@@ -31,6 +31,12 @@ class StateID(Enum):
     GAMEPLAY = auto()
     GAME_OVER = auto()
 
+class ProvinceID(Enum):
+    PRUSY = "Prusy"
+    LITWA = "Litwa"
+    UKRAINA = "Ukraina"
+    WIELKOPOLSKA = "Wielkopolska"
+    MALOPOLSKA = "Małopolska"
 
 @dataclass
 class Player:
@@ -62,9 +68,24 @@ class GameContext:
     round_status: RoundStatus = field(default_factory=RoundStatus)
     rng: random.Random = field(default_factory=random.Random)
     last_output: str = ""
+    provinces: Dict[ProvinceID, Province] = field(default_factory=lambda: {
+        ProvinceID.PRUSY: Province(ProvinceID.PRUSY),
+        ProvinceID.LITWA: Province(ProvinceID.LITWA),
+        ProvinceID.UKRAINA: Province(ProvinceID.UKRAINA),
+        ProvinceID.WIELKOPOLSKA: Province(ProvinceID.WIELKOPOLSKA),
+        ProvinceID.MALOPOLSKA: Province(ProvinceID.MALOPOLSKA),
+    })
 
 
-# --------------- I/O Helpers --------------- #
+@dataclass
+class Province:
+    id: ProvinceID
+    has_fort: bool = False
+    # 5 slotów posiadłości; -1 oznacza brak, a liczba to indeks gracza (0..N-1)
+    estates: List[int] = field(default_factory=lambda: [-1] * 5)
+
+
+# --------------- Helpers --------------- #
 
 def prompt(text: str) -> str:
     try:
@@ -85,8 +106,49 @@ def show_player_stats(ctx: GameContext):
     println(f"Marshal: {ctx.settings.players[ctx.round_status.marshal_index].name}")
     if ctx.round_status.last_law is not None:
         println(f"Last law: {ctx.round_status.last_law}")
+    # Prowincje
+    println("Provinces:")
+    # pomocnicza mapka: indeks gracza -> skrót/nazwa
+    idx2name = {i: pl.name for i, pl in enumerate(ctx.settings.players)}
+    for pid, prov in ctx.provinces.items():
+        estates_str = "[" + ",".join(str(v) for v in prov.estates) + "]"
+        # opcjonalnie: czytelniej z nazwami graczy zamiast indeksów
+        # estates_str = "[" + ",".join(idx2name.get(v, "-") if v != -1 else "-" for v in prov.estates) + "]"
+        println(f"  {pid.value}: fort={'TAK' if prov.has_fort else 'NIE'}, posiadłości={estates_str}")
     println("--------------------")
 
+def build_estate(ctx: GameContext, province_id: ProvinceID, player_index: int) -> bool:
+    """
+    Zajmuje pierwsze wolne (=-1) miejsce w liście posiadłości danej prowincji.
+    Zwraca True, jeśli się udało; False, gdy brak wolnych slotów.
+    """
+    prov = ctx.provinces[province_id]
+    for i, v in enumerate(prov.estates):
+        if v == -1:
+            prov.estates[i] = player_index
+            return True
+    return False
+
+def remove_last_estate(ctx: GameContext, province_id: ProvinceID, player_index: int) -> bool:
+    """
+    Usuwa najpóźniej postawioną posiadłość danego gracza (czyli od końca listy).
+    Zwraca True, jeśli coś usunięto.
+    """
+    prov = ctx.provinces[province_id]
+    for i in range(len(prov.estates)-1, -1, -1):
+        if prov.estates[i] == player_index:
+            prov.estates[i] = -1
+            return True
+    return False
+
+def toggle_fort(ctx: GameContext, province_id: ProvinceID, value: Optional[bool] = None) -> bool:
+    """
+    Ustawia/flipuje fort w prowincji. Jeśli value jest None, to flip (NOT).
+    Zwraca bieżący stan fortu po operacji.
+    """
+    prov = ctx.provinces[province_id]
+    prov.has_fort = (not prov.has_fort) if value is None else bool(value)
+    return prov.has_fort
 
 # --------------- Phase System --------------- #
 
@@ -312,6 +374,7 @@ class GameplayState(BaseState):
         self._start_round(ctx)
 
     def _start_round(self, ctx: GameContext) -> None:
+        println(f"=== ROUND {ctx.round_status.current_round} / {ctx.round_status.total_rounds} ===")
         self.round_engine = RoundEngine([
             AuctionPhase(),
             SejmPhase()
