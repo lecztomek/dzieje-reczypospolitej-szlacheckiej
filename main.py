@@ -345,6 +345,49 @@ def count_estates_for_player_in_province(ctx: GameContext, province_id: Province
     prov = ctx.provinces[province_id]
     return sum(1 for v in prov.estates if v == pidx)
 
+from typing import Tuple
+
+def influence_winners_in_province(ctx: GameContext, province_id: ProvinceID) -> List[int]:
+    """
+    Zwraca listę indeksów graczy mających kontrolę (wpływ) w danej prowincji.
+    Zasada:
+      - najwięcej szlachciców wygrywa,
+      - remis: jeśli dokładnie jeden z remisujących ma >0 wojsk w tej prowincji, wygrywa on,
+      - w przeciwnym razie kontrolę mają wszyscy remisujący.
+    """
+    players = ctx.settings.players
+    pcount = len(players)
+    nobles = ctx.nobles.per_province.get(province_id, [0]*pcount)
+    troops = ctx.troops.per_province.get(province_id, [0]*pcount)
+
+    max_n = max(nobles) if nobles else 0
+    if max_n == 0:
+        return []  # nikt nie ma wpływu
+
+    leaders = [i for i, v in enumerate(nobles) if v == max_n]
+    if len(leaders) == 1:
+        return leaders
+
+    with_troops = [i for i in leaders if troops[i] > 0]
+    if len(with_troops) == 1:
+        return with_troops
+
+    return leaders  # remis utrzymany — wielu zwycięzców
+
+
+def estate_income_by_wealth(wealth: int) -> int:
+    """
+    Dochód z jednej posiadłości w zależności od zamożności prowincji:
+      0–1 -> 0; 2 -> 1; 3 -> 2
+    """
+    w = max(0, min(3, int(wealth)))
+    if w <= 1:
+        return 0
+    if w == 2:
+        return 1
+    return 2  # w == 3
+
+
 def compute_final_scores(ctx: GameContext) -> str:
     """
     Zasady:
@@ -458,7 +501,67 @@ class BasePhase:
         show_player_stats(ctx)
 
 
-# --- New Phases: Auction & Sejm --- #
+# --- Phases: #
+class IncomePhase(BasePhase):
+    name = "IncomePhase"
+
+    def __init__(self) -> None:
+        self._ran = False
+
+    def enter(self, ctx: GameContext) -> None:
+        println("[Dochód] Pobieranie dochodów: +1 zł za kontrolę prowincji; posiadłości wg zamożności (0–1:0, 2:1, 3:2).")
+        println("Uwaga: Wielkopolska daje dochód tylko graczom mającym w niej kontrolę (zarówno +1, jak i z posiadłości).")
+
+    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        return ""  # sterowanie centralne
+
+    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
+        if self._ran:
+            return PhaseResult(done=True)
+        self._ran = True
+
+        players = ctx.settings.players
+        pcount = len(players)
+        gained_control = [0]*pcount
+        gained_estates = [0]*pcount
+
+        for pid, prov in ctx.provinces.items():
+            controllers = influence_winners_in_province(ctx, pid)
+            single_controller = controllers[0] if len(controllers) == 1 else None
+
+            # (A) +1 za kontrolę — TYLKO jeśli kontrola jest jednoznaczna (brak remisu)
+            if single_controller is not None:
+                players[single_controller].gold += 1
+                gained_control[single_controller] += 1
+
+            # (B) dochód z posiadłości
+            per_estate = estate_income_by_wealth(prov.wealth)
+            if per_estate > 0:
+                if pid == ProvinceID.WIELKOPOLSKA:
+                    # Wielkopolska płaci tylko, gdy jest JEDEN kontrolujący.
+                    if single_controller is not None:
+                        # tylko posiadłości należące do kontrolującego przynoszą dochód
+                        for owner in prov.estates:
+                            if owner == single_controller:
+                                players[owner].gold += per_estate
+                                gained_estates[owner] += per_estate
+                    # przy remisie: nic (również z posiadłości)
+                else:
+                    # inne prowincje płacą posiadłościom niezależnie od wyniku kontroli/remisu
+                    for owner in prov.estates:
+                        if 0 <= owner < pcount:
+                            players[owner].gold += per_estate
+                            gained_estates[owner] += per_estate
+
+        # Podsumowanie logu
+        for i, p in enumerate(players):
+            println(f"[Dochód] {p.name}: +{gained_control[i]} (kontrola) +{gained_estates[i]} (posiadłości) = +{gained_control[i]+gained_estates[i]} zł. (razem złoto: {p.gold})")
+
+        return PhaseResult(done=True)
+
+    def exit(self, ctx: GameContext) -> None:
+        super().exit(ctx)  # pokaże aktualne statystyki
+
 
 class AuctionPhase(BasePhase):
     name = "AuctionPhase"
@@ -1255,6 +1358,7 @@ class GameplayState(BaseState):
     def _start_round(self, ctx: GameContext) -> None:
         println(f"=== ROUND {ctx.round_status.current_round} / {ctx.round_status.total_rounds} ===")
         self.round_engine = RoundEngine([
+            IncomePhase(),
             AuctionPhase(),
             SejmPhase(),
             ActionPhase(),
