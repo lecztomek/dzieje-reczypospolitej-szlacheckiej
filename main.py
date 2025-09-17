@@ -240,6 +240,48 @@ def toggle_fort(ctx: GameContext, province_id: ProvinceID, value: Optional[bool]
     prov.has_fort = (not prov.has_fort) if value is None else bool(value)
     return prov.has_fort
 
+def destroy_last_estate_any(ctx: GameContext, province_id: ProvinceID) -> Optional[int]:
+    """
+    Usuwa 'ostatnio zbudowaną' posiadłość w prowincji, niezależnie od właściciela.
+    Interpretujemy to jako ostatni zajęty slot od końca listy.
+    Zwraca indeks gracza, któremu zniszczono posiadłość, albo None gdy brak.
+    """
+    prov = ctx.provinces[province_id]
+    for i in range(len(prov.estates) - 1, -1, -1):
+        if prov.estates[i] != -1:
+            owner = prov.estates[i]
+            prov.estates[i] = -1
+            return owner
+    return None
+
+
+def plunder_province(ctx: GameContext, province_id: ProvinceID) -> str:
+    """
+    Spustoszenie prowincji:
+      - Jeśli jest fort: niszczymy fort.
+      - W przeciwnym razie niszczymy ostatnio zbudowaną posiadłość (jeśli jest).
+      - Zamożność zawsze spada o 1 (do min 0).
+    Zwraca opis tekstowy tego, co się stało.
+    """
+    prov = ctx.provinces[province_id]
+    msgs = [f"[Spustoszenie] {province_id.value}: "]
+
+    if prov.has_fort:
+        prov.has_fort = False
+        msgs.append("zniszczono fort; ")
+    else:
+        owner = destroy_last_estate_any(ctx, province_id)
+        if owner is not None:
+            owner_name = ctx.settings.players[owner].name if 0 <= owner < len(ctx.settings.players) else "?"
+            msgs.append(f"zniszczono posiadłość gracza {owner_name}; ")
+        else:
+            msgs.append("brak fortu i posiadłości do zniszczenia; ")
+
+    before = prov.wealth
+    prov.wealth = max(0, prov.wealth - 1)
+    msgs.append(f"zamożność {before}→{prov.wealth}.")
+    return "".join(msgs)
+
 def set_units(ctx: GameContext, province_id: ProvinceID, player_index: int, value: int) -> int:
     """Ustaw dokładną liczbę jednostek gracza na prowincji (nieujemną). Zwraca nową wartość."""
     arr = ctx.troops.per_province[province_id]
@@ -945,6 +987,65 @@ class AttackInvadersPhase(BasePhase):
     def exit(self, ctx: GameContext) -> None:
         super().exit(ctx)  # pokaże podsumowanie i tory
 
+class DevastationPhase(BasePhase):
+    name = "DevastationPhase"
+
+    def __init__(self) -> None:
+        # kolejność i mapowanie 'pierwsza/druga' prowincja dla każdego toru
+        self._pairs = {
+            RaidTrackID.N: (ProvinceID.PRUSY, ProvinceID.LITWA),       # Szwecja
+            RaidTrackID.E: (ProvinceID.LITWA, ProvinceID.UKRAINA),     # Moskwa
+            RaidTrackID.S: (ProvinceID.UKRAINA, ProvinceID.MALOPOLSKA) # Tatarzy
+        }
+        self._order = [RaidTrackID.N, RaidTrackID.S, RaidTrackID.E]
+        self._ran = False
+
+    def enter(self, ctx: GameContext) -> None:
+        println("[Spustoszenia] Jeśli tor najeźdźcy ≥ 3, następuje splądrowanie jednej prowincji.")
+        println("Wybór prowincji k6: 1–3 pierwsza z pary, 4–6 druga z pary.")
+        println("Pary: Szwecja: Prusy/Litwa; Moskwa: Litwa/Ukraina; Tatarzy: Ukraina/Małopolska.")
+
+    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        return ""  # faza sterowana centralnie
+
+    def _pick_target(self, first: ProvinceID, second: ProvinceID) -> ProvinceID:
+        while True:
+            val = (prompt("  Rzut k6 (1–6): ") or "").strip()
+            try:
+                r = int(val)
+                if 1 <= r <= 6:
+                    break
+                raise ValueError
+            except ValueError:
+                println("Nieprawidłowe — wpisz liczbę 1–6.")
+        return first if r <= 3 else second
+
+    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
+        if self._ran:
+            return PhaseResult(done=True)
+        self._ran = True
+
+        any_happened = False
+        for rid in self._order:
+            track = ctx.raid_tracks[rid]
+            if track.value >= 3:
+                any_happened = True
+                first, second = self._pairs[rid]
+                println(f"[Spustoszenia] {rid.value} (tor={track.value}) plądruje: {first.value}/{second.value}.")
+                target = self._pick_target(first, second)
+                msg = plunder_province(ctx, target)
+                # po splądrowaniu tor spada do 1
+                track.value = 1
+                println(msg + f" Tor {rid.value} ustawiony na 1.")
+
+        if not any_happened:
+            println("[Spustoszenia] Brak torów ≥ 3 — nic się nie dzieje.")
+
+        return PhaseResult(done=True)
+
+    def exit(self, ctx: GameContext) -> None:
+        super().exit(ctx)  # pokaże aktualny stan mapy i torów
+
 
 class ScoringPhase(BasePhase):
     name = "ScoringPhase"
@@ -1076,6 +1177,7 @@ class GameplayState(BaseState):
             ActionPhase(),
             EnemyReinforcementPhase(),
             AttackInvadersPhase(),
+            DevastationPhase(),   
         ])
         self.round_engine.start(ctx)
 
