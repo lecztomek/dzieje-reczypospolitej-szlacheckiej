@@ -726,6 +726,226 @@ class EnemyReinforcementPhase(BasePhase):
     def exit(self, ctx: GameContext) -> None:
         super().exit(ctx)  # pokaże zaktualizowane statystyki wraz z torami najazdów
 
+class AttackInvadersPhase(BasePhase):
+    name = "AttackInvadersPhase"
+
+    def __init__(self) -> None:
+        # mapy skrótów i dozwolonych prowincji startowych
+        self._prov_short = {
+            "p": ProvinceID.PRUSY,
+            "l": ProvinceID.LITWA,
+            "u": ProvinceID.UKRAINA,
+            "w": ProvinceID.WIELKOPOLSKA,
+            "m": ProvinceID.MALOPOLSKA,
+        }
+        self._enemy_keys = {
+            "n": RaidTrackID.N,  # Szwecja
+            "s": RaidTrackID.S,  # Tatarzy
+            "e": RaidTrackID.E,  # Moskwa
+        }
+        self._allowed_sources = {
+            RaidTrackID.N: {ProvinceID.PRUSY, ProvinceID.LITWA},
+            RaidTrackID.E: {ProvinceID.LITWA, ProvinceID.UKRAINA},
+            RaidTrackID.S: {ProvinceID.MALOPOLSKA, ProvinceID.UKRAINA},
+        }
+
+    # --- utils ---
+    @staticmethod
+    def _norm(s: str) -> str:
+        import unicodedata
+        s = (s or "").strip()
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        return s.lower().strip()
+
+    def _parse_enemy(self, text: str) -> Optional[RaidTrackID]:
+        t = self._norm(text)
+        if not t:
+            return None
+        # skróty literowe
+        if t in self._enemy_keys:
+            return self._enemy_keys[t]
+        # nazwy
+        names = {
+            "szwecja": RaidTrackID.N,
+            "tatarzy": RaidTrackID.S,
+            "moskwa": RaidTrackID.E,
+        }
+        for k, v in names.items():
+            if t == k or k.startswith(t) or t.startswith(k):
+                return v
+        return None
+
+    def _parse_province(self, text: str) -> Optional[ProvinceID]:
+        t = self._norm(text)
+        if not t:
+            return None
+        if len(t) == 1 and t in self._prov_short:
+            return self._prov_short[t]
+        for pid in ProvinceID:
+            name_n = self._norm(pid.value)
+            if t == name_n or name_n.startswith(t) or t.startswith(name_n):
+                return pid
+        if len(t) == 1:
+            for pid in ProvinceID:
+                if self._norm(pid.value)[0] == t:
+                    return pid
+        return None
+
+    def enter(self, ctx: GameContext) -> None:
+        println("[Ataki] Gracze mogą atakować najeźdźców.")
+        println("Zasięgi: Szwecja z Prus/Litwy; Moskwa z Litwy/Ukrainy; Tatarzy z Małopolski/Ukrainy.")
+        println("Tura gracza: 'atak' lub 'pass'.")
+
+    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        return ""  # sterujemy interaktywnie wewnątrz handle_input
+
+    def _player_index(self, ctx: GameContext, player: Player) -> int:
+        return ctx.settings.players.index(player)
+
+    def _has_any_attack_troops(self, ctx: GameContext, pidx: int) -> bool:
+        # Czy gracz ma wojsko w prowincjach, z których da się atakować ktokolwiek?
+        for rid, sources in self._allowed_sources.items():
+            if ctx.raid_tracks[rid].value <= 0:
+                continue
+            for src in sources:
+                if ctx.troops.per_province[src][pidx] > 0:
+                    return True
+        return False
+
+    def _any_side_has_troops(self, ctx: GameContext) -> bool:
+        # Czy istnieje gracz, który w ogóle ma wojsko (globalnie)?
+        for arr in ctx.troops.per_province.values():
+            if sum(arr) > 0:
+                return True
+        return False
+
+    def _attack_from(self, ctx: GameContext, rid: RaidTrackID, src: ProvinceID, pidx: int, player: Player) -> None:
+        units_here = ctx.troops.per_province[src][pidx]
+        if units_here <= 0:
+            println("Brak jednostek na wybranej prowincji.")
+            return
+        if ctx.raid_tracks[rid].value <= 0:
+            println("Ten tor najazdu ma już 0 — brak celu do bicia.")
+            return
+
+        println(f"[Atak] {player.name} atakuje {rid.value} z {src.value}. Masz {units_here} jednostek.")
+        # Rzucamy dla KAŻDEJ jednostki aktualnie na prowincji (stan na start ataku)
+        rolls = []
+        for i in range(units_here):
+            while True:
+                val = (prompt(f"  Rzut #{i+1} (1–6): ") or "").strip()
+                try:
+                    r = int(val)
+                    if 1 <= r <= 6:
+                        rolls.append(r)
+                        break
+                    raise ValueError
+                except ValueError:
+                    println("Nieprawidłowe — wpisz liczbę 1–6.")
+
+        # Przetwarzamy rzuty w kolejności
+        for r in rolls:
+            if ctx.raid_tracks[rid].value <= 0:
+                println("  Cel już zbity do 0 — dalsze sukcesy nie obniżą więcej.")
+            if r == 1:
+                add_units(ctx, src, pidx, -1)
+                player.honor += 1
+                println("  Wynik 1 → porażka, tracisz 1 jednostkę.")
+            elif 2 <= r <= 5:
+                add_raid(ctx, rid, -1)
+                add_units(ctx, src, pidx, -1)
+                player.honor += 1
+                println("  Wynik 2–5 → sukces: tor -1 i tracisz 1 jednostkę.")
+            else:  # r == 6
+                add_raid(ctx, rid, -1)
+                player.honor += 1
+                println("  Wynik 6 → sukces: tor -1 i jednostka pozostaje.")
+
+        println(f"  Po ataku: {rid.value} = {ctx.raid_tracks[rid].value}, jednostek w {src.value} = {ctx.troops.per_province[src][pidx]}")
+
+    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
+        players = ctx.settings.players
+        m = ctx.round_status.marshal_index
+        order = players[m:] + players[:m]
+
+        # pętle tur do momentu aż wszyscy spasuja lub nie ma już znaczących wojsk
+        passed = {p.name: False for p in players}
+
+        while True:
+            # zakończ, jeśli wszyscy spasuja
+            if all(passed.values()):
+                println("[Ataki] Wszyscy spasu­ją — koniec fazy.")
+                break
+            # albo jeśli nikt nie ma już wojsk (globalnie)
+            if not self._any_side_has_troops(ctx):
+                println("[Ataki] Brak wojsk na mapie — koniec fazy.")
+                break
+
+            for pl in order:
+                # pomiń jeśli już spassował wcześniej, ale resetujemy po jego akcji jeśli zdecyduje się jednak atakować
+                if not self._has_any_attack_troops(ctx, self._player_index(ctx, pl)):
+                    println(f"[Ataki] {pl.name} nie ma wojsk w zasięgu — PASS automatyczny.")
+                    passed[pl.name] = True
+                    continue
+
+                choice = (prompt(f"[Ataki] Tura {pl.name}. 'atak' czy 'pass'? ").strip() or "").lower()
+                if choice.startswith("p"):
+                    passed[pl.name] = True
+                    continue
+
+                if not choice.startswith("a"):
+                    println("Nie rozpoznano — wpisz 'atak' albo 'pass'.")
+                    # gracz nie traci kolejki, spróbujemy jeszcze raz
+                    choice = (prompt(f"[Ataki] Tura {pl.name}. 'atak' czy 'pass'? ").strip() or "").lower()
+                    if not choice.startswith("a"):
+                        passed[pl.name] = False
+                        continue
+
+                # atak — reset pasa dla tego gracza
+                passed[pl.name] = False
+
+                # wybór prowincji źródłowej zgodnej z mapą zasięgu
+                src_txt = prompt("  Z której prowincji? (np. Prusy/P, Litwa/L, Ukraina/U, Małopolska/M): ")
+                src = self._parse_province(src_txt)
+                if not src:
+                    println("  Nie rozpoznano prowincji.")
+                    passed[pl.name] = False
+                    continue
+
+                pidx = self._player_index(ctx, pl)
+                if ctx.troops.per_province[src][pidx] <= 0:
+                    println("  Nie masz tu jednostek.")
+                    passed[pl.name] = False
+                    continue
+
+                # wybór najeźdźcy
+                enemy_txt = prompt("  Kogo atakujesz? (Szwecja/N, Tatarzy/S, Moskwa/E): ")
+                rid = self._parse_enemy(enemy_txt)
+                if not rid:
+                    println("  Nie rozpoznano najeźdźcy.")
+                    passed[pl.name] = False
+                    continue
+
+                if ctx.raid_tracks[rid].value <= 0:
+                    println("  Tego najeźdźcy nie można już atakować (tor = 0). Wybierz innego lub 'pass'.")
+                    # pozwalamy graczowi spróbować jeszcze raz w tej samej turze
+                    passed[pl.name] = False
+                    continue
+
+                if src not in self._allowed_sources[rid]:
+                    println("  Z tej prowincji nie można atakować wybranego najeźdźcy.")
+                    passed[pl.name] = False
+                    continue
+
+                self._attack_from(ctx, rid, src, pidx, pl)
+
+        return PhaseResult(done=True)
+
+    def exit(self, ctx: GameContext) -> None:
+        super().exit(ctx)  # pokaże podsumowanie i tory
+
+
 class ScoringPhase(BasePhase):
     name = "ScoringPhase"
 
@@ -854,7 +1074,8 @@ class GameplayState(BaseState):
             AuctionPhase(),
             SejmPhase(),
             ActionPhase(),
-            EnemyReinforcementPhase()
+            EnemyReinforcementPhase(),
+            AttackInvadersPhase(),
         ])
         self.round_engine.start(ctx)
 
