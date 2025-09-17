@@ -910,6 +910,116 @@ class ActionPhase(BasePhase):
                 # po jednej poprawnej akcji kończymy turę tego gracza
                 break
 
+class PlayerBattlePhase(BasePhase):
+    name = "PlayerBattlePhase"
+
+    def __init__(self) -> None:
+        self._ran = False
+
+    def enter(self, ctx: GameContext) -> None:
+        println("[Starcia] Rozstrzyganie bitew między graczami na tych samych prowincjach.")
+        println("Zasady: każdy gracz podaje tyle rzutów (1–6), ile ma jednostek.")
+        println("Wynik 5–6 zabija 1 jednostkę przeciwnika; 1–4 nic. Straty odejmujemy po obu seriach rzutów.")
+
+    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        return ""  # sterowanie centralne
+
+    def _turn_order(self, ctx: GameContext) -> List[Player]:
+        m = ctx.round_status.marshal_index
+        players = ctx.settings.players
+        return players[m:] + players[:m]
+
+    def _players_with_units(self, ctx: GameContext, pid: ProvinceID) -> List[int]:
+        arr = ctx.troops.per_province[pid]
+        return [i for i, n in enumerate(arr) if n > 0]
+
+    @staticmethod
+    def _read_rolls(name: str, count: int) -> List[int]:
+        """Czyta dokładnie `count` rzutów 1–6. Akceptuje spacje/komy; dopytuje aż będzie poprawnie."""
+        while True:
+            raw = (prompt(f"  {name}: podaj {count} rzutów 1–6 (np. '1 6 4 ...'): ") or "").strip()
+            if not raw:
+                continue
+            # akceptuj spacje i przecinki
+            toks = [t for t in raw.replace(",", " ").split() if t]
+            try:
+                rolls = [int(t) for t in toks]
+                if len(rolls) != count or any(r < 1 or r > 6 for r in rolls):
+                    raise ValueError
+                return rolls
+            except ValueError:
+                println("    Nieprawidłowe dane. Upewnij się, że liczba rzutów i wartości (1–6) się zgadzają.")
+
+    @staticmethod
+    def _kills_from_rolls(rolls: List[int]) -> int:
+        return sum(1 for r in rolls if r >= 5)
+
+    def _resolve_duel(self, ctx: GameContext, pid: ProvinceID, i: int, j: int) -> None:
+        """Potyczka 1v1 na prowincji pid między graczami i oraz j. Straty po obu seriach."""
+        troops_arr = ctx.troops.per_province[pid]
+        pi = ctx.settings.players[i]
+        pj = ctx.settings.players[j]
+
+        units_i_start = troops_arr[i]
+        units_j_start = troops_arr[j]
+        println(f"[Starcia] {pid.value}: {pi.name} ({units_i_start}) vs {pj.name} ({units_j_start})")
+
+        # brak sensu walczyć, jeśli ktoś jednak 0 (sprawdzamy defensywnie)
+        if units_i_start <= 0 or units_j_start <= 0:
+            println("  (Ktoś nie ma jednostek — pomijam potyczkę.)")
+            return
+
+        rolls_i = self._read_rolls(pi.name, units_i_start)
+        rolls_j = self._read_rolls(pj.name, units_j_start)
+
+        kills_i = self._kills_from_rolls(rolls_i)  # zadaje straty przeciwnikowi
+        kills_j = self._kills_from_rolls(rolls_j)
+
+        # Straty stosujemy dopiero teraz, limitując do liczby jednostek przeciwnika na początku potyczki
+        loss_i = min(kills_j, units_i_start)
+        loss_j = min(kills_i, units_j_start)
+
+        troops_arr[i] = max(0, troops_arr[i] - loss_i)
+        troops_arr[j] = max(0, troops_arr[j] - loss_j)
+
+        println(f"  {pi.name} zadał {loss_j} strat; {pj.name} zadał {loss_i} strat.")
+        println(f"  Stan po potyczce: {pi.name}={troops_arr[i]}, {pj.name}={troops_arr[j]}.")
+
+    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
+        if self._ran:
+            return PhaseResult(done=True)
+        self._ran = True
+
+        order = self._turn_order(ctx)
+        name_to_idx = {p.name: idx for idx, p in enumerate(ctx.settings.players)}
+
+        any_battle = False
+        # Dla każdej prowincji rozstrzygamy kolejne potyczki aż zostanie ≤1 gracz z jednostkami.
+        for pid in ProvinceID:
+            # pętla kolejnych potyczek na tej prowincji
+            while True:
+                present = self._players_with_units(ctx, pid)
+                if len(present) < 2:
+                    break
+                any_battle = True
+
+                # wybierz DWÓCH pierwszych wg kolejności tur od marszałka
+                ordered_present = [name_to_idx[p.name] for p in order if name_to_idx[p.name] in present]
+                a = ordered_present[0]
+                # drugi to następny różny od a
+                b = next(idx for idx in ordered_present if idx != a)
+
+                self._resolve_duel(ctx, pid, a, b)
+
+        if not any_battle:
+            println("[Starcia] Brak prowincji z armiami ≥2 graczy — nic do rozstrzygnięcia.")
+
+        return PhaseResult(done=True)
+
+    def exit(self, ctx: GameContext) -> None:
+        super().exit(ctx)  # pokaż zaktualizowane statystyki po bitwach
+
+
 class EnemyReinforcementPhase(BasePhase):
     name = "EnemyReinforcementPhase"
 
@@ -1362,6 +1472,7 @@ class GameplayState(BaseState):
             AuctionPhase(),
             SejmPhase(),
             ActionPhase(),
+            PlayerBattlePhase(),
             EnemyReinforcementPhase(),
             AttackInvadersPhase(),
             DevastationPhase(),   
