@@ -38,6 +38,16 @@ class ProvinceID(Enum):
     WIELKOPOLSKA = "Wielkopolska"
     MALOPOLSKA = "Małopolska"
 
+class RaidTrackID(Enum):
+    N = "Szwecja"
+    S = "Tatarzy"
+    E = "Moskwa"
+
+@dataclass
+class RaidTrack:
+    id: RaidTrackID
+    value: int = 0  # licznik najazdu (startowo 0)
+
 @dataclass
 class Player:
     name: str
@@ -61,6 +71,13 @@ class RoundStatus:
     marshal_index: int = 0  # kto jest marszałkiem
     last_law: Optional[int] = None  # numer ustawy wybranej w sejmie (1..10)
 
+@dataclass
+class Province:
+    id: ProvinceID
+    has_fort: bool = False
+    # 5 slotów posiadłości; -1 oznacza brak, a liczba to indeks gracza (0..N-1)
+    estates: List[int] = field(default_factory=lambda: [-1] * 5)
+
 
 @dataclass
 class GameContext:
@@ -75,15 +92,11 @@ class GameContext:
         ProvinceID.WIELKOPOLSKA: Province(ProvinceID.WIELKOPOLSKA),
         ProvinceID.MALOPOLSKA: Province(ProvinceID.MALOPOLSKA),
     })
-
-
-@dataclass
-class Province:
-    id: ProvinceID
-    has_fort: bool = False
-    # 5 slotów posiadłości; -1 oznacza brak, a liczba to indeks gracza (0..N-1)
-    estates: List[int] = field(default_factory=lambda: [-1] * 5)
-
+    raid_tracks: Dict[RaidTrackID, RaidTrack] = field(default_factory=lambda: {
+        RaidTrackID.N: RaidTrack(RaidTrackID.N, 0),
+        RaidTrackID.S: RaidTrack(RaidTrackID.S, 0),
+        RaidTrackID.E: RaidTrack(RaidTrackID.E, 0),
+    })
 
 # --------------- Helpers --------------- #
 
@@ -97,6 +110,16 @@ def prompt(text: str) -> str:
 def println(*args: Any) -> None:
     print(*args)
 
+def set_raid(ctx: GameContext, track_id: RaidTrackID, value: int) -> int:
+    """Ustawia konkretną wartość toru najazdu. Zwraca nową wartość."""
+    ctx.raid_tracks[track_id].value = int(value)
+    return ctx.raid_tracks[track_id].value
+
+def add_raid(ctx: GameContext, track_id: RaidTrackID, delta: int) -> int:
+    """Dodaje (może być ujemne) do licznika toru. Zwraca nową wartość."""
+    t = ctx.raid_tracks[track_id]
+    t.value += int(delta)
+    return t.value
 
 def show_player_stats(ctx: GameContext):
     println("--- Player Stats ---")
@@ -115,6 +138,11 @@ def show_player_stats(ctx: GameContext):
         # opcjonalnie: czytelniej z nazwami graczy zamiast indeksów
         # estates_str = "[" + ",".join(idx2name.get(v, "-") if v != -1 else "-" for v in prov.estates) + "]"
         println(f"  {pid.value}: fort={'TAK' if prov.has_fort else 'NIE'}, posiadłości={estates_str}")
+    # Tory najazdów
+    println("Raid Tracks:")
+    for rid, track in ctx.raid_tracks.items():
+        println(f"  {rid.value}: {track.value}")   
+    
     println("--------------------")
 
 def build_estate(ctx: GameContext, province_id: ProvinceID, player_index: int) -> bool:
