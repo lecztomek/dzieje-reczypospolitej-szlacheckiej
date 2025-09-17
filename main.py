@@ -84,6 +84,11 @@ class TroopBoard:
     per_province: Dict[ProvinceID, List[int]] = field(default_factory=dict)
 
 @dataclass
+class NoblesBoard:
+    # Dla każdej prowincji trzymamy listę [nobles_gracza0, nobles_gracza1, ...]
+    per_province: Dict[ProvinceID, List[int]] = field(default_factory=dict)
+
+@dataclass
 class GameContext:
     settings: Settings = field(default_factory=Settings)
     round_status: RoundStatus = field(default_factory=RoundStatus)
@@ -102,6 +107,7 @@ class GameContext:
         RaidTrackID.E: RaidTrack(RaidTrackID.E, 0),
     })
     troops: TroopBoard = field(default_factory=TroopBoard)
+    nobles: NoblesBoard = field(default_factory=NoblesBoard)
 
 # --------------- Helpers --------------- #
 
@@ -114,17 +120,6 @@ def prompt(text: str) -> str:
 
 def println(*args: Any) -> None:
     print(*args)
-
-def set_raid(ctx: GameContext, track_id: RaidTrackID, value: int) -> int:
-    """Ustawia konkretną wartość toru najazdu. Zwraca nową wartość."""
-    ctx.raid_tracks[track_id].value = int(value)
-    return ctx.raid_tracks[track_id].value
-
-def add_raid(ctx: GameContext, track_id: RaidTrackID, delta: int) -> int:
-    """Dodaje (może być ujemne) do licznika toru. Zwraca nową wartość."""
-    t = ctx.raid_tracks[track_id]
-    t.value += int(delta)
-    return t.value
 
 def show_player_stats(ctx: GameContext):
     println("--- Player Stats ---")
@@ -156,7 +151,26 @@ def show_player_stats(ctx: GameContext):
         troop_pairs.append(f"{pname}:{units}")
     println(f"Wojsko: " + (", ".join(troop_pairs) if troop_pairs else "(brak)"))
 
+    # Szlachcice
+    nobles_arr = ctx.nobles.per_province.get(pid, [])
+    noble_pairs = []
+    for i, nobles in enumerate(nobles_arr):
+        pname = ctx.settings.players[i].name if i < len(ctx.settings.players) else f"P{i}"
+        noble_pairs.append(f"{pname}:{nobles}")
+    println(f"Szlachcice: " + (", ".join(noble_pairs) if noble_pairs else "(brak)"))
+
     println("--------------------")
+
+def set_raid(ctx: GameContext, track_id: RaidTrackID, value: int) -> int:
+    """Ustawia konkretną wartość toru najazdu. Zwraca nową wartość."""
+    ctx.raid_tracks[track_id].value = int(value)
+    return ctx.raid_tracks[track_id].value
+
+def add_raid(ctx: GameContext, track_id: RaidTrackID, delta: int) -> int:
+    """Dodaje (może być ujemne) do licznika toru. Zwraca nową wartość."""
+    t = ctx.raid_tracks[track_id]
+    t.value += int(delta)
+    return t.value
 
 def build_estate(ctx: GameContext, province_id: ProvinceID, player_index: int) -> bool:
     """
@@ -219,6 +233,35 @@ def move_units(ctx: GameContext, from_pid: ProvinceID, to_pid: ProvinceID, playe
 def total_units_on(ctx: GameContext, province_id: ProvinceID) -> int:
     """Suma wszystkich jednostek (wszyscy gracze) na danej prowincji."""
     return sum(ctx.troops.per_province[province_id])
+
+def set_nobles(ctx: GameContext, province_id: ProvinceID, player_index: int, value: int) -> int:
+    """Ustaw dokładną liczbę szlachciców gracza na prowincji (nieujemną). Zwraca nową wartość."""
+    arr = ctx.nobles.per_province[province_id]
+    arr[player_index] = max(0, int(value))
+    return arr[player_index]
+
+def add_nobles(ctx: GameContext, province_id: ProvinceID, player_index: int, delta: int) -> int:
+    """Dodaj/odejmij szlachciców (może być ujemne). Zwraca nową wartość (nie spadnie poniżej 0)."""
+    arr = ctx.nobles.per_province[province_id]
+    arr[player_index] = max(0, arr[player_index] + int(delta))
+    return arr[player_index]
+
+def move_nobles(ctx: GameContext, from_pid: ProvinceID, to_pid: ProvinceID, player_index: int, amount: int) -> bool:
+    """Przenieś amount szlachciców między prowincjami dla danego gracza. Zwraca True, jeśli się udało."""
+    amount = int(amount)
+    if amount <= 0:
+        return False
+    from_arr = ctx.nobles.per_province[from_pid]
+    to_arr = ctx.nobles.per_province[to_pid]
+    if from_arr[player_index] < amount:
+        return False
+    from_arr[player_index] -= amount
+    to_arr[player_index] += amount
+    return True
+
+def total_nobles_on(ctx: GameContext, province_id: ProvinceID) -> int:
+    """Suma wszystkich szlachciców (wszyscy gracze) na danej prowincji."""
+    return sum(ctx.nobles.per_province[province_id])
 
 # --------------- Phase System --------------- #
 
@@ -434,6 +477,12 @@ class StartMenuState(BaseState):
         # --- INIT TROOPS: po znaniu liczby graczy przygotuj tablice wojsk ---
         pcount = len(ctx.settings.players)
         ctx.troops.per_province = {
+            pid: [0] * pcount
+            for pid in ctx.provinces.keys()
+        }
+
+        # --- INIT NOBLES: analogicznie do wojsk ---
+        ctx.nobles.per_province = {
             pid: [0] * pcount
             for pid in ctx.provinces.keys()
         }
