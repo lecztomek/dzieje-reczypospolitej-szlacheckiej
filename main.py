@@ -203,61 +203,6 @@ class SejmPhase(BasePhase):
         super().exit(ctx)
 
 
-# --- Example Phases (existing) --- #
-
-class GreetPhase(BasePhase):
-    name = "GreetPhase"
-
-    def enter(self, ctx: GameContext) -> None:
-        marshal = ctx.settings.players[ctx.round_status.marshal_index]
-        println(f"[Round {ctx.round_status.current_round}] Starting round! Marshal is {marshal.name}.")
-
-    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
-        return f"{player.name}, type anything to begin your turn: " if player else ""
-
-    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
-        if player:
-            ctx.last_output = f"{player.name} typed: {raw.strip() or '[empty]'}"
-            return PhaseResult(message=ctx.last_output, done=True)
-        return PhaseResult(done=True)
-
-
-class ActionPhase(BasePhase):
-    name = "ActionPhase"
-
-    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
-        return f"{player.name}, choose action [a]ttack, [d]efend, or [s]kip: " if player else ""
-
-    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
-        if not player:
-            return PhaseResult(done=True)
-
-        choice = (raw or "").strip().lower()[:1]
-        if choice not in {"a", "d", "s"}:
-            return PhaseResult(message="Invalid choice. Try again.", done=False)
-
-        roll = ctx.rng.random()
-
-        if choice == "a":
-            success = roll < 0.5
-            delta = 2 if success else -1
-            player.score += delta
-            player.gold += 1 if success else 0
-            player.honor += 1
-            msg = f"{player.name} attacked — {'success' if success else 'fail'} (roll={roll:.2f}). Score {delta:+d}."
-        elif choice == "d":
-            success = roll < 0.6
-            delta = 1 if success else 0
-            player.score += delta
-            player.honor += 1
-            msg = f"{player.name} defended — {'success' if success else 'ok'} (roll={roll:.2f}). Score {delta:+d}."
-        else:
-            player.gold += 1
-            msg = f"{player.name} skipped (roll={roll:.2f}). Gained 1 gold."
-
-        return PhaseResult(message=msg, done=True)
-
-
 class ScoringPhase(BasePhase):
     name = "ScoringPhase"
 
@@ -367,13 +312,9 @@ class GameplayState(BaseState):
         self._start_round(ctx)
 
     def _start_round(self, ctx: GameContext) -> None:
-        # Kolejność faz w rundzie: Licytacja -> Sejm -> (przykładowe) Przywitanie -> Akcja -> Podsumowanie
         self.round_engine = RoundEngine([
             AuctionPhase(),
-            SejmPhase(),
-            GreetPhase(),
-            ActionPhase(),
-            ScoringPhase(),
+            SejmPhase()
         ])
         self.round_engine.start(ctx)
 
