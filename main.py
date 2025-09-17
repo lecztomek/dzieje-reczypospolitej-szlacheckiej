@@ -77,6 +77,8 @@ class Province:
     has_fort: bool = False
     # 5 slotów posiadłości; -1 oznacza brak, a liczba to indeks gracza (0..N-1)
     estates: List[int] = field(default_factory=lambda: [-1] * 5)
+    wealth: int = 2  # zamożność prowincji (0–3)
+
 
 @dataclass
 class TroopBoard:
@@ -129,37 +131,70 @@ def show_player_stats(ctx: GameContext):
     println(f"Marshal: {ctx.settings.players[ctx.round_status.marshal_index].name}")
     if ctx.round_status.last_law is not None:
         println(f"Last law: {ctx.round_status.last_law}")
-    # Prowincje
-    println("Provinces:")
-    # pomocnicza mapka: indeks gracza -> skrót/nazwa
+    
+    println("\nProvinces:")
     idx2name = {i: pl.name for i, pl in enumerate(ctx.settings.players)}
     for pid, prov in ctx.provinces.items():
-        estates_str = "[" + ",".join(str(v) for v in prov.estates) + "]"
-        # opcjonalnie: czytelniej z nazwami graczy zamiast indeksów
-        # estates_str = "[" + ",".join(idx2name.get(v, "-") if v != -1 else "-" for v in prov.estates) + "]"
-        println(f"  {pid.value}: fort={'TAK' if prov.has_fort else 'NIE'}, posiadłości={estates_str}")
+        println(f"  {pid.value}:")
+        something_printed = False
+
+        # Fort (tylko jeśli istnieje)
+        if prov.has_fort:
+            println("    Fort: TAK")
+            something_printed = True
+
+        # Wojsko (tylko jeśli ktokolwiek ma >0)
+        troops_arr = ctx.troops.per_province.get(pid, [])
+        if troops_arr and sum(troops_arr) > 0:
+            println("    Wojsko:")
+            for i, player in enumerate(ctx.settings.players):
+                units = troops_arr[i] if i < len(troops_arr) else 0
+                if units > 0:
+                    println(f"      - {player.name}: {units}")
+            something_printed = True
+
+        # Posiadłości (tylko jeśli jakakolwiek zajęta)
+        if any(v != -1 for v in prov.estates):
+            estates_str = "[" + ",".join((idx2name[v] if v != -1 else "-") for v in prov.estates) + "]"
+            println(f"    Posiadłości: {estates_str}")
+            something_printed = True
+
+        # Zamożność (tylko jeśli > 0)
+        if prov.wealth > 0:
+            println(f"    Zamożność: {prov.wealth}")
+            something_printed = True
+
+        # Szlachcice (tylko jeśli ktokolwiek ma >0)
+        nobles_arr = ctx.nobles.per_province.get(pid, [])
+        if nobles_arr and sum(nobles_arr) > 0:
+            println("    Szlachcice:")
+            for i, player in enumerate(ctx.settings.players):
+                nobles = nobles_arr[i] if i < len(nobles_arr) else 0
+                if nobles > 0:
+                    println(f"      - {player.name}: {nobles}")
+            something_printed = True
+
+        if not something_printed:
+            println("    (brak)")
+
     # Tory najazdów
     println("Raid Tracks:")
     for rid, track in ctx.raid_tracks.items():
         println(f"  {rid.value}: {track.value}")   
 
-    # Wojsko na tej prowincji (w formacie P0:2,P1:0,... z nazwami graczy)
-    troops_arr = ctx.troops.per_province.get(pid, [])
-    troop_pairs = []
-    for i, units in enumerate(troops_arr):
-        pname = ctx.settings.players[i].name if i < len(ctx.settings.players) else f"P{i}"
-        troop_pairs.append(f"{pname}:{units}")
-    println(f"Wojsko: " + (", ".join(troop_pairs) if troop_pairs else "(brak)"))
-
-    # Szlachcice
-    nobles_arr = ctx.nobles.per_province.get(pid, [])
-    noble_pairs = []
-    for i, nobles in enumerate(nobles_arr):
-        pname = ctx.settings.players[i].name if i < len(ctx.settings.players) else f"P{i}"
-        noble_pairs.append(f"{pname}:{nobles}")
-    println(f"Szlachcice: " + (", ".join(noble_pairs) if noble_pairs else "(brak)"))
-
     println("--------------------")
+
+def set_province_wealth(ctx: GameContext, province_id: ProvinceID, value: int) -> int:
+    """Ustawia zamożność prowincji (0–3)."""
+    prov = ctx.provinces[province_id]
+    prov.wealth = max(0, min(3, int(value)))
+    return prov.wealth
+
+def add_province_wealth(ctx: GameContext, province_id: ProvinceID, delta: int) -> int:
+    """Dodaje (lub odejmuje) zamożność w zakresie 0–3."""
+    prov = ctx.provinces[province_id]
+    prov.wealth = max(0, min(3, prov.wealth + int(delta)))
+    return prov.wealth
 
 def set_raid(ctx: GameContext, track_id: RaidTrackID, value: int) -> int:
     """Ustawia konkretną wartość toru najazdu. Zwraca nową wartość."""
@@ -377,6 +412,266 @@ class SejmPhase(BasePhase):
             println("[Sejm] Brak większości — żadna ustawa nie przeszła.")
         super().exit(ctx)
 
+class ActionPhase(BasePhase):
+    name = "ActionPhase"
+
+    COST_PAID = {
+        "wplyw": 2,
+        "posiadlosc": 2,
+        "rekrutacja": 2,
+        "marsz": 0,
+        "zamoznosc": 2,
+        "administracja": 0,
+    }
+
+    def __init__(self) -> None:
+        self._ran = False
+        # <<< MAPA INICJAŁÓW PROWINCJI >>>
+        self._prov_short = {
+            "p": ProvinceID.PRUSY,
+            "l": ProvinceID.LITWA,
+            "u": ProvinceID.UKRAINA,
+            "w": ProvinceID.WIELKOPOLSKA,
+            "m": ProvinceID.MALOPOLSKA,
+        }
+
+    # ====== NOWE HELPERY DLA SKRÓTÓW ======
+    @staticmethod
+    def _norm(s: str) -> str:
+        import unicodedata
+        s = (s or "").strip()
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        return s.lower().strip()
+
+    def _match_action(self, token: str) -> str:
+        """Zwraca canonical action id po skrócie/prefiksie."""
+        t = self._norm(token)
+        if not t:
+            return ""
+        # jednoznaczne skróty literowe
+        letter_map = {
+            "w": "wplyw",
+            "p": "posiadlosc",
+            "r": "rekrutacja",
+            "m": "marsz",
+            "z": "zamoznosc",
+            "a": "administracja",
+        }
+        if t in letter_map:
+            return letter_map[t]
+
+        # pełne/prefiksy nazw
+        candidates = {
+            "wplyw": ["wplyw", "wpl", "wp", "w"],
+            "posiadlosc": ["posiadlosc", "posiadłość", "posiad", "pos", "p"],
+            "rekrutacja": ["rekrutacja", "rekr", "rek", "r"],
+            "marsz": ["marsz", "mar", "m"],
+            "zamoznosc": ["zamoznosc", "zamożność", "zamoz", "z"],
+            "administracja": ["administracja", "admin", "adm", "a"],
+        }
+        for act, keys in candidates.items():
+            if any(self._norm(k).startswith(t) or t.startswith(self._norm(k)) for k in keys):
+                return act
+        return ""
+
+    def _parse_province(self, text: str) -> Optional[ProvinceID]:
+        """Akceptuje: pełną nazwę, prefiks lub pojedynczą literę (np. 'P' -> Prusy)."""
+        t = self._norm(text)
+        if not t:
+            return None
+
+        # 1) jednoznaczny skrót literowy (P/L/U/W/M)
+        if len(t) == 1 and t in self._prov_short:
+            return self._prov_short[t]
+
+        # 2) pełna nazwa lub prefiks (np. 'Lit', 'Prus', 'Malop')
+        for pid in ProvinceID:
+            name_n = self._norm(pid.value)
+            if t == name_n or name_n.startswith(t) or t.startswith(name_n):
+                return pid
+
+        # 3) awaryjnie: dopasuj po inicjale, gdyby nie było w mapie
+        if len(t) == 1:
+            for pid in ProvinceID:
+                if self._norm(pid.value)[0] == t:
+                    return pid
+
+        return None
+
+    # ====== RESZTA KLASY BEZ ZMIAN... (pokazuję tylko fragmenty, które trzeba podmienić) ======
+
+    def _prompt_action(self, player: Player) -> tuple[str, str]:
+        """Zwraca (action, args_str). Obsługuje skróty typu 'w L' lub 'm L->P'."""
+        println(f"[Akcje] Tura gracza {player.name} (złoto={player.gold}).")
+        raw = (prompt("Podaj akcję: ").strip() or "")
+
+        if not raw:
+            return "", ""
+
+        # Pierwszy token = akcja (skrót lub pełna nazwa); reszta to argumenty (np. prowincja)
+        parts = raw.split(maxsplit=1)
+        action_token = parts[0]
+        args = parts[1] if len(parts) > 1 else ""
+
+        action = self._match_action(action_token)
+        if not action:
+            return "", ""
+
+        # Jeżeli nie podano argumentów, dopytaj (zgodnie z typem akcji)
+        if not args:
+            if action == "marsz":
+                args = prompt("Z (np. L->P lub Litwa->Prusy): ")
+            elif action in ("wplyw", "posiadlosc", "rekrutacja", "zamoznosc"):
+                args = prompt("Prowincja: ")
+            else:
+                args = ""
+
+        # Normalizacja skrótu marszu: L->P itd. rozwiążemy później w _one_action_turn
+        return action, args
+
+    def enter(self, ctx: GameContext) -> None:
+        println("[Akcje] Dwie kolejki akcji. Kolejność: od marszałka, po 1 akcji na kolejkę.")
+        println("Dostępne: Wplyw(2), Posiadlosc(2), Rekrutacja(2), Marsz(0), Zamoznosc(2), Administracja(0)")
+        println("Przykłady:")
+        println("  wplyw Litwa")
+        println("  posiadlosc Prusy")
+        println("  rekrutacja Ukraina")
+        println("  marsz Litwa->Prusy")
+        println("  zamoznosc Malopolska")
+        println("  administracja")
+
+    # RoundEngine i tak woła ask/handle per gracz, ale my sterujemy całą fazą wewnętrznie,
+    # więc ask nic nie pyta (unikamy podwójnych promptów).
+    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        return ""
+
+    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
+        # Uruchom pełną fazę tylko przy pierwszym wywołaniu
+        if self._ran:
+            return PhaseResult(done=True)
+        self._ran = True
+
+        players = ctx.settings.players
+        m = ctx.round_status.marshal_index
+        order = players[m:] + players[:m]
+
+        # Dwie kolejki: w każdej każdy gracz wykona dokładnie jedną akcję
+        for pass_no in (1, 2):
+            println(f"[Akcje] --- Kolejka {pass_no}/2 ---")
+            for pl in order:
+                self._one_action_turn(ctx, pl)
+
+        return PhaseResult(done=True)
+
+    # ---------- Helpers ----------
+
+    def _player_index(self, ctx: GameContext, player: Player) -> int:
+        return ctx.settings.players.index(player)
+
+    def _has_noble(self, ctx: GameContext, pid: ProvinceID, pidx: int) -> bool:
+        return ctx.nobles.per_province[pid][pidx] > 0
+
+    def _one_action_turn(self, ctx: GameContext, player: Player) -> None:
+        # pętla do skutku: jedna poprawnie wykonana akcja
+        while True:
+            action, args = self._prompt_action(player)
+            if not action:
+                println("Nieznana akcja. Spróbuj ponownie.")
+                continue
+
+            cost = self.COST_PAID[action]
+            if player.gold < cost:
+                println(f"Za mało złota. Akcja '{action}' kosztuje {cost}, masz {player.gold}.")
+                continue
+
+            pidx = self._player_index(ctx, player)
+            ok = False
+            msg = ""
+
+            if action == "administracja":
+                player.gold += 2
+                ok = True
+                msg = f"{player.name} otrzymuje +2 złota (teraz {player.gold})."
+
+            elif action == "wplyw":
+                pid = self._parse_province(args)
+                if not pid:
+                    println("Nie rozpoznano prowincji.")
+                    continue
+                add_nobles(ctx, pid, pidx, 1)
+                player.gold -= cost
+                ok = True
+                msg = f"{player.name} stawia szlachcica w {pid.value}. (złoto {player.gold})"
+
+            elif action == "posiadlosc":
+                pid = self._parse_province(args)
+                if not pid:
+                    println("Nie rozpoznano prowincji.")
+                    continue
+                if not self._has_noble(ctx, pid, pidx):
+                    println("Musisz mieć szlachcica na tej prowincji.")
+                    continue
+                if build_estate(ctx, pid, pidx):
+                    player.gold -= cost
+                    ok = True
+                    msg = f"{player.name} buduje posiadłość w {pid.value}. (złoto {player.gold})"
+                else:
+                    println("Brak wolnych slotów posiadłości w tej prowincji.")
+                    continue
+
+            elif action == "rekrutacja":
+                pid = self._parse_province(args)
+                if not pid:
+                    println("Nie rozpoznano prowincji.")
+                    continue
+                if not self._has_noble(ctx, pid, pidx):
+                    println("Musisz mieć szlachcica na tej prowincji.")
+                    continue
+                add_units(ctx, pid, pidx, 1)
+                player.gold -= cost
+                ok = True
+                msg = f"{player.name} rekrutuje 1 jednostkę w {pid.value}. (złoto {player.gold})"
+
+            elif action == "marsz":
+                if "->" not in args:
+                    println("Podaj format: Źródło->Cel (np. Litwa->Prusy).")
+                    continue
+                src_txt, dst_txt = [s.strip() for s in args.split("->", 1)]
+                src = self._parse_province(src_txt)
+                dst = self._parse_province(dst_txt)
+                if not src or not dst:
+                    println("Nie rozpoznano prowincji.")
+                    continue
+                if not self._has_noble(ctx, src, pidx) or not self._has_noble(ctx, dst, pidx):
+                    println("Marsz tylko między prowincjami, gdzie masz szlachcica na obu.")
+                    continue
+                if move_units(ctx, src, dst, pidx, 1):
+                    ok = True
+                    msg = f"{player.name} maszeruje 1 jednostką: {src.value} -> {dst.value}."
+                else:
+                    println("Brak jednostek do przesunięcia na prowincji źródłowej.")
+                    continue
+
+            elif action == "zamoznosc":
+                pid = self._parse_province(args)
+                if not pid:
+                    println("Nie rozpoznano prowincji.")
+                    continue
+                before = ctx.provinces[pid].wealth
+                if before >= 3:
+                    println("Zamożność już wynosi 3 (maksimum).")
+                    continue
+                add_province_wealth(ctx, pid, 1)
+                player.gold -= cost
+                ok = True
+                msg = f"{player.name} podnosi zamożność {pid.value} z {before} do {ctx.provinces[pid].wealth}. (złoto {player.gold})"
+
+            if ok:
+                println(msg)
+                # po jednej poprawnej akcji kończymy turę tego gracza
+                break
+
 
 class ScoringPhase(BasePhase):
     name = "ScoringPhase"
@@ -504,7 +799,8 @@ class GameplayState(BaseState):
         println(f"=== ROUND {ctx.round_status.current_round} / {ctx.round_status.total_rounds} ===")
         self.round_engine = RoundEngine([
             AuctionPhase(),
-            SejmPhase()
+            SejmPhase(),
+            ActionPhase()
         ])
         self.round_engine.start(ctx)
 
