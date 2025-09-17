@@ -392,22 +392,22 @@ def compute_final_scores(ctx: GameContext) -> str:
     """
     Zasady:
       1) +1 pkt dla gracza(ów) z największą liczbą posiadłości (suma po całej mapie).
-      2) Wpływy z prowincji: +1 pkt dla zwycięzcy w każdej prowincji.
+      2) Wpływy z prowincji: +1 pkt TYLKO jeśli jest dokładnie jeden zwycięzca.
          Zwycięża najwięcej szlachciców; remis -> jeśli dokładnie jeden z remisujących ma wojsko w tej prowincji,
-         to on wygrywa; w innym wypadku remis i wszyscy remisujący dostają po +1.
+         to on wygrywa; w przeciwnym razie (brak rozstrzygnięcia) NIKT nie dostaje punktu.
       3) +punkty honoru (dodajemy p.honor do wyniku).
       4) Za każde 3 złota +1 pkt (floor(gold/3)).
     Zwraca tekstowy raport.
     """
     players = ctx.settings.players
     pcount = len(players)
-    # wyzeruj tymczasowo score (żeby liczyć "od zera" finalnie)
+    # wyzeruj wynik, liczymy od zera
     for p in players:
         p.score = 0
 
     # (1) NAJWIĘCEJ POSIADŁOŚCI – globalnie
     estates_total = [0] * pcount
-    for pid, prov in ctx.provinces.items():
+    for prov in ctx.provinces.values():
         for owner in prov.estates:
             if 0 <= owner < pcount:
                 estates_total[owner] += 1
@@ -416,43 +416,26 @@ def compute_final_scores(ctx: GameContext) -> str:
     for i in estate_winners:
         players[i].score += 1
 
-    # (2) WPŁYWY Z PROWINCJI – per prowincja
+    # (2) WPŁYWY Z PROWINCJI – punkt tylko przy JEDNYM zwycięzcy
     influence_lines = []
     for pid in ProvinceID:
-        nobles_arr = ctx.nobles.per_province.get(pid, [0]*pcount)
-        troops_arr = ctx.troops.per_province.get(pid, [0]*pcount)
-
-        max_nob = max(nobles_arr) if nobles_arr else 0
-        if max_nob == 0:
-            # nikt nie ma szlachciców – nikt nie dostaje punktu
+        winners = influence_winners_in_province(ctx, pid)  # już uwzględnia tie-break wojskiem
+        if not winners:
             influence_lines.append(f"{pid.value}: brak wpływu")
             continue
-
-        leaders = [i for i, v in enumerate(nobles_arr) if v == max_nob]
-        winner_idxs: List[int]
-
-        if len(leaders) == 1:
-            winner_idxs = leaders
+        if len(winners) == 1:
+            w = winners[0]
+            players[w].score += 1
+            influence_lines.append(f"{pid.value}: {players[w].name}")
         else:
-            # remis – tie-breaker wojskiem: jeśli dokładnie jeden z remisujących ma >0 wojsk, wygrywa on,
-            # inaczej remis się utrzymuje i każdy z remisujących dostaje punkt.
-            with_troops = [i for i in leaders if troops_arr[i] > 0]
-            if len(with_troops) == 1:
-                winner_idxs = with_troops
-            else:
-                winner_idxs = leaders  # remis – punkty dla wszystkich remisujących
-
-        for i in winner_idxs:
-            players[i].score += 1
-
-        winners_names = ", ".join(players[i].name for i in winner_idxs)
-        influence_lines.append(f"{pid.value}: {winners_names}")
+            # remis nierozstrzygnięty -> nikt nie dostaje punktu
+            influence_lines.append(f"{pid.value}: remis – nikt")
 
     # (3) HONOR
     for p in players:
         p.score += p.honor
 
-    # (4) ZŁOTO → PUNKTY
+    # (4) ZŁOTO → PUNKTY (co 3 złota)
     gold_pts = [p.gold // 3 for p in players]
     for i, gp in enumerate(gold_pts):
         players[i].score += gp
@@ -460,7 +443,7 @@ def compute_final_scores(ctx: GameContext) -> str:
     # raport
     lines = []
     lines.append("[Punktacja końcowa]")
-    lines.append(f"Posiadłości (łącznie): " + ", ".join(f"{players[i].name}={estates_total[i]}" for i in range(pcount)))
+    lines.append("Posiadłości (łącznie): " + ", ".join(f"{players[i].name}={estates_total[i]}" for i in range(pcount)))
     if estate_winners:
         lines.append("Najwięcej posiadłości: " + ", ".join(players[i].name for i in estate_winners) + " (+1)")
     else:
@@ -474,6 +457,7 @@ def compute_final_scores(ctx: GameContext) -> str:
     lines.append("Złoto→pkt: " + ", ".join(f"{players[i].name}=+{gold_pts[i]} (z {players[i].gold} zł)" for i in range(pcount)))
 
     return "\n".join(lines)
+
 
 
 # --------------- Phase System --------------- #
