@@ -78,6 +78,10 @@ class Province:
     # 5 slotów posiadłości; -1 oznacza brak, a liczba to indeks gracza (0..N-1)
     estates: List[int] = field(default_factory=lambda: [-1] * 5)
 
+@dataclass
+class TroopBoard:
+    # Dla każdej prowincji trzymamy listę [units_gracza0, units_gracza1, ...]
+    per_province: Dict[ProvinceID, List[int]] = field(default_factory=dict)
 
 @dataclass
 class GameContext:
@@ -97,6 +101,7 @@ class GameContext:
         RaidTrackID.S: RaidTrack(RaidTrackID.S, 0),
         RaidTrackID.E: RaidTrack(RaidTrackID.E, 0),
     })
+    troops: TroopBoard = field(default_factory=TroopBoard)
 
 # --------------- Helpers --------------- #
 
@@ -142,7 +147,15 @@ def show_player_stats(ctx: GameContext):
     println("Raid Tracks:")
     for rid, track in ctx.raid_tracks.items():
         println(f"  {rid.value}: {track.value}")   
-    
+
+    # Wojsko na tej prowincji (w formacie P0:2,P1:0,... z nazwami graczy)
+    troops_arr = ctx.troops.per_province.get(pid, [])
+    troop_pairs = []
+    for i, units in enumerate(troops_arr):
+        pname = ctx.settings.players[i].name if i < len(ctx.settings.players) else f"P{i}"
+        troop_pairs.append(f"{pname}:{units}")
+    println(f"Wojsko: " + (", ".join(troop_pairs) if troop_pairs else "(brak)"))
+
     println("--------------------")
 
 def build_estate(ctx: GameContext, province_id: ProvinceID, player_index: int) -> bool:
@@ -177,6 +190,35 @@ def toggle_fort(ctx: GameContext, province_id: ProvinceID, value: Optional[bool]
     prov = ctx.provinces[province_id]
     prov.has_fort = (not prov.has_fort) if value is None else bool(value)
     return prov.has_fort
+
+def set_units(ctx: GameContext, province_id: ProvinceID, player_index: int, value: int) -> int:
+    """Ustaw dokładną liczbę jednostek gracza na prowincji (nieujemną). Zwraca nową wartość."""
+    arr = ctx.troops.per_province[province_id]
+    arr[player_index] = max(0, int(value))
+    return arr[player_index]
+
+def add_units(ctx: GameContext, province_id: ProvinceID, player_index: int, delta: int) -> int:
+    """Dodaj/odejmij jednostki (może być ujemne). Zwraca nową wartość (nie spadnie poniżej 0)."""
+    arr = ctx.troops.per_province[province_id]
+    arr[player_index] = max(0, arr[player_index] + int(delta))
+    return arr[player_index]
+
+def move_units(ctx: GameContext, from_pid: ProvinceID, to_pid: ProvinceID, player_index: int, amount: int) -> bool:
+    """Przenieś amount jednostek między prowincjami dla danego gracza. Zwraca True, jeśli się udało."""
+    amount = int(amount)
+    if amount <= 0:
+        return False
+    from_arr = ctx.troops.per_province[from_pid]
+    to_arr = ctx.troops.per_province[to_pid]
+    if from_arr[player_index] < amount:
+        return False
+    from_arr[player_index] -= amount
+    to_arr[player_index] += amount
+    return True
+
+def total_units_on(ctx: GameContext, province_id: ProvinceID) -> int:
+    """Suma wszystkich jednostek (wszyscy gracze) na danej prowincji."""
+    return sum(ctx.troops.per_province[province_id])
 
 # --------------- Phase System --------------- #
 
@@ -388,6 +430,14 @@ class StartMenuState(BaseState):
             println("Invalid number, keeping default.")
 
         ctx.round_status = RoundStatus(current_round=1, total_rounds=ctx.settings.max_rounds, marshal_index=0)
+        
+        # --- INIT TROOPS: po znaniu liczby graczy przygotuj tablice wojsk ---
+        pcount = len(ctx.settings.players)
+        ctx.troops.per_province = {
+            pid: [0] * pcount
+            for pid in ctx.provinces.keys()
+        }
+        
         return StateID.GAMEPLAY
 
 
