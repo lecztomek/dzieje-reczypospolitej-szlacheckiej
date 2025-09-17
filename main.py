@@ -340,6 +340,99 @@ def total_nobles_on(ctx: GameContext, province_id: ProvinceID) -> int:
     """Suma wszystkich szlachciców (wszyscy gracze) na danej prowincji."""
     return sum(ctx.nobles.per_province[province_id])
 
+def count_estates_for_player_in_province(ctx: GameContext, province_id: ProvinceID, pidx: int) -> int:
+    """Ile slotów posiadłości w danej prowincji należy do gracza pidx."""
+    prov = ctx.provinces[province_id]
+    return sum(1 for v in prov.estates if v == pidx)
+
+def compute_final_scores(ctx: GameContext) -> str:
+    """
+    Zasady:
+      1) +1 pkt dla gracza(ów) z największą liczbą posiadłości (suma po całej mapie).
+      2) Wpływy z prowincji: +1 pkt dla zwycięzcy w każdej prowincji.
+         Zwycięża najwięcej szlachciców; remis -> jeśli dokładnie jeden z remisujących ma wojsko w tej prowincji,
+         to on wygrywa; w innym wypadku remis i wszyscy remisujący dostają po +1.
+      3) +punkty honoru (dodajemy p.honor do wyniku).
+      4) Za każde 3 złota +1 pkt (floor(gold/3)).
+    Zwraca tekstowy raport.
+    """
+    players = ctx.settings.players
+    pcount = len(players)
+    # wyzeruj tymczasowo score (żeby liczyć "od zera" finalnie)
+    for p in players:
+        p.score = 0
+
+    # (1) NAJWIĘCEJ POSIADŁOŚCI – globalnie
+    estates_total = [0] * pcount
+    for pid, prov in ctx.provinces.items():
+        for owner in prov.estates:
+            if 0 <= owner < pcount:
+                estates_total[owner] += 1
+    max_est = max(estates_total) if estates_total else 0
+    estate_winners = [i for i, v in enumerate(estates_total) if v == max_est and max_est > 0]
+    for i in estate_winners:
+        players[i].score += 1
+
+    # (2) WPŁYWY Z PROWINCJI – per prowincja
+    influence_lines = []
+    for pid in ProvinceID:
+        nobles_arr = ctx.nobles.per_province.get(pid, [0]*pcount)
+        troops_arr = ctx.troops.per_province.get(pid, [0]*pcount)
+
+        max_nob = max(nobles_arr) if nobles_arr else 0
+        if max_nob == 0:
+            # nikt nie ma szlachciców – nikt nie dostaje punktu
+            influence_lines.append(f"{pid.value}: brak wpływu")
+            continue
+
+        leaders = [i for i, v in enumerate(nobles_arr) if v == max_nob]
+        winner_idxs: List[int]
+
+        if len(leaders) == 1:
+            winner_idxs = leaders
+        else:
+            # remis – tie-breaker wojskiem: jeśli dokładnie jeden z remisujących ma >0 wojsk, wygrywa on,
+            # inaczej remis się utrzymuje i każdy z remisujących dostaje punkt.
+            with_troops = [i for i in leaders if troops_arr[i] > 0]
+            if len(with_troops) == 1:
+                winner_idxs = with_troops
+            else:
+                winner_idxs = leaders  # remis – punkty dla wszystkich remisujących
+
+        for i in winner_idxs:
+            players[i].score += 1
+
+        winners_names = ", ".join(players[i].name for i in winner_idxs)
+        influence_lines.append(f"{pid.value}: {winners_names}")
+
+    # (3) HONOR
+    for p in players:
+        p.score += p.honor
+
+    # (4) ZŁOTO → PUNKTY
+    gold_pts = [p.gold // 3 for p in players]
+    for i, gp in enumerate(gold_pts):
+        players[i].score += gp
+
+    # raport
+    lines = []
+    lines.append("[Punktacja końcowa]")
+    lines.append(f"Posiadłości (łącznie): " + ", ".join(f"{players[i].name}={estates_total[i]}" for i in range(pcount)))
+    if estate_winners:
+        lines.append("Najwięcej posiadłości: " + ", ".join(players[i].name for i in estate_winners) + " (+1)")
+    else:
+        lines.append("Najwięcej posiadłości: nikt (brak posiadłości)")
+
+    lines.append("Wpływy z prowincji:")
+    for s in influence_lines:
+        lines.append("  • " + s)
+
+    lines.append("Honor: " + ", ".join(f"{p.name}=+{p.honor}" for p in players))
+    lines.append("Złoto→pkt: " + ", ".join(f"{players[i].name}=+{gold_pts[i]} (z {players[i].gold} zł)" for i in range(pcount)))
+
+    return "\n".join(lines)
+
+
 # --------------- Phase System --------------- #
 
 class PhaseResult:
@@ -1047,16 +1140,6 @@ class DevastationPhase(BasePhase):
         super().exit(ctx)  # pokaże aktualny stan mapy i torów
 
 
-class ScoringPhase(BasePhase):
-    name = "ScoringPhase"
-
-    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
-        summary = "Round %d summary:" % ctx.round_status.current_round
-        for p in ctx.settings.players:
-            summary += f"  {p.name}: {p.score} points, {p.gold} gold, {p.honor} honor\n"
-        return PhaseResult(message=summary, done=True)
-
-
 # --------------- Round Engine --------------- #
 
 class RoundEngine:
@@ -1202,6 +1285,9 @@ class GameOverState(BaseState):
 
     def enter(self, ctx: GameContext) -> None:
         println("=== GAME OVER ===")
+        # policz końcowe punkty wg zasad
+        report = compute_final_scores(ctx)
+        println(report)
         println("Final scores:")
         for p in ctx.settings.players:
             tag = " (MAJORITY)" if p.majority else ""
@@ -1213,6 +1299,7 @@ class GameOverState(BaseState):
             return StateID.START_MENU
         println("Thanks for playing!")
         return None
+
 
 
 # --------------- FSM Orchestrator --------------- #
