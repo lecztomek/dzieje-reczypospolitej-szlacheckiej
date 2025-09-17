@@ -672,6 +672,59 @@ class ActionPhase(BasePhase):
                 # po jednej poprawnej akcji kończymy turę tego gracza
                 break
 
+class EnemyReinforcementPhase(BasePhase):
+    name = "EnemyReinforcementPhase"
+
+    def __init__(self) -> None:
+        self._ran = False
+
+    @staticmethod
+    def _roll_to_delta(roll: int) -> int:
+        if roll <= 2:
+            return 0
+        elif roll <= 4:
+            return 1
+        else:
+            return 2
+
+    def enter(self, ctx: GameContext) -> None:
+        println("[Wrogowie] Wzmacnianie wrogich armii.")
+        println("Dla każdego toru podaj wynik 1–6. Modyfikacje: 1–2:+0, 3–4:+1, 5–6:+2.")
+
+    # Nie pytamy per gracza — faza sama prowadzi wejście/wyjście.
+    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        return ""
+
+    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
+        if self._ran:
+            return PhaseResult(done=True)
+        self._ran = True
+
+        # stała kolejność: N, S, E (Szwecja, Tatarzy, Moskwa)
+        order = [RaidTrackID.N, RaidTrackID.S, RaidTrackID.E]
+        for rid in order:
+            name = rid.value
+            while True:
+                val = (prompt(f"[Wrogowie] Rzut dla {name} (1–6): ") or "").strip()
+                try:
+                    roll = int(val)
+                    if 1 <= roll <= 6:
+                        break
+                    raise ValueError
+                except ValueError:
+                    println("Nieprawidłowe — wpisz liczbę 1–6.")
+
+            delta = self._roll_to_delta(roll)
+            if delta != 0:
+                new_val = add_raid(ctx, rid, delta)
+                println(f"  {name}: +{delta} → {new_val}")
+            else:
+                println(f"  {name}: +0 (bez zmian)")
+
+        return PhaseResult(done=True)
+
+    def exit(self, ctx: GameContext) -> None:
+        super().exit(ctx)  # pokaże zaktualizowane statystyki wraz z torami najazdów
 
 class ScoringPhase(BasePhase):
     name = "ScoringPhase"
@@ -800,7 +853,8 @@ class GameplayState(BaseState):
         self.round_engine = RoundEngine([
             AuctionPhase(),
             SejmPhase(),
-            ActionPhase()
+            ActionPhase(),
+            EnemyReinforcementPhase()
         ])
         self.round_engine.start(ctx)
 
