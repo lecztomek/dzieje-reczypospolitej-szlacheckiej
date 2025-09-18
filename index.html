@@ -3,78 +3,85 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mapa Polski ok. 1650 r. – Interaktywne prowincje</title>
+  <title>Mapa Polski ok. 1650 r. – interaktywna + konsola rysunku</title>
   <style>
-    :root {
-      --bg: #0f172a;          /* slate-900 */
-      --panel: #111827ee;     /* gray-900 */
-      --card: #0b1221cc;      /* dark translucent */
-      --accent: #eab308;      /* amber-500 */
-      --muted: #94a3b8;       /* slate-400 */
-      --text: #e5e7eb;        /* gray-200 */
-      --stroke: #061127;      /* deep navy */
-      --shadow: 0 10px 30px rgba(0,0,0,.4);
+    :root{
+      --bg:#0f172a;--panel:#111827ee;--card:#0b1221cc;--accent:#eab308;--muted:#94a3b8;--text:#e5e7eb;--stroke:#061127;--shadow:0 10px 30px rgba(0,0,0,.4);
+      --console-h: 220px; /* stała wysokość konsoli; JS ustawi padding strony pod to */
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color:var(--text);
+      background: radial-gradient(1200px 600px at 60% -10%, #1f2a4a 0%, #0b1020 35%, var(--bg) 100%);
+      padding-bottom: calc(var(--console-h) + var(--safe-bottom));
     }
 
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body {
-      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-      color: var(--text); background: radial-gradient(1200px 600px at 60% -10%, #1f2a4a 0%, #0b1020 35%, var(--bg) 100%);
-    }
+    header{position:sticky;top:0;z-index:5;backdrop-filter:blur(10px);background:#0b1020aa;border-bottom:1px solid #1f2937}
+    .wrap{max-width:1200px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:14px}
+    h1{font-size:clamp(18px,2.4vw,28px);margin:0;letter-spacing:.3px}
+    .note{color:var(--muted);font-size:.95rem;margin-left:auto}
 
-    header {
-      position: sticky; top: 0; z-index: 5;
-      backdrop-filter: blur(10px); background: #0b1020aa; border-bottom: 1px solid #1f2937;
-    }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; gap: 14px; }
-    h1 { font-size: clamp(18px, 2.4vw, 28px); margin: 0; letter-spacing: .3px; }
-    .note { color: var(--muted); font-size: .95rem; margin-left: auto; }
+    main{max-width:1200px;margin:18px auto 40px;padding:0 20px;display:block}
+    .map-card{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+    .map-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #1f2937}
+    .map-header h2{margin:0;font-size:1.05rem;color:#cbd5e1}
+    .actions{display:flex;gap:10px;align-items:center}
+    button,.legend button{cursor:pointer;border:1px solid #334155;background:#0f172a;color:#e2e8f0;padding:8px 12px;border-radius:10px;font-weight:600;transition:.2s ease}
+    button:hover,.legend button:hover{background:#111827;border-color:#475569}
+    .svg-wrap{position:relative;padding:14px}
+    svg{width:100%;height:auto;display:block;filter:drop-shadow(0 16px 24px rgba(0,0,0,.35))}
 
-    main { max-width: 1200px; margin: 18px auto; padding: 0 20px 40px; display: grid; grid-template-columns: 1.6fr .95fr; gap: 18px; }
-    @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+    .region{stroke:#0b1221;stroke-width:2;vector-effect:non-scaling-stroke;fill-opacity:.92;transition:transform .15s ease, filter .2s ease, fill-opacity .2s ease;cursor:pointer;outline:none}
+    .region:hover{filter:brightness(1.1) saturate(1.1)}
+    .region:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+    .region.selected{stroke:#f59e0b;stroke-width:3;fill-opacity:1}
 
-    .map-card, .info-card { background: var(--card); border: 1px solid #1f2937; border-radius: 16px; box-shadow: var(--shadow); }
-
-    .map-card { position: relative; overflow: hidden; }
-    .map-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #1f2937; }
-    .map-header h2 { margin: 0; font-size: 1.05rem; color: #cbd5e1; }
-
-    .actions { display: flex; gap: 10px; align-items: center; }
-    button, .legend button { cursor: pointer; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; padding: 8px 12px; border-radius: 10px; font-weight: 600; transition: .2s ease; }
-    button:hover, .legend button:hover { background: #111827; border-color: #475569; }
-
-    .svg-wrap { position: relative; padding: 14px; }
-    svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 16px 24px rgba(0,0,0,.35)); }
-
-    .region { stroke: #0b1221; stroke-width: 2; vector-effect: non-scaling-stroke; fill-opacity: .92; transition: transform .15s ease, filter .2s ease, fill-opacity .2s ease; cursor: pointer; outline: none; }
-    .region:hover { filter: brightness(1.1) saturate(1.1); }
-    .region:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
-    .region.selected { stroke: #f59e0b; stroke-width: 3; filter: drop-shadow(0 0 0 rgba(0,0,0,0)); fill-opacity: 1; }
-
-    .legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
-    .legend button { font-size: .9rem; }
-
-    .info-card { padding: 16px; display: grid; gap: 12px; }
-    .info-card h3 { margin: 2px 0 0; font-size: 1.2rem; }
-    .info-card .subtitle { color: #cbd5e1; margin: 0; }
-    .info-body { background: #0a0f1b; border: 1px solid #172036; border-radius: 12px; padding: 14px; line-height: 1.45; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-    .meta div { background: #0d1424; border: 1px solid #1c2740; border-radius: 10px; padding: 10px; font-size: .95rem; }
-    .muted { color: var(--muted); }
-
-    footer { max-width: 1200px; margin: 20px auto 50px; padding: 0 20px; color: var(--muted); font-size: .9rem; }
+    .legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 16px}
+    .legend button{font-size:.9rem}
 
     /* Tooltip */
-    .tooltip { position: fixed; pointer-events: none; z-index: 10; background: #0b1221f2; border: 1px solid #1f2937; padding: 8px 10px; border-radius: 10px; font-size: .9rem; box-shadow: var(--shadow); transform: translate(-50%, calc(-100% - 14px)); opacity: 0; transition: opacity .12s ease; }
-    .tooltip.shown { opacity: 1; }
+    .tooltip{position:fixed;pointer-events:none;z-index:10;background:#0b1221f2;border:1px solid #1f2937;padding:8px 10px;border-radius:10px;font-size:.9rem;box-shadow:var(--shadow);transform:translate(-50%, calc(-100% - 14px));opacity:0;transition:opacity .12s ease}
+    .tooltip.shown{opacity:1}
+
+    /* Znacznik współrzędnych nad mapą */
+    .coords{position:absolute;left:10px;bottom:10px;background:#0a0f1bcc;border:1px solid #172036;border-radius:10px;padding:6px 10px;font-size:.85rem;color:#cbd5e1;pointer-events:none}
+
+    /* Konsola na dole */
+    .console{
+      position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--panel);
+      border-top:1px solid #1f2937;box-shadow:0 -10px 30px rgba(0,0,0,.35);
+      height:var(--console-h); display:flex; flex-direction:column;
+      padding-bottom:var(--safe-bottom);
+    }
+    .console .bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #1f2937}
+    .console .bar .title{font-weight:700;letter-spacing:.3px}
+    .console .log{flex:1;overflow:auto;padding:10px 14px;line-height:1.35}
+    .console .log .entry{opacity:.95;margin:.25rem 0}
+    .console .log .ok{color:#a7f3d0}
+    .console .log .err{color:#fecaca}
+    .console form{display:flex;gap:8px;padding:10px 14px}
+    .console input[type="text"]{
+      flex:1;border:1px solid #334155;background:#0f172a;color:#e2e8f0;
+      padding:10px 12px;border-radius:10px;font-size:1rem
+    }
+    .console .hint{margin-left:auto;color:#94a3b8;font-size:.9rem}
+
+    @media (max-width: 640px){
+      :root{ --console-h: 260px; }
+      .console .hint{display:none}
+    }
+
+    footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);font-size:.9rem}
   </style>
 </head>
 <body>
   <header>
     <div class="wrap">
-      <h1>Mapa Polski ok. 1650 r. – interaktywne prowincje (schematycznie)</h1>
-      <p class="note">Kliknij na region lub skorzystaj z legendy.</p>
+      <h1>Mapa Polski ok. 1650 r. – interaktywne prowincje (schemat)</h1>
+      <p class="note">Korzystaj z konsoli na dole (wpisz <code>pomoc</code>).</p>
     </div>
   </header>
 
@@ -84,35 +91,46 @@
         <h2>Mapa (schemat niegeograficzny)</h2>
         <div class="actions">
           <button id="resetBtn" type="button" aria-label="Wyczyść zaznaczenie">Reset</button>
+          <button id="clearDrawBtn" type="button" aria-label="Usuń rysunki z mapy">Wyczyść rysunki</button>
         </div>
       </div>
 
       <div class="svg-wrap">
-        <svg viewBox="0 0 1633 1137" role="img" aria-labelledby="map-title" aria-describedby="map-desc">
+        <svg id="mapSvg" viewBox="0 0 1633 1137" role="img" aria-labelledby="map-title" aria-describedby="map-desc">
           <title id="map-title">Rzeczpospolita Obojga Narodów ok. 1650 r. – uproszczony podział</title>
-          <desc id="map-desc">Uproszczona, poglądowa mapa z pięcioma regionami: Prusy, Wielkopolska, Małopolska, Litwa, Ukraina. Granice i kształty są przybliżone, służą wyłącznie interakcji.</desc>
+          <desc id="map-desc">Uproszczona, poglądowa mapa z pięcioma regionami: Prusy, Wielkopolska, Małopolska, Litwa, Ukraina. Granice i kształty są przybliżone, służą wyłącznie interakcji i rysowaniu.</desc>
+
+          <!-- Definicje strzałek do linii -->
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#eab308"/>
+            </marker>
+            <filter id="softGlow">
+              <feGaussianBlur stdDeviation="2.2" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
 
           <!-- REGIONY (układ poglądowy) -->
           <!-- PRUSY -->
           <path id="r-prusy" class="region" tabindex="0" data-key="prusy" fill="#38bdf8" d="M 329 512.1875 L 386 464.1875 L 403 471.1875 L 400 491.1875 L 416 493.1875 L 422 485.1875 L 446 494.1875 L 469 486.1875 L 524 481.1875 L 548 456.1875 L 566 441.1875 L 569 407.1875 L 576 392.1875 L 576 381.1875 L 587 373.1875 L 565 344.1875 L 569 321.1875 L 548 303.1875 L 531 305.1875 L 531 297.1875 L 514 292.1875 L 508 267.1875 L 499 261.1875 L 497 276.1875 L 504 298.1875 L 511 300.1875 L 511 308.1875 L 501 314.1875 L 497 342.1875 L 488 338.1875 L 488 347.1875 L 467 337.1875 L 461 340.1875 L 463 330.1875 L 452 335.1875 L 415 337.1875 L 417 357.1875 L 439 363.1875 L 410 388.1875 L 391 392.1875 L 364 394.1875 L 346 391.1875 L 333 382.1875 L 310 376.1875 L 316 359.1875 L 340 372.1875 L 335 359.1875 L 320 350.1875 L 308 362.1875 L 302 351.1875 L 298 386.1875 L 276 400.1875 L 262 417.1875 L 259 427.1875 L 241 422.1875 L 217 425.1875 L 220 448.1875 L 207 466.1875 L 224 482.1875 L 238 494.1875 L 266 485.1875 L 300 502.1875 L 329 512.1875 Z"/>
-
-
           <!-- WIELKOPOLSKA -->
           <path id="r-wielkopolska" class="region" tabindex="0" data-key="wielkopolska" fill="#60a5fa" d="M 189 463.1875 L 206 472.1875 L 240 497.1875 L 263 486.1875 L 276 498.1875 L 323 511.1875 L 362 486.1875 L 384 465.1875 L 402 472.1875 L 400 489.1875 L 412 496.1875 L 423 485.1875 L 452 494.1875 L 469 484.1875 L 519 482.1875 L 540 457.1875 L 568 443.1875 L 569 421.1875 L 595 430.1875 L 618 491.1875 L 647 516.1875 L 626 547.1875 L 596 560.1875 L 588 597.1875 L 565 605.1875 L 557 628.1875 L 520 597.1875 L 487 624.1875 L 433 633.1875 L 403 634.1875 L 357 646.1875 L 326 678.1875 L 260 709.1875 L 245 695.1875 L 243 674.1875 L 207 640.1875 L 198 631.1875 L 194 613.1875 L 167 624.1875 L 122 615.1875 L 120 584.1875 L 89 559.1875 L 94 545.1875 L 154 523.1875 L 172 517.1875 L 173 504.1875 L 177 473.1875 L 189 463.1875 Z"/>
-
-
           <!-- MAŁOPOLSKA -->
           <path id="r-malopolska" class="region" tabindex="0" data-key="malopolska" fill="#a78bfa" d="M 360 645.1875 L 399 635.1875 L 427 641.1875 L 466 628.1875 L 480 631.1875 L 512 599.1875 L 550 624.1875 L 566 644.1875 L 594 644.1875 L 608 651.1875 L 648 638.1875 L 665 650.1875 L 643 675.1875 L 656 702.1875 L 619 732.1875 L 615 757.1875 L 659 751.1875 L 694 772.1875 L 700 799.1875 L 727 789.1875 L 769 797.1875 L 803 818.1875 L 865 797.1875 L 871 807.1875 L 883 808.1875 L 867 826.1875 L 869 861.1875 L 866 890.1875 L 840 917.1875 L 821 899.1875 L 783 911.1875 L 765 909.1875 L 764 898.1875 L 690 892.1875 L 691 908.1875 L 679 930.1875 L 665 936.1875 L 660 968.1875 L 630 965.1875 L 593 948.1875 L 520 896.1875 L 494 899.1875 L 474 886.1875 L 437 871.1875 L 422 854.1875 L 379 854.1875 L 346 870.1875 L 303 850.1875 L 280 844.1875 L 277 825.1875 L 276 810.1875 L 269 794.1875 L 273 776.1875 L 266 760.1875 L 276 739.1875 L 263 721.1875 L 256 707.1875 L 286 696.1875 L 314 683.1875 L 337 669.1875 L 358 645.1875 Z"/>
-
-
           <!-- LITWA -->
           <path id="r-litwa" class="region" tabindex="0" data-key="litwa" fill="#34d399" d="M 570 413.1875 L 574 393.1875 L 575 381.1875 L 589 376.1875 L 566 346.1875 L 569 328.1875 L 542 303.1875 L 532 302.1875 L 531 297.1875 L 521 294.1875 L 514 291.1875 L 510 263.1875 L 495 263.1875 L 498 243.1875 L 490 220.1875 L 518 216.1875 L 525 220.1875 L 535 211.1875 L 548 211.1875 L 569 203.1875 L 574 208.1875 L 594 198.1875 L 621 210.1875 L 627 222.1875 L 652 204.1875 L 680 216.1875 L 702 209.1875 L 709 217.1875 L 738 214.1875 L 754 233.1875 L 771 244.1875 L 831 236.1875 L 845 221.1875 L 887 219.1875 L 901 229.1875 L 931 207.1875 L 949 205.1875 L 974 200.1875 L 985 208.1875 L 1014 204.1875 L 1044 218.1875 L 1070 219.1875 L 1101 206.1875 L 1121 250.1875 L 1123 284.1875 L 1137 304.1875 L 1134 322.1875 L 1139 357.1875 L 1136 376.1875 L 1178 425.1875 L 1179 456.1875 L 1190 488.1875 L 1183 514.1875 L 1162 529.1875 L 1177 565.1875 L 1163 584.1875 L 1142 600.1875 L 1123 591.1875 L 1103 595.1875 L 1080 603.1875 L 1033 615.1875 L 942 631.1875 L 922 628.1875 L 895 653.1875 L 844 640.1875 L 822 637.1875 L 822 631.1875 L 790 653.1875 L 783 661.1875 L 734 653.1875 L 728 643.1875 L 695 654.1875 L 663 656.1875 L 663 642.1875 L 644 637.1875 L 611 646.1875 L 591 642.1875 L 566 646.1875 L 557 634.1875 L 562 604.1875 L 588 598.1875 L 595 563.1875 L 625 553.1875 L 629 538.1875 L 651 523.1875 L 615 491.1875 L 594 429.1875 L 570 415.1875 Z"/>
-
-
           <!-- UKRAINA -->
           <path id="r-ukraina" class="region" tabindex="0" data-key="ukraina" fill="#f472b6" d="M 661 657.1875 L 680 657.1875 L 704 648.1875 L 717 642.1875 L 734 650.1875 L 783 662.1875 L 791 653.1875 L 820 633.1875 L 839 640.1875 L 892 651.1875 L 920 630.1875 L 954 631.1875 L 1072 602.1875 L 1088 604.1875 L 1128 585.1875 L 1150 613.1875 L 1141 646.1875 L 1179 649.1875 L 1221 652.1875 L 1249 648.1875 L 1267 671.1875 L 1290 674.1875 L 1301 689.1875 L 1303 713.1875 L 1303 731.1875 L 1289 745.1875 L 1332 759.1875 L 1344 794.1875 L 1338 829.1875 L 1360 850.1875 L 1340 897.1875 L 1269 917.1875 L 1251 956.1875 L 1236 981.1875 L 1154 992.1875 L 1123 983.1875 L 1107 981.1875 L 1086 985.1875 L 1048 997.1875 L 1008 988.1875 L 977 959.1875 L 941 956.1875 L 886 965.1875 L 853 979.1875 L 847 953.1875 L 842 912.1875 L 870 881.1875 L 874 863.1875 L 870 854.1875 L 866 825.1875 L 882 809.1875 L 870 807.1875 L 869 798.1875 L 806 815.1875 L 764 793.1875 L 723 783.1875 L 706 799.1875 L 696 783.1875 L 693 763.1875 L 668 746.1875 L 624 758.1875 L 613 755.1875 L 613 734.1875 L 659 705.1875 L 638 675.1875 L 660 657.1875 Z"/>
 
+          <!-- warstwa rysunków -->
+          <g id="overlay"></g>
         </svg>
+
+        <div class="coords" id="coords">x: –, y: –</div>
       </div>
 
       <div class="legend" aria-label="Legenda – skróty do regionów">
@@ -122,136 +140,363 @@
         <button data-jump="litwa" aria-label="Zaznacz: Litwa">Litwa</button>
         <button data-jump="ukraina" aria-label="Zaznacz: Ukraina">Ukraina</button>
       </div>
-
-      <div class="tooltip" id="tooltip" role="tooltip" aria-hidden="true"></div>
     </section>
-
-    <aside class="info-card" aria-live="polite" aria-atomic="true">
-      <p class="subtitle">Szczegóły</p>
-      <h3 id="regionTitle">Wybierz region</h3>
-      <div class="info-body" id="regionContent">
-        <p>Wybierz jeden z regionów na mapie, aby zobaczyć krótki opis i przykładowe ośrodki miejskie. To <strong>schemat poglądowy</strong> – nie odwzorowuje dokładnie granic z 1650 roku, ale pozwala szybko przełączać się między <em>Prusami</em>, <em>Wielkopolską</em>, <em>Małopolską</em>, <em>Litwą</em> i <em>Ukrainą</em>.</p>
-      </div>
-      <div class="meta">
-        <div>
-          <strong>Okres:</strong><br>
-          ok. 1650 r. (Rzeczpospolita Obojga Narodów)
-        </div>
-        <div>
-          <strong>Uwaga:</strong><br>
-          Granice uproszczone – do celów interaktywnych.
-        </div>
-      </div>
-    </aside>
   </main>
 
   <footer>
-    <p>Źródło inspiracji historycznej: powszechnie dostępna wiedza o podziale Korony i WKL na prowincje (ujęcie uproszczone). Chcesz podmienić schemat na <em>prawdziwą mapę</em>? Podepnij obraz/plik SVG historyczny – struktura strony już to obsłuży.</p>
+    <p class="note">To schemat poglądowy. Konsola na dole pozwala rysować: markery, linie i etykiety, kolorować oraz zaznaczać regiony.</p>
   </footer>
 
+  <!-- KONSOLA -->
+  <section class="console" aria-label="Konsola poleceń">
+    <div class="bar">
+      <span class="title">Konsola</span>
+      <button id="btnHelp" type="button">Pomoc</button>
+      <button id="btnClearLog" type="button">Wyczyść log</button>
+      <span class="hint">Enter = wykonaj • Strzałki ↑/↓ = historia</span>
+    </div>
+    <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
+    <form id="cmdForm" autocomplete="off">
+      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "pin prusy '+"'"+`Magazyn zboża'`+"'"+'", "linia prusy litwa", "etykieta 820 540 '+"'"+`Most'`+"'"+'"'>
+      <button type="submit">Wykonaj</button>
+    </form>
+  </section>
+
   <script>
-    // Dane opisowe regionów (krótko i poglądowo)
+    // ===================== Dane i narzędzia =====================
     const REGIONS = {
-      prusy: {
-        name: "Prusy",
-        blurb: "Region nadbałtycki (Prusy Królewskie i Książęce – w połowie XVII w. w zależności lennej/zależnej).",
-        cities: ["Gdańsk", "Toruń", "Elbląg"],
-        notes: "Silny handel morski, miasta lokowane na prawie niemieckim, port w Gdańsku kluczowy dla eksportu zboża."
-      },
-      wielkopolska: {
-        name: "Wielkopolska",
-        blurb: "Historyczne centrum państwowości polskiej, rozległe ziemie wokół Poznania i Kalisza.",
-        cities: ["Poznań", "Kalisz", "Gniezno"],
-        notes: "Żyzne ziemie, gęsta sieć grodów i miast; ważne trakty handlowe łączące zachód i centrum."
-      },
-      malopolska: {
-        name: "Małopolska",
-        blurb: "Południowo-środkowa prowincja Korony z głównym ośrodkiem w Krakowie.",
-        cities: ["Kraków", "Sandomierz", "Lublin"],
-        notes: "Uniwersytet Krakowski, kopalnie soli, silne mieszczaństwo i kultura dworska."
-      },
-      litwa: {
-        name: "Litwa",
-        blurb: "Wielkie Księstwo Litewskie – część unii polsko‑litewskiej.",
-        cities: ["Wilno", "Kowno", "Nowogródek"],
-        notes: "Wielonarodowe ziemie, rozległe lasy i gospodarstwa folwarczne; ważna rola bojarów i magnaterii."
-      },
-      ukraina: {
-        name: "Ukraina",
-        blurb: "Wschodnie województwa Korony (m.in. kijowskie, bracławskie, czernihowskie).",
-        cities: ["Kijów", "Bracław", "Czernihów"],
-        notes: "Kresy – stepy i czarnoziemy; kozaczyzna, fortyfikacje nad Dnieprem i dynamiczna historia XVII w."
-      }
+      prusy: { key: "prusy", el: null, aliases: ["prusy"] },
+      wielkopolska: { key: "wielkopolska", el: null, aliases: ["wielkopolska", "wkp"] },
+      malopolska: { key: "malopolska", el: null, aliases: ["małopolska","malopolska","mlp"] },
+      litwa: { key: "litwa", el: null, aliases: ["litwa"] },
+      ukraina: { key: "ukraina", el: null, aliases: ["ukraina"] },
     };
 
-    const titleEl = document.getElementById('regionTitle');
-    const contentEl = document.getElementById('regionContent');
-    const tooltip = document.getElementById('tooltip');
+    const svg = document.getElementById('mapSvg');
+    const overlay = document.getElementById('overlay');
+    const tooltip = document.getElementById('tooltip') || createTooltip();
+    const coordsBadge = document.getElementById('coords');
+    const logEl = document.getElementById('log');
+    const inputEl = document.getElementById('cmdInput');
+    const formEl = document.getElementById('cmdForm');
+    const history = [];
+    let histIdx = -1;
+    let idCounter = 1;
 
-    function setDetails(key) {
-      const data = REGIONS[key];
-      if (!data) return;
-      titleEl.textContent = data.name;
-      contentEl.innerHTML = `
-        <p><strong>${data.name}</strong> – ${data.blurb}</p>
-        <ul>
-          <li><strong>Główne miasta:</strong> ${data.cities.join(', ')}</li>
-          <li><strong>Notka:</strong> ${data.notes}</li>
-        </ul>
-      `;
+    // Podłącz elementy regionów
+    Object.keys(REGIONS).forEach(k => {
+      const el = svg.querySelector(`[data-key="${k}"]`);
+      REGIONS[k].el = el;
+    });
+
+    // ===== tooltip (jeśli brak w DOM) =====
+    function createTooltip(){
+      const t = document.createElement('div');
+      t.className = 'tooltip';
+      t.id = 'tooltip';
+      t.setAttribute('role','tooltip');
+      t.setAttribute('aria-hidden','true');
+      document.body.appendChild(t);
+      return t;
     }
 
-    function clearSelection() {
-      document.querySelectorAll('.region.selected').forEach(n => n.classList.remove('selected'));
-      titleEl.textContent = 'Wybierz region';
-      contentEl.innerHTML = '<p>Wybierz jeden z regionów na mapie, aby zobaczyć krótki opis i przykładowe ośrodki miejskie.</p>';
+    // ===================== Utilsy =====================
+    const diac = { "ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z" };
+    function norm(s){
+      return (s||"")
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/[ąćęłńóśźż]/g, m => diac[m] || m);
     }
 
-    function showTooltip(e, text) {
+    function getRegionByName(name){
+      const key = norm(name);
+      for(const r of Object.values(REGIONS)){
+        if (r.key===key || r.aliases.includes(key)) return r;
+      }
+      return null;
+    }
+
+    function bboxCenter(el){
+      const b = el.getBBox();
+      return { x: b.x + b.width/2, y: b.y + b.height/2 };
+    }
+
+    function print(msg, cls="entry"){
+      const div = document.createElement('div');
+      div.className = `entry ${cls}`;
+      div.textContent = msg;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function ok(msg){ print(msg, "entry ok"); }
+    function err(msg){ print(msg, "entry err"); }
+
+    function setBodyPaddingToConsole(){
+      const h = document.querySelector('.console')?.offsetHeight || 0;
+      document.body.style.paddingBottom = `${h}px`;
+    }
+    window.addEventListener('resize', setBodyPaddingToConsole);
+    setBodyPaddingToConsole();
+
+    function clientToSvg(clientX, clientY){
+      const pt = svg.createSVGPoint();
+      pt.x = clientX; pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return {x:0,y:0};
+      const inv = ctm.inverse();
+      const res = pt.matrixTransform(inv);
+      return { x: +res.x.toFixed(1), y: +res.y.toFixed(1) };
+    }
+
+    // ===================== Interakcje mapy =====================
+    function showTooltip(e, text){
       tooltip.textContent = text;
       tooltip.style.left = e.clientX + 'px';
       tooltip.style.top = e.clientY + 'px';
       tooltip.classList.add('shown');
-      tooltip.setAttribute('aria-hidden', 'false');
+      tooltip.setAttribute('aria-hidden','false');
     }
-
-    function hideTooltip() {
+    function hideTooltip(){
       tooltip.classList.remove('shown');
-      tooltip.setAttribute('aria-hidden', 'true');
+      tooltip.setAttribute('aria-hidden','true');
     }
 
-    // Interakcje regionów
     document.querySelectorAll('.region').forEach(path => {
       const key = path.getAttribute('data-key');
-      const name = REGIONS[key]?.name || key;
+      const name = key[0].toUpperCase() + key.slice(1);
 
       path.addEventListener('click', () => {
         document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
         path.classList.add('selected');
-        setDetails(key);
       });
-
       path.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); path.click(); }
       });
-
       path.addEventListener('pointerenter', (e) => showTooltip(e, name));
       path.addEventListener('pointermove', (e) => showTooltip(e, name));
       path.addEventListener('pointerleave', hideTooltip);
       path.addEventListener('blur', hideTooltip);
     });
 
-    // Legenda – skróty
+    // Legendy
     document.querySelectorAll('.legend button').forEach(btn => {
       btn.addEventListener('click', () => {
         const key = btn.getAttribute('data-jump');
         const target = document.querySelector(`[data-key="${key}"]`);
-        if (target) { target.focus({preventScroll:false}); target.click(); }
+        if (target){ target.focus({preventScroll:false}); target.click(); }
       });
     });
 
-    // Reset wyboru
-    document.getElementById('resetBtn').addEventListener('click', clearSelection);
+    // Reset i czyszczenie rysunków
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
+      ok("Reset zaznaczenia.");
+    });
+    document.getElementById('clearDrawBtn').addEventListener('click', clearOverlay);
+
+    function clearOverlay(){
+      while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+      ok("Usunięto wszystkie rysunki.");
+    }
+
+    // Współrzędne pod kursorem
+    svg.addEventListener('pointermove', (e) => {
+      const {x,y} = clientToSvg(e.clientX, e.clientY);
+      coordsBadge.textContent = `x: ${x}, y: ${y}`;
+    });
+
+    // ===================== Rysowanie =====================
+    function makeId(prefix){ return `${prefix}-${idCounter++}`; }
+
+    function drawPinAt(x,y,label){
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('id', makeId('pin'));
+      g.setAttribute('filter','url(#softGlow)');
+
+      const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circle.setAttribute('cx', x); circle.setAttribute('cy', y);
+      circle.setAttribute('r', 8); circle.setAttribute('fill', '#eab308');
+      circle.setAttribute('stroke', '#0b1221'); circle.setAttribute('stroke-width','2');
+
+      const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+      dot.setAttribute('r', 2.6); dot.setAttribute('fill', '#0b1221');
+
+      g.appendChild(circle); g.appendChild(dot);
+
+      if (label){
+        const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+        text.setAttribute('x', x + 12); text.setAttribute('y', y - 12);
+        text.setAttribute('font-size','20'); text.setAttribute('font-weight','700');
+        text.setAttribute('fill','#e5e7eb'); text.setAttribute('stroke','#061127'); text.setAttribute('stroke-width','0.8');
+        text.textContent = label;
+        g.appendChild(text);
+      }
+      overlay.appendChild(g);
+      return g.id;
+    }
+
+    function drawLine(x1,y1,x2,y2,withArrow=true,label){
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('id', makeId('line'));
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',x1); line.setAttribute('y1',y1); line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+      line.setAttribute('stroke','#eab308'); line.setAttribute('stroke-width','4');
+      if (withArrow) line.setAttribute('marker-end','url(#arrow)');
+      g.appendChild(line);
+
+      if (label){
+        const midx = (x1+x2)/2, midy = (y1+y2)/2;
+        const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+        text.setAttribute('x', midx + 8); text.setAttribute('y', midy - 8);
+        text.setAttribute('font-size','18'); text.setAttribute('font-weight','700');
+        text.setAttribute('fill','#e5e7eb'); text.setAttribute('stroke','#061127'); text.setAttribute('stroke-width','0.8');
+        text.textContent = label;
+        g.appendChild(text);
+      }
+      overlay.appendChild(g);
+      return g.id;
+    }
+
+    function drawLabel(x,y,textStr){
+      const id = makeId('label');
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('id', id);
+      t.setAttribute('x', x); t.setAttribute('y', y);
+      t.setAttribute('font-size','22'); t.setAttribute('font-weight','800');
+      t.setAttribute('fill','#e5e7eb'); t.setAttribute('stroke','#061127'); t.setAttribute('stroke-width','1');
+      t.textContent = textStr;
+      overlay.appendChild(t);
+      return id;
+    }
+
+    function colorRegion(region, color){
+      region.el.setAttribute('fill', color);
+    }
+
+    function selectRegion(region){
+      document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
+      region.el.classList.add('selected');
+    }
+
+    // ===================== Parser poleceń =====================
+    // Składnia (przykłady):
+    // pomoc
+    // wyczysc | wyczyść | clear
+    // reset
+    // zaznacz <region>
+    // kolor <region> <#hex|css>
+    // pin <region> "Tekst"    -> znacznik w centrum regionu
+    // pinxy <x> <y> "Tekst"   -> znacznik w punktach x,y
+    // linia <region1> <region2> ["Tekst"]
+    // etykieta <x> <y> "Tekst"
+    function tokenize(input){
+      // split with quotes kept (")
+      const m = input.match(/"[^"]*"|\S+/g) || [];
+      return m.map(t => t.startsWith('"') && t.endsWith('"') ? t.slice(1,-1) : t);
+    }
+
+    function execCommand(raw){
+      const line = raw.trim();
+      if (!line){ return; }
+      history.push(line); histIdx = history.length;
+      const tokens = tokenize(line);
+      const cmd = norm(tokens[0] || "");
+
+      // aliasy
+      if (["pomoc","help","?"].includes(cmd)) return showHelp();
+      if (["wyczysc","wyczyść","clear","cls"].includes(cmd)){ clearOverlay(); return; }
+      if (cmd === "reset"){ document.getElementById('resetBtn').click(); clearOverlay(); return; }
+
+      if (cmd === "zaznacz"){
+        const r = getRegionByName(tokens[1]);
+        if (!r) return err("Nieznany region.");
+        selectRegion(r); ok(`Zaznaczono: ${r.key}`); return;
+      }
+
+      if (cmd === "kolor"){
+        const r = getRegionByName(tokens[1]);
+        const color = tokens[2];
+        if (!r || !color) return err('Użycie: kolor <region> <kolor>');
+        colorRegion(r, color); ok(`Ustawiono kolor ${color} dla: ${r.key}`); return;
+      }
+
+      if (cmd === "pin"){
+        const r = getRegionByName(tokens[1]);
+        const label = tokens.slice(2).join(' ') || "";
+        if (!r) return err("Nieznany region.");
+        const c = bboxCenter(r.el);
+        const id = drawPinAt(c.x, c.y, label);
+        ok(`Dodano pin (${r.key}) id=${id}`); return;
+      }
+
+      if (cmd === "pinxy"){
+        const x = parseFloat(tokens[1]), y = parseFloat(tokens[2]);
+        const label = tokens.slice(3).join(' ') || "";
+        if (Number.isNaN(x) || Number.isNaN(y)) return err('Użycie: pinxy <x> <y> "Tekst (opc.)">');
+        const id = drawPinAt(x,y,label); ok(`Dodano pin id=${id}`); return;
+      }
+
+      if (cmd === "linia"){
+        const r1 = getRegionByName(tokens[1]);
+        const r2 = getRegionByName(tokens[2]);
+        const label = tokens[3] ? tokens.slice(3).join(' ') : "";
+        if (!r1 || !r2) return err('Użycie: linia <region1> <region2> ["Tekst"]');
+        const c1 = bboxCenter(r1.el), c2 = bboxCenter(r2.el);
+        const id = drawLine(c1.x, c1.y, c2.x, c2.y, true, label);
+        ok(`Narysowano linię ${r1.key} → ${r2.key} id=${id}`); return;
+      }
+
+      if (cmd === "etykieta"){
+        const x = parseFloat(tokens[1]), y = parseFloat(tokens[2]);
+        const text = tokens.slice(3).join(' ');
+        if (Number.isNaN(x) || Number.isNaN(y) || !text) return err('Użycie: etykieta <x> <y> "Tekst"');
+        const id = drawLabel(x,y,text); ok(`Dodano etykietę id=${id}`); return;
+      }
+
+      err('Nieznane polecenie. Wpisz "pomoc".');
+    }
+
+    function showHelp(){
+      ok('Dostępne polecenia:');
+      print('• pomoc — lista komend');
+      print('• wyczyść | clear — usuń wszystkie rysunki');
+      print('• reset — usuń zaznaczenia i rysunki');
+      print('• zaznacz <region> — podświetl region');
+      print('• kolor <region> <kolor> — ustaw kolor regionu (np. #ff0, red)');
+      print('• pin <region> "Tekst" — znacznik w centrum regionu');
+      print('• pinxy <x> <y> "Tekst" — znacznik w punktach x,y');
+      print('• linia <region1> <region2> ["Tekst"] — linia pomiędzy regionami');
+      print('• etykieta <x> <y> "Tekst" — podpis w danym punkcie');
+    }
+
+    // ===================== Obsługa konsoli =====================
+    formEl.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = inputEl.value;
+      print('> ' + val);
+      try { execCommand(val); }
+      catch(ex){ console.error(ex); err('Błąd wykonania: ' + ex.message); }
+      inputEl.value = '';
+      histIdx = history.length;
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp'){
+        if (histIdx > 0){ histIdx--; inputEl.value = history[histIdx] || ''; setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0); e.preventDefault(); }
+      } else if (e.key === 'ArrowDown'){
+        if (histIdx < history.length){ histIdx++; inputEl.value = history[histIdx] || ''; setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0); e.preventDefault(); }
+      }
+    });
+
+    document.getElementById('btnHelp').addEventListener('click', showHelp);
+    document.getElementById('btnClearLog').addEventListener('click', () => { logEl.innerHTML=''; ok('Wyczyszczono log.'); });
+
+    // Przy starcie
+    ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
 </body>
 </html>
