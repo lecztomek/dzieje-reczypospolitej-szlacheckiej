@@ -531,7 +531,7 @@
       ok('Dodano tory wrogów: Szwecja (góra), Moskwa (prawa), Tatarzy (dół).');
     }
 
-    function colorCross(g, color){ g.querySelectorAll('line').forEach(l=>{ l.setAttribute('stroke', color); }); }
+    function colorCross(g, color){ g.querySelectorAll('line').forEach(l=>{ l.style.stroke = color; }); }
 
     // Ustaw liczbę pokolorowanych X (0..6). Liczymy od lewej/góry.
     function setEnemyCount(which, n, color=ENEMY_DEFAULT_COLOR){ const key = norm(which); const enemy = ENEMIES[key]; if(!enemy){ return false; } const count = Math.max(0, Math.min(ENEMY_COUNT, parseInt(n,10))); enemy.items.forEach((g, idx)=>{ colorCross(g, idx < count ? color : 'gray'); }); return true; }
