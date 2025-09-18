@@ -10,6 +10,7 @@
       --console-h: 220px;
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --sidebar-w: 320px;
+      --rightbar-w: 300px; 
     }
     *{box-sizing:border-box}
     html,body{min-height:100%}
@@ -21,18 +22,37 @@
     }
 
     header{position:sticky;top:0;z-index:5;backdrop-filter:blur(10px);background:#0b1020aa;border-bottom:1px solid #1f2937}
-    .wrap{max-width:1200px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:14px}
+    .wrap{max-width:1400px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:14px}
     h1{font-size:clamp(18px,2.4vw,28px);margin:0;letter-spacing:.3px}
     .note{color:var(--muted);font-size:.95rem;margin-left:auto}
 
-    main{max-width:1200px;margin:18px auto 40px;padding:0 20px;display:block}
-    .layout{display:grid;grid-template-columns:var(--sidebar-w) 1fr;gap:16px}
-    @media (max-width: 980px){ .layout{grid-template-columns:1fr} }
+    main{max-width:1400px;margin:18px auto 40px;padding:0 20px;display:block}
+    .layout{
+      display:grid;
+      grid-template-columns: var(--sidebar-w) 1fr var(--rightbar-w); /* + prawa kolumna */
+      gap:16px;
+    }
+    @media (max-width: 980px){
+      .layout{ grid-template-columns: 1fr; }
+    }
     
     
     .round { display:flex; align-items:center; gap:8px; }
     #roundLabel { letter-spacing:.8px; font-weight:800; color:#e2e8f0; }
     #roundCur { font-weight:900; }
+ 
+    .rightbar{
+      background:var(--card);border:1px solid #1f2937;border-radius:16px;
+      box-shadow:var(--shadow);overflow:hidden;height:100%;
+    }
+    .rightbar .head{padding:14px 16px;border-bottom:1px solid #1f2937;display:flex;align-items:center;justify-content:space-between}
+    .rightbar h2{margin:0;font-size:1.05rem;color:#cbd5e1}
+    .rightbar .section{padding:12px 14px;border-bottom:1px solid #1f2937}
+    .rightbar .section:last-child{border-bottom:none}
+    #phaseActions{display:flex;flex-wrap:wrap;gap:8px}
+    #phaseActions button{border:1px solid #334155;background:#0f172a;color:#e2e8f0;padding:8px 10px;border-radius:10px;font-weight:700;cursor:pointer}
+    #phaseActions button:hover{background:#111827;border-color:#475569}
+    #pickedRegion{font-weight:800;color:#e2e8f0;opacity:.9}
     
     /* === [CSS] SIDEBAR === */
     .sidebar{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);overflow:hidden;height:100%}
@@ -267,6 +287,21 @@
         <div class="coords" id="coords">x: –, y: –</div>
       </div>
     </section>
+    
+      <aside class="rightbar" id="rightBar" aria-label="Szybkie akcje">
+      <div class="head">
+        <h2>Akcje fazy</h2>
+      </div>
+      <div class="section">
+        <div style="color:#94a3b8;font-size:.9rem">Wybrana prowincja:</div>
+        <div id="pickedRegion">–</div>
+      </div>
+      <div class="section">
+        <h3 style="margin:0 0 8px;font-size:1rem;color:#cbd5e1">Przyciski</h3>
+        <div id="phaseActions" role="group" aria-label="Przyciski fazy"></div>
+      </div>
+    </aside>
+    
     </div>
   </main>
 
@@ -360,6 +395,18 @@
       document.body.appendChild(t);
       return t;
     }
+    
+    function pushToConsole(text, submit = true){
+      inputEl.value = text;
+      if(submit){
+        // wyślij formularz bez klikania
+        formEl.requestSubmit ? formEl.requestSubmit() : formEl.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
+      } else {
+        inputEl.focus();
+        // kursor na koniec
+        setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0);
+      }
+    }
 
     // ===================== Utilsy =====================
     const diac = { "ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z" };
@@ -412,6 +459,47 @@
     let phaseCur = 1; // 1..PHASES.length
     const phaseBarEl = document.getElementById('phaseBar');
     
+    const PHASE_ACTIONS = {
+      1: [ // Wydarzenia
+        { label: 'Losuj Wydarzenie', cmd: 'pomoc' },
+      ],
+      2: [ // Dochód
+        { label: 'wealthall 2', cmd: 'wealthall 2' },
+      ],
+      3: [ // Sejm
+        { label: 'fnext', cmd: 'fnext' },
+      ],
+      4: [ // Akcje
+        { label: 'army litwa 1 #34d399 5', cmd: 'army litwa 1 #34d399 5' },
+        { label: 'armreset litwa', cmd: 'armreset litwa' },
+      ],
+      5: [ // Starcia
+        { label: 'enemy szwecja 3', cmd: 'enemy szwecja 3' },
+      ],
+      6: [ // Wyprawy
+        { label: 'fort ukraina #f59e0b', cmd: 'fort ukraina #f59e0b' },
+      ],
+      7: [ // Najazdy
+        { label: 'enemy tatarzy 4', cmd: 'enemy tatarzy 4' },
+      ],
+    };
+    
+    const actionsWrap = document.getElementById('phaseActions');
+    const pickedRegionEl = document.getElementById('pickedRegion');
+    
+    function renderPhaseButtons(){
+      if(!actionsWrap) return;
+      actionsWrap.innerHTML = '';
+      const items = PHASE_ACTIONS[phaseCur] || [];
+      items.forEach(({label, cmd}) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.addEventListener('click', () => pushToConsole(cmd, true));
+        actionsWrap.appendChild(b);
+      });
+    }
+    
     function buildPhaseBar(){
       if(!phaseBarEl) return;
       phaseBarEl.innerHTML = '';
@@ -436,6 +524,8 @@
         if (active) { el.setAttribute('aria-current','step'); }
         else { el.removeAttribute('aria-current'); }
       });
+      
+      renderPhaseButtons(); 
     }
     
     function setPhase(n){
@@ -538,6 +628,12 @@
       path.addEventListener('click', () => {
         document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
         path.classList.add('selected');
+        
+        inputEl.value = key + ' ';
+        inputEl.focus();
+        setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0);
+        // pokazuj też w prawym panelu
+        if (pickedRegionEl) pickedRegionEl.textContent = key;
       });
       path.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); path.click(); }
@@ -1240,6 +1336,7 @@
     createEnemyTracks();
     buildNoblesTable();
     buildPhaseBar();
+    renderPhaseButtons();
     ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
 </body>
