@@ -72,6 +72,15 @@
       text-anchor:middle; dominant-baseline:middle;
       pointer-events:none;
     }
+    
+    /* *** NOWE: Tory wrogów (X) *** */
+    #enemiesLayer{ pointer-events:none; }
+    #enemiesLayer text.label{
+      font-size:22px; font-weight:800; fill:#cbd5e1; stroke:#061127; stroke-width:.8;
+      text-anchor:middle; dominant-baseline:middle;
+    }
+    #enemiesLayer g.cross line{ stroke:gray; stroke-width:6; vector-effect:non-scaling-stroke; stroke-linecap:round }
+
 
     /* Konsola na dole */
     .console{
@@ -149,6 +158,7 @@
           <g id="boxLayer"></g>
           <!-- warstwa armii (nad boxami) -->
           <g id="armiesLayer"></g>
+          <g id="enemiesLayer"></g>
           <!-- warstwa rysunków -->
           <g id="overlay"></g>
         </svg>
@@ -220,6 +230,7 @@
     const overlay = document.getElementById('overlay');
     const boxLayer = document.getElementById('boxLayer');
     const armiesLayer = document.getElementById('armiesLayer');
+    const enemiesLayer = document.getElementById('enemiesLayer');
     const tooltip = document.getElementById('tooltip') || createTooltip();
     const coordsBadge = document.getElementById('coords');
     const logEl = document.getElementById('log');
@@ -481,6 +492,51 @@
       }
       ok('Dodano po 5 boxów i gwiazdkę (fort) w każdej prowincji.');
     }
+
+    // ===================== *** NOWE: Tory wrogów (X) *** =====================
+    const ENEMY_COUNT = 6; // zawsze 6 X
+    const ENEMY_SPACING = 42; // odległość między X
+    const ENEMY_SIZE = 16; // długość ramienia X
+    const ENEMY_DEFAULT_COLOR = getComputedStyle(document.documentElement).getPropertyValue('--accent')?.trim() || '#eab308';
+
+    const ENEMIES = {
+      szwecja: { key:'szwecja', items:[], label:null },
+      moskwa:  { key:'moskwa',  items:[], label:null },
+      tatarzy: { key:'tatarzy', items:[], label:null },
+    };
+
+    function makeCross(x, y, size=ENEMY_SIZE, color='gray'){
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.classList.add('cross');
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line');
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l1.setAttribute('x1', (x-size).toFixed(1)); l1.setAttribute('y1', (y-size).toFixed(1));
+      l1.setAttribute('x2', (x+size).toFixed(1)); l1.setAttribute('y2', (y+size).toFixed(1));
+      l2.setAttribute('x1', (x-size).toFixed(1)); l2.setAttribute('y1', (y+size).toFixed(1));
+      l2.setAttribute('x2', (x+size).toFixed(1)); l2.setAttribute('y2', (y-size).toFixed(1));
+      l1.setAttribute('stroke', color); l2.setAttribute('stroke', color);
+      g.appendChild(l1); g.appendChild(l2);
+      return g;
+    }
+
+    function createEnemyTracks(){
+      const width = 1633, height = 1137;
+      const centerX = width/2;
+      // Szwecja – nad mapą, poziomo
+      { const y = 60; const startX = centerX - ((ENEMY_COUNT-1)/2)*ENEMY_SPACING; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Szwecja'; label.setAttribute('x', centerX); label.setAttribute('y', y - 28); enemiesLayer.appendChild(label); ENEMIES.szwecja.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const x = startX + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.szwecja.items = arr; }
+      // Moskwa – po prawej, pionowo
+      { const x = width - 40; const startY = 340; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Moskwa'; label.setAttribute('x', x); label.setAttribute('y', startY - 40); enemiesLayer.appendChild(label); ENEMIES.moskwa.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const y = startY + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.moskwa.items = arr; }
+      // Tatarzy – na dole, poziomo
+      { const y = height - 50; const startX = centerX - ((ENEMY_COUNT-1)/2)*ENEMY_SPACING; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Tatarzy'; label.setAttribute('x', centerX); label.setAttribute('y', y + 42); enemiesLayer.appendChild(label); ENEMIES.tatarzy.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const x = startX + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.tatarzy.items = arr; }
+      ok('Dodano tory wrogów: Szwecja (góra), Moskwa (prawa), Tatarzy (dół).');
+    }
+
+    function colorCross(g, color){ g.querySelectorAll('line').forEach(l=>{ l.setAttribute('stroke', color); }); }
+
+    // Ustaw liczbę pokolorowanych X (0..6). Liczymy od lewej/góry.
+    function setEnemyCount(which, n, color=ENEMY_DEFAULT_COLOR){ const key = norm(which); const enemy = ENEMIES[key]; if(!enemy){ return false; } const count = Math.max(0, Math.min(ENEMY_COUNT, parseInt(n,10))); enemy.items.forEach((g, idx)=>{ colorCross(g, idx < count ? color : 'gray'); }); return true; }
+
+    function clearEnemy(which){ return setEnemyCount(which, 0, 'gray'); }
 
     // ========== API kolorowania boxów ==========
     function setBox(regionKey, idx, color){
@@ -792,6 +848,12 @@
         ok(`Ustawiono zamożność = ${level} dla ${count} prowincji.`);
         return;
       }
+    
+      // ======= *** NOWE KOMENDY: tory wrogów (X) *** =======
+      if (cmd === 'enemy' || cmd === 'wróg' || cmd === 'wrog'){
+        const who = tokens[1]; const n = parseInt(tokens[2],10); const color = tokens[3] || ENEMY_DEFAULT_COLOR; if(!who || Number.isNaN(n) || n < 0 || n > ENEMY_COUNT) return err('Użycie: enemy <szwecja|moskwa|tatarzy> <0-6> [kolor]'); setEnemyCount(who, n, color) ? ok(`Ustawiono tor: ${who} = ${n} (kolor ${color}).`) : err('Nieznany wróg. Dostępni: szwecja, moskwa, tatarzy.'); return; }
+      if (cmd === 'enemyclr' || cmd === 'enemyclear' || cmd === 'enemyrst'){
+        const who = tokens[1]; if(!who) return err('Użycie: enemyclr <szwecja|moskwa|tatarzy>'); clearEnemy(who) ? ok(`Wyczyszczono tor: ${who}.`) : err('Nieznany wróg.'); return; }
 
       err('Nieznane polecenie. Wpisz "pomoc".');
     }
@@ -816,9 +878,10 @@
       print('• armset <region> <1-4> <liczba> — zmień liczbę jednostek');
       print('• armclr <region> <1-4> — usuń znacznik z danego slotu');
       print('• armreset <region> — usuń wszystkie 4 znaczniki w prowincji');
-      // NOWE:
       print('• wealth|bogactwo <region> <0-3> — pokoloruj prowincję wg skali (0=jasnoszary, 3=zielony)');
       print('• wealthall <0-3> — ustaw jeden poziom dla wszystkich prowincji');
+      print('• enemy <szwecja|moskwa|tatarzy> <0-6> [kolor] — pokoloruj X (0..6)');
+      print('• enemyclr <szwecja|moskwa|tatarzy> — wyczyść tor wroga');
     }
 
     // ===================== Obsługa konsoli =====================
@@ -844,6 +907,7 @@
     // Start: utwórz boxy + fort, sloty armii i powitanie
     createBoxes();
     createArmySlots();
+    createEnemyTracks();
     ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
 </body>
