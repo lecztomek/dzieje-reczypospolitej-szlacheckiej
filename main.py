@@ -81,6 +81,10 @@ class RoundStatus:
     fairs_plus_one_income: bool = False             # „Jarmarki królewskie”: +1 zł dla każdego na początku Dochodu
     artillery_defense_active: bool = False          # „Artyleria koronna”: aktywna w tej rundzie
     artillery_defense_used: List[bool] = field(default_factory=list) 
+    sejm_tiebreak_wlkp: bool = False                 # „Sejmik w Środzie”: remisy w licytacji wygrywa kontrolujący Wlkp
+    wlkp_influence_cost_override: Optional[int] = None  # „Szlak Warta–Odra”: Wpływ w Wlkp = 1 zł
+    wlkp_estate_cost_override: Optional[int] = None     # „Szlak Warta–Odra”: Posiadłość w Wlkp = 3 zł
+
 
 @dataclass
 class Province:
@@ -293,6 +297,8 @@ def plunder_province(ctx: GameContext, province_id: ProvinceID) -> str:
     msgs.append(f"zamożność {before}→{prov.wealth}.")
     return "".join(msgs)
 
+
+
 def set_units(ctx: GameContext, province_id: ProvinceID, player_index: int, value: int) -> int:
     """Ustaw dokładną liczbę jednostek gracza na prowincji (nieujemną). Zwraca nową wartość."""
     arr = ctx.troops.per_province[province_id]
@@ -384,6 +390,10 @@ def influence_winners_in_province(ctx: GameContext, province_id: ProvinceID) -> 
         return with_troops
 
     return leaders  # remis utrzymany — wielu zwycięzców
+
+def single_controller_of(ctx: GameContext, province_id: ProvinceID) -> Optional[int]:
+    winners = influence_winners_in_province(ctx, province_id)
+    return winners[0] if len(winners) == 1 else None
 
 
 def estate_income_by_wealth(wealth: int) -> int:
@@ -502,7 +512,6 @@ class EventsPhase(BasePhase):
 
     def __init__(self) -> None:
         self._ran = False
-        # mapa: numer (1..20) -> funkcja efektu wydarzenia
         self.events: Dict[int, Any] = {}
         # === Rejestr pierwszego wydarzenia ===
         self.events[1] = self._ev_liberum_veto  
@@ -523,9 +532,17 @@ class EventsPhase(BasePhase):
         self.events[16] = self._ev_susza                       # Susza
         self.events[17] = self._ev_urodzaj                     # Urodzaj
         self.events[18] = self._ev_jarmarki_krolewskie         # Jarmarki królewskie
+        self.events[19] = self._ev_bunt_chlopski             # Bunt chłopski
+        self.events[20] = self._ev_magnackie_roszady         # Magnackie roszady
+        self.events[21] = self._ev_bunt_w_poznaniu           # Bunt w Poznaniu (Wlkp)
+        self.events[22] = self._ev_sejmik_w_srodzie          # Sejmik w Środzie (Wlkp)
+        self.events[23] = self._ev_pozar_w_poznaniu          # Pożar w Poznaniu (Wlkp)
+        self.events[24] = self._ev_szlak_warta_odra          # Szlak handlowy Warta–Odra (Wlkp)
+        self.events[25] = self._ev_cła_morskie               # Cła morskie (ekonomia – Północ)
+
 
     def enter(self, ctx: GameContext) -> None:
-        println("[Wydarzenia] Podaj numer wydarzenia 1–20. Następnie rozpatrzymy jego efekt.")
+        println("[Wydarzenia] Podaj numer wydarzenia 1–25. Następnie rozpatrzymy jego efekt.")
 
     def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
         # faza sterowana centralnie; brak pytań per gracz
@@ -539,14 +556,14 @@ class EventsPhase(BasePhase):
 
         # Jedno pytanie na całą rundę:
         while True:
-            tok = (prompt("Numer wydarzenia [1–20]: ") or "").strip()
+            tok = (prompt("Numer wydarzenia [1–25]: ") or "").strip()
             try:
                 n = int(tok)
-                if 1 <= n <= 20:
+                if 1 <= n <= 25:
                     break
                 raise ValueError
             except ValueError:
-                println("Nieprawidłowe — wpisz liczbę 1–20.")
+                println("Nieprawidłowe — wpisz liczbę 1–25.")
 
         effect = self.events.get(n)
         if effect is None:
@@ -756,6 +773,145 @@ class EventsPhase(BasePhase):
         ctx.round_status.fairs_plus_one_income = True
         println("[Wydarzenia] Jarmarki królewskie — na początku Dochodu każdy otrzyma +1 zł.")
 
+    @staticmethod
+    def _ev_bunt_chlopski(ctx: GameContext) -> None:
+        """
+        Bunt chłopski.
+        Każda prowincja o zamożności 0–1:
+          • jej JEDNOZNACZNY kontrolujący płaci 2 zł, aby uspokoić bunt,
+          • jeśli nie może zapłacić (ma <2 zł): traci 1 wpływ (szlachcica) w tej prowincji.
+        """
+        affected = []
+        for pid, prov in ctx.provinces.items():
+            if prov.wealth <= 1:
+                ctrl = single_controller_of(ctx, pid)
+                if ctrl is None:
+                    continue
+                player = ctx.settings.players[ctrl]
+                if player.gold >= 2:
+                    player.gold -= 2
+                    affected.append(f"{pid.value}: {player.name} zapłacił 2 zł")
+                else:
+                    # usuwamy 1 wpływ (szlachcica), min 0
+                    add_nobles(ctx, pid, ctrl, -1)
+                    affected.append(f"{pid.value}: {player.name} nie stać — −1 wpływ")
+        if affected:
+            println("[Wydarzenia] Bunt chłopski — " + "; ".join(affected) + ".")
+        else:
+            println("[Wydarzenia] Bunt chłopski — brak efektów.")
+
+    @staticmethod
+    def _ev_magnackie_roszady(ctx: GameContext) -> None:
+        """
+        Magnackie roszady.
+        Z jednej losowej prowincji usuwamy 1 wpływ (szlachcica) losowego gracza,
+        ale NIE zwycięzcy licytacji (jeśli w tej rundzie ktoś ma większość).
+        """
+        # zbuduj listę (pid, [gracze_z_noblem_do_losowania])
+        majority_idx = None
+        for i, p in enumerate(ctx.settings.players):
+            if p.majority:
+                majority_idx = i
+                break
+
+        candidates: List[tuple[ProvinceID, List[int]]] = []
+        for pid in ProvinceID:
+            nobles = ctx.nobles.per_province.get(pid, [])
+            present = [i for i, n in enumerate(nobles) if n > 0]
+            if majority_idx is not None:
+                present = [i for i in present if i != majority_idx]
+            if present:
+                candidates.append((pid, present))
+
+        if not candidates:
+            println("[Wydarzenia] Magnackie roszady — brak kandydatów (nikt, kogo można ruszyć).")
+            return
+
+        pid, present = ctx.rng.choice(candidates)
+        victim = ctx.rng.choice(present)
+        add_nobles(ctx, pid, victim, -1)
+        println(f"[Wydarzenia] Magnackie roszady — w {pid.value} usunięto 1 wpływ gracza {ctx.settings.players[victim].name}.")
+
+    @staticmethod
+    def _ev_bunt_w_poznaniu(ctx: GameContext) -> None:
+        """
+        Bunt w Poznaniu (Wlkp).
+        Kontrolujący Wielkopolskę płaci 2 zł; jeśli nie może, traci 1 posiadłość (ostatnią) w Wlkp.
+        """
+        pid = ProvinceID.WIELKOPOLSKA
+        ctrl = single_controller_of(ctx, pid)
+        if ctrl is None:
+            println("[Wydarzenia] Bunt w Poznaniu — nikt nie kontroluje Wlkp (brak efektu).")
+            return
+        player = ctx.settings.players[ctrl]
+        if player.gold >= 2:
+            player.gold -= 2
+            println(f"[Wydarzenia] Bunt w Poznaniu — {player.name} zapłacił 2 zł.")
+        else:
+            removed = remove_last_estate(ctx, pid, ctrl)
+            if removed:
+                println(f"[Wydarzenia] Bunt w Poznaniu — {player.name} nie stać, usunięto 1 posiadłość w Wlkp.")
+            else:
+                println(f"[Wydarzenia] Bunt w Poznaniu — {player.name} nie stać, ale nie miał posiadłości w Wlkp.")
+
+    @staticmethod
+    def _ev_sejmik_w_srodzie(ctx: GameContext) -> None:
+        """
+        Sejmik w Środzie (Wlkp).
+        W tej rundzie remisy w licytacji sejmowej wygrywa gracz kontrolujący Wlkp.
+        Jeśli nikt nie kontroluje — pozostaje standard (remis=brak większości).
+        """
+        ctx.round_status.sejm_tiebreak_wlkp = True
+        println("[Wydarzenia] Sejmik w Środzie — remisy w licytacji rozstrzyga kontrolujący Wlkp (w tej rundzie).")
+
+    @staticmethod
+    def _ev_pozar_w_poznaniu(ctx: GameContext) -> None:
+        """
+        Pożar w Poznaniu (Wlkp).
+        Zamożność Wlkp −1. Kontrolujący Wlkp płaci 2 zł; jeśli nie może — traci 1 posiadłość (ostatnią).
+        """
+        pid = ProvinceID.WIELKOPOLSKA
+        # zamożność -1 (min 0)
+        add_province_wealth(ctx, pid, -1)
+        ctrl = single_controller_of(ctx, pid)
+        if ctrl is None:
+            println("[Wydarzenia] Pożar w Poznaniu — zamożność Wlkp −1; brak kontrolującego (brak dalszych efektów).")
+            return
+        player = ctx.settings.players[ctrl]
+        if player.gold >= 2:
+            player.gold -= 2
+            println(f"[Wydarzenia] Pożar w Poznaniu — zamożność −1; {player.name} zapłacił 2 zł.")
+        else:
+            removed = remove_last_estate(ctx, pid, ctrl)
+            if removed:
+                println(f"[Wydarzenia] Pożar w Poznaniu — zamożność −1; {player.name} nie stać — usunięto 1 posiadłość.")
+            else:
+                println(f"[Wydarzenia] Pożar w Poznaniu — zamożność −1; {player.name} nie stać i nie ma posiadłości do usunięcia.")
+
+    @staticmethod
+    def _ev_szlak_warta_odra(ctx: GameContext) -> None:
+        """
+        Szlak handlowy Warta–Odra (Wlkp).
+        W tej rundzie: Wpływ w Wlkp kosztuje 1 zł, ale Posiadłość w Wlkp kosztuje 3 zł.
+        """
+        ctx.round_status.wlkp_influence_cost_override = 1
+        ctx.round_status.wlkp_estate_cost_override = 3
+        println("[Wydarzenia] Szlak Warta–Odra — w tej rundzie Wplyw(Wlkp)=1 zł, Posiadlosc(Wlkp)=3 zł.")
+
+    @staticmethod
+    def _ev_cła_morskie(ctx: GameContext) -> None:
+        """
+        Cła morskie (ekonomia – Północ).
+        Natychmiast: gracz kontrolujący Prusy otrzymuje +2 zł (jeśli nikt — nikt).
+        """
+        pid = ProvinceID.PRUSY
+        ctrl = single_controller_of(ctx, pid)
+        if ctrl is not None:
+            ctx.settings.players[ctrl].gold += 2
+            println(f"[Wydarzenia] Cła morskie — {ctx.settings.players[ctrl].name} (kontroluje Prusy) otrzymuje +2 zł.")
+        else:
+            println("[Wydarzenia] Cła morskie — nikt nie kontroluje Prus (brak efektu).")
+
 
 # --- Phases: #
 class IncomePhase(BasePhase):
@@ -877,11 +1033,27 @@ class AuctionPhase(BasePhase):
         top_bid, top_idx = bids[0]
         # sprawdź remis
         tie = len(bids) > 1 and bids[1][0] == top_bid
-        if top_bid == 0 or tie:
-            # brak większości
+        if top_bid == 0:
             for p in ctx.settings.players:
                 p.majority = False
-            println("[Auction] Remis lub brak ofert > 0 — nikt nie ma większości.")
+            println("[Auction] Brak ofert > 0 — nikt nie ma większości.")
+        elif tie:
+            # Sejmik w Środzie: remisy rozstrzyga kontrolujący Wlkp (jeśli ktoś kontroluje i jest wśród remisujących)
+            if ctx.round_status.sejm_tiebreak_wlkp:
+                ctrl = single_controller_of(ctx, ProvinceID.WIELKOPOLSKA)
+                if ctrl is not None:
+                    tied_idxs = [idx for bid, idx in bids if bid == top_bid]
+                    if ctrl in tied_idxs:
+                        winner = ctx.settings.players[ctrl]
+                        winner.gold -= top_bid
+                        for p in ctx.settings.players:
+                            p.majority = (p is winner)
+                        println(f"[Auction] Remis — tie-break Wlkp: większość zdobywa {winner.name} (zapłacił {top_bid}).")
+                        super().exit(ctx); return
+            # standard: nikt nie ma większości
+            for p in ctx.settings.players:
+                p.majority = False
+            println("[Auction] Remis — nikt nie ma większości.")
         else:
             # zwycięzca płaci i ma większość
             winner = ctx.settings.players[top_idx]
@@ -1257,6 +1429,8 @@ class ActionPhase(BasePhase):
                     continue
                 cost = self.COST_PAID[action]
                 actual_cost = cost
+                if pid == ProvinceID.WIELKOPOLSKA and ctx.round_status.wlkp_influence_cost_override is not None:
+                    actual_cost = ctx.round_status.wlkp_influence_cost_override
                 if pid == ProvinceID.LITWA and ctx.round_status.discount_litwa_wplyw_pos > 0:
                     actual_cost = max(0, cost - ctx.round_status.discount_litwa_wplyw_pos)
                 if player.gold < actual_cost:
@@ -1277,6 +1451,9 @@ class ActionPhase(BasePhase):
                     continue
                 cost = self.COST_PAID[action]
                 actual_cost = cost
+                if pid == ProvinceID.WIELKOPOLSKA and ctx.round_status.wlkp_estate_cost_override is not None:
+                    actual_cost = ctx.round_status.wlkp_estate_cost_override
+
                 if pid == ProvinceID.LITWA and ctx.round_status.discount_litwa_wplyw_pos > 0:
                     actual_cost = max(0, cost - ctx.round_status.discount_litwa_wplyw_pos)
                 if player.gold < actual_cost:
@@ -1944,6 +2121,10 @@ class GameplayState(BaseState):
         ctx.round_status.fairs_plus_one_income = False
         ctx.round_status.artillery_defense_active = False
         ctx.round_status.artillery_defense_used = [False] * len(ctx.settings.players)
+        ctx.round_status.sejm_tiebreak_wlkp = False
+        ctx.round_status.wlkp_influence_cost_override = None
+        ctx.round_status.wlkp_estate_cost_override = None
+
 
         println(f"=== ROUND {ctx.round_status.current_round} / {ctx.round_status.total_rounds} ===")
         self.round_engine = RoundEngine([
