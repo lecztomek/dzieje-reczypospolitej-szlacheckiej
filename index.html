@@ -48,6 +48,17 @@
     .marshal-reset{margin-left:auto;border:1px solid #334155;background:#0f172a;color:#e2e8f0;padding:6px 10px;border-radius:10px;font-weight:600;cursor:pointer}
     .marshal-reset:hover{background:#111827;border-color:#475569}
     
+    /* Gracze */
+    .players-table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .players-table th,.players-table td{padding:6px 6px;vertical-align:middle;text-align:center}
+    .players-table thead th{color:#9ca3af;font-size:.9rem;font-weight:700}
+    .players-table tbody td.name{font-weight:700;color:#e2e8f0;text-align:left}
+    .player-color{
+      width:22px;height:22px;border-radius:6px;
+      border:2px solid #475569;background:none;display:inline-block;
+      box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)
+    }
+    
     /* Szlachcice */
     .nobles-table{width:100%;border-collapse:separate;border-spacing:0 8px}
     .nobles-table th,.nobles-table td{padding:6px 6px;vertical-align:middle}
@@ -160,6 +171,25 @@
           <div id="marshalBox" class="marshal-box" role="img" aria-label="Kolor Marszałka"></div>
           <button id="marshalResetBtn" class="marshal-reset" type="button">Wyczyść</button>
         </div>
+      </div>
+      
+      <div class="section" aria-label="Tabela Graczy">
+        <h2 style="font-size:1rem;margin:0 0 10px;color:#cbd5e1">Gracze</h2>
+        <table class="players-table" id="playersTable" aria-describedby="players-desc">
+          <caption id="players-desc" style="clip:rect(0 0 0 0);position:absolute">
+            Tabela graczy z kolorem, liczbą złota, punktami honoru i punktami końcowymi
+          </caption>
+          <thead>
+            <tr>
+              <th style="width:36px" aria-label="Kolor"></th>
+              <th style="text-align:left">Imię</th>
+              <th>Złoto</th>
+              <th>Honor</th>
+              <th>Punkty</th>
+            </tr>
+          </thead>
+          <tbody id="playersBody"></tbody>
+        </table>
       </div>
   
       <!-- Szlachcice -->
@@ -285,6 +315,8 @@
     const noblesBody = document.getElementById('noblesBody');
     const marshalBox = document.getElementById('marshalBox');
     const marshalResetBtn = document.getElementById('marshalResetBtn');
+    const playersBody = document.getElementById('playersBody');
+
     const history = [];
     let histIdx = -1;
     let idCounter = 1;
@@ -359,6 +391,62 @@
       const inv = ctm.inverse();
       const res = pt.matrixTransform(inv);
       return { x: +res.x.toFixed(1), y: +res.y.toFixed(1) };
+    }
+    
+    // ===== Gracze =====
+    const PLAYERS = []; // { key, name, color, gold:0, honor:0, final:0 }
+    
+    function playerKey(name){
+      return norm(name).replace(/\s+/g,'_');
+    }
+    function findPlayer(name){
+      const k = playerKey(name);
+      return PLAYERS.find(p => p.key === k) || null;
+    }
+    function renderPlayerRow(p){
+      const tr = document.createElement('tr');
+      tr.id = `player-${p.key}`;
+    
+      const tdColor = document.createElement('td');
+      const box = document.createElement('div');
+      box.className = 'player-color';
+      box.style.background = p.color;
+      box.style.borderColor = p.color;
+      tdColor.appendChild(box);
+    
+      const tdName = document.createElement('td');
+      tdName.className = 'name';
+      tdName.textContent = p.name;
+    
+      const tdGold  = document.createElement('td');  tdGold.textContent  = p.gold;  tdGold.setAttribute('data-col','gold');
+      const tdHonor = document.createElement('td');  tdHonor.textContent = p.honor; tdHonor.setAttribute('data-col','honor');
+      const tdFinal = document.createElement('td');  tdFinal.textContent = p.final; tdFinal.setAttribute('data-col','final');
+    
+      tr.append(tdColor, tdName, tdGold, tdHonor, tdFinal);
+      playersBody.appendChild(tr);
+    }
+    function addPlayer(name, color){
+      if (!name || !color) return false;
+      if (findPlayer(name)) return 'exists';
+      const p = { key: playerKey(name), name: name, color: color, gold:0, honor:0, final:0 };
+      PLAYERS.push(p);
+      renderPlayerRow(p);
+      return true;
+    }
+    function setPlayerStats(name, gold, honor, finalPts){
+      const p = findPlayer(name);
+      if (!p) return false;
+      p.gold  = Number.isFinite(+gold)  ? parseInt(gold,10)  : p.gold;
+      p.honor = Number.isFinite(+honor) ? parseInt(honor,10) : p.honor;
+      p.final = Number.isFinite(+finalPts)?parseInt(finalPts,10): p.final;
+    
+      const row = document.getElementById(`player-${p.key}`);
+      if (row){
+        row.querySelector('td[data-col="gold"]').textContent  = p.gold;
+        row.querySelector('td[data-col="honor"]').textContent = p.honor;
+        row.querySelector('td[data-col="final"]').textContent = p.final;
+      }
+      return true;
     }
 
     // ===================== Interakcje mapy =====================
@@ -977,6 +1065,30 @@
         ok(`Ustawiono maksymalną liczbę rund = ${roundMax}.`);
         return;
       }
+      
+      if (cmd === 'gracz' || cmd === 'player'){
+        const name = tokens[1];
+        const color = tokens[2];
+        if (!name || !color) return err('Użycie: gracz <imię> <kolor>');
+        const res = addPlayer(name, color);
+        if (res === true) return ok(`Dodano gracza "${name}" z kolorem ${color}.`);
+        if (res === 'exists') return err(`Gracz "${name}" już istnieje (nie można zmienić imienia/koloru).`);
+        return err('Nie udało się dodać gracza.');
+      }
+
+      // gset <imię> <zloto> <honor> <koncowe>
+      if (cmd === 'gset'){
+        const name = tokens[1];
+        const gold = parseInt(tokens[2],10);
+        const honor = parseInt(tokens[3],10);
+        const finalPts = parseInt(tokens[4],10);
+        if (!name || Number.isNaN(gold) || Number.isNaN(honor) || Number.isNaN(finalPts)){
+          return err('Użycie: gset <imię> <zloto> <honor> <koncowe>');
+        }
+        return setPlayerStats(name, gold, honor, finalPts)
+          ? ok(`Ustawiono "${name}": złoto=${gold}, honor=${honor}, punkty=${finalPts}.`)
+          : err(`Nie znaleziono gracza "${name}". Najpierw dodaj go: gracz <imię> <kolor>.`);
+      }
 
 
       err('Nieznane polecenie. Wpisz "pomoc".');
@@ -1006,6 +1118,8 @@
       print('• noblereset <region> — usuń wszystkich 4 Szlachciców w prowincji');
       print('• runda <obecna> [maks] — ustaw numer i (opcjonalnie) maksymalną liczbę rund');
       print('• rmax <maks> — ustaw maksymalną liczbę rund');
+      print('• gracz <imię> <kolor> — dodaj gracza (kolor i imię niezmienne)');
+      print('• gset <imię> <zloto> <honor> <koncowe> — ustaw statystyki gracza');
     }
 
     // ===================== Obsługa konsoli =====================
