@@ -59,6 +59,17 @@
       box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)
     }
     
+    /* === Pasek faz === */
+    .phasebar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid #1f2937;background:linear-gradient(180deg, #0b1221aa, #0b122100)}
+    .phasebar .phase{position:relative;border:1px solid #334155;background:#0f172a;color:#e2e8f0;
+      padding:8px 12px;border-radius:10px;font-weight:700;letter-spacing:.2px;cursor:pointer;user-select:none}
+    .phasebar .phase:hover{background:#111827;border-color:#475569}
+    .phasebar .phase[data-active="1"]{
+      background:linear-gradient(180deg,#eab308,#c08411);
+      color:#0b1221;border-color:#eab308;box-shadow:inset 0 0 0 1px #0b1221aa, var(--shadow)
+    }
+    .phasebar .phase .idx{opacity:.85;margin-right:.4rem;font-weight:900}
+    
     /* Szlachcice */
     .nobles-table{width:100%;border-collapse:separate;border-spacing:0 8px}
     .nobles-table th,.nobles-table td{padding:6px 6px;vertical-align:middle}
@@ -214,6 +225,9 @@
           </div>
         </div>
       </div>
+      
+      <!-- Pasek faz gry -->
+      <nav class="phasebar" id="phaseBar" aria-label="Fazy gry"></nav>
 
       <div class="svg-wrap">
         <svg id="mapSvg" viewBox="0 0 1633 1137" role="img" aria-labelledby="map-title" aria-describedby="map-desc">
@@ -392,6 +406,61 @@
       const res = pt.matrixTransform(inv);
       return { x: +res.x.toFixed(1), y: +res.y.toFixed(1) };
     }
+    
+    // ===== Fazy gry =====
+    const PHASES = ['Wydarzenia','Dochód','Sejm','Akcje','Starcia','Wyprawy','Najazdy'];
+    let phaseCur = 1; // 1..PHASES.length
+    const phaseBarEl = document.getElementById('phaseBar');
+    
+    function buildPhaseBar(){
+      if(!phaseBarEl) return;
+      phaseBarEl.innerHTML = '';
+      PHASES.forEach((name, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'phase';
+        btn.setAttribute('data-idx', String(i+1));
+        btn.innerHTML = `<span class="idx">${i+1}.</span>${name}`;
+        btn.addEventListener('click', () => setPhase(i+1));
+        phaseBarEl.appendChild(btn);
+      });
+      updatePhaseUI();
+    }
+    
+    function updatePhaseUI(){
+      const items = phaseBarEl?.querySelectorAll('.phase') || [];
+      items.forEach(el => {
+        const idx = +el.getAttribute('data-idx');
+        const active = (idx === phaseCur);
+        el.setAttribute('data-active', active ? '1' : '0');
+        if (active) { el.setAttribute('aria-current','step'); }
+        else { el.removeAttribute('aria-current'); }
+      });
+    }
+    
+    function setPhase(n){
+      const max = PHASES.length;
+      const next = Math.min(Math.max(1, parseInt(n,10)), max);
+      if (!Number.isFinite(next)) return false;
+      phaseCur = next;
+      updatePhaseUI();
+      ok(`Faza ${phaseCur}/${max}: ${PHASES[phaseCur-1]}.`);
+      return true;
+    }
+    
+    function phaseNext(){
+      const max = PHASES.length;
+      phaseCur = phaseCur >= max ? max : phaseCur + 1;
+      updatePhaseUI();
+      ok(`Faza ${phaseCur}/${max}: ${PHASES[phaseCur-1]}.`);
+    }
+    
+    function phasePrev(){
+      phaseCur = phaseCur <= 1 ? 1 : phaseCur - 1;
+      updatePhaseUI();
+      ok(`Faza ${phaseCur}/${PHASES.length}: ${PHASES[phaseCur-1]}.`);
+    }
+
     
     // ===== Gracze =====
     const PLAYERS = []; // { key, name, color, gold:0, honor:0, final:0 }
@@ -1089,6 +1158,25 @@
           ? ok(`Ustawiono "${name}": złoto=${gold}, honor=${honor}, punkty=${finalPts}.`)
           : err(`Nie znaleziono gracza "${name}". Najpierw dodaj go: gracz <imię> <kolor>.`);
       }
+      
+      // ===== FAZY GRY =====
+      // faza <nr>  — ustawia konkretną fazę (1..7)
+      // fnext      — następna faza
+      // fprev      — poprzednia faza
+      if (cmd === 'faza' || cmd === 'phase'){
+        const n = parseInt(tokens[1],10);
+        if (Number.isNaN(n) || n < 1 || n > PHASES.length)
+          return err(`Użycie: faza <1-${PHASES.length}>`);
+        setPhase(n);
+        return;
+      }
+      if (cmd === 'fnext' || cmd === 'f+'){
+        phaseNext(); return;
+      }
+      if (cmd === 'fprev' || cmd === 'f-'){
+        phasePrev(); return;
+      }
+
 
 
       err('Nieznane polecenie. Wpisz "pomoc".');
@@ -1120,6 +1208,9 @@
       print('• rmax <maks> — ustaw maksymalną liczbę rund');
       print('• gracz <imię> <kolor> — dodaj gracza (kolor i imię niezmienne)');
       print('• gset <imię> <zloto> <honor> <koncowe> — ustaw statystyki gracza');
+      print(`• faza <1-${PHASES.length}> — ustaw aktualną fazę gry`);
+      print('• fnext — przejdź do następnej fazy');
+      print('• fprev — wróć do poprzedniej fazy');
     }
 
     // ===================== Obsługa konsoli =====================
@@ -1148,6 +1239,7 @@
     createArmySlots();
     createEnemyTracks();
     buildNoblesTable();
+    buildPhaseBar();
     ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
 </body>
