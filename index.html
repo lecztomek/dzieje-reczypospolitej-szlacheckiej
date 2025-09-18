@@ -7,13 +7,13 @@
   <style>
     :root{
       --bg:#0f172a;--panel:#111827ee;--card:#0b1221cc;--accent:#eab308;--muted:#94a3b8;--text:#e5e7eb;--stroke:#061127;--shadow:0 10px 30px rgba(0,0,0,.4);
-      --console-h: 220px; /* stała wysokość konsoli; JS ustawi padding strony pod to */
+      --console-h: 220px;
       --safe-bottom: env(safe-area-inset-bottom, 0px);
     }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
-      margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
       color:var(--text);
       background: radial-gradient(1200px 600px at 60% -10%, #1f2a4a 0%, #0b1020 35%, var(--bg) 100%);
       padding-bottom: calc(var(--console-h) + var(--safe-bottom));
@@ -48,6 +48,13 @@
 
     /* Znacznik współrzędnych nad mapą */
     .coords{position:absolute;left:10px;bottom:10px;background:#0a0f1bcc;border:1px solid #172036;border-radius:10px;padding:6px 10px;font-size:.85rem;color:#cbd5e1;pointer-events:none}
+
+    /* Warstwa z pięcioma boxami w każdej prowincji */
+    #boxLayer{pointer-events:none} /* nie zasłania klików na prowincje */
+    #boxLayer rect{
+      fill:none; stroke:#94a3b8; stroke-width:3; vector-effect:non-scaling-stroke;
+      rx:3; ry:3;
+    }
 
     /* Konsola na dole */
     .console{
@@ -114,18 +121,15 @@
             </filter>
           </defs>
 
-          <!-- REGIONY (układ poglądowy) -->
-          <!-- PRUSY -->
+          <!-- REGIONY -->
           <path id="r-prusy" class="region" tabindex="0" data-key="prusy" fill="#38bdf8" d="M 329 512.1875 L 386 464.1875 L 403 471.1875 L 400 491.1875 L 416 493.1875 L 422 485.1875 L 446 494.1875 L 469 486.1875 L 524 481.1875 L 548 456.1875 L 566 441.1875 L 569 407.1875 L 576 392.1875 L 576 381.1875 L 587 373.1875 L 565 344.1875 L 569 321.1875 L 548 303.1875 L 531 305.1875 L 531 297.1875 L 514 292.1875 L 508 267.1875 L 499 261.1875 L 497 276.1875 L 504 298.1875 L 511 300.1875 L 511 308.1875 L 501 314.1875 L 497 342.1875 L 488 338.1875 L 488 347.1875 L 467 337.1875 L 461 340.1875 L 463 330.1875 L 452 335.1875 L 415 337.1875 L 417 357.1875 L 439 363.1875 L 410 388.1875 L 391 392.1875 L 364 394.1875 L 346 391.1875 L 333 382.1875 L 310 376.1875 L 316 359.1875 L 340 372.1875 L 335 359.1875 L 320 350.1875 L 308 362.1875 L 302 351.1875 L 298 386.1875 L 276 400.1875 L 262 417.1875 L 259 427.1875 L 241 422.1875 L 217 425.1875 L 220 448.1875 L 207 466.1875 L 224 482.1875 L 238 494.1875 L 266 485.1875 L 300 502.1875 L 329 512.1875 Z"/>
-          <!-- WIELKOPOLSKA -->
           <path id="r-wielkopolska" class="region" tabindex="0" data-key="wielkopolska" fill="#60a5fa" d="M 189 463.1875 L 206 472.1875 L 240 497.1875 L 263 486.1875 L 276 498.1875 L 323 511.1875 L 362 486.1875 L 384 465.1875 L 402 472.1875 L 400 489.1875 L 412 496.1875 L 423 485.1875 L 452 494.1875 L 469 484.1875 L 519 482.1875 L 540 457.1875 L 568 443.1875 L 569 421.1875 L 595 430.1875 L 618 491.1875 L 647 516.1875 L 626 547.1875 L 596 560.1875 L 588 597.1875 L 565 605.1875 L 557 628.1875 L 520 597.1875 L 487 624.1875 L 433 633.1875 L 403 634.1875 L 357 646.1875 L 326 678.1875 L 260 709.1875 L 245 695.1875 L 243 674.1875 L 207 640.1875 L 198 631.1875 L 194 613.1875 L 167 624.1875 L 122 615.1875 L 120 584.1875 L 89 559.1875 L 94 545.1875 L 154 523.1875 L 172 517.1875 L 173 504.1875 L 177 473.1875 L 189 463.1875 Z"/>
-          <!-- MAŁOPOLSKA -->
           <path id="r-malopolska" class="region" tabindex="0" data-key="malopolska" fill="#a78bfa" d="M 360 645.1875 L 399 635.1875 L 427 641.1875 L 466 628.1875 L 480 631.1875 L 512 599.1875 L 550 624.1875 L 566 644.1875 L 594 644.1875 L 608 651.1875 L 648 638.1875 L 665 650.1875 L 643 675.1875 L 656 702.1875 L 619 732.1875 L 615 757.1875 L 659 751.1875 L 694 772.1875 L 700 799.1875 L 727 789.1875 L 769 797.1875 L 803 818.1875 L 865 797.1875 L 871 807.1875 L 883 808.1875 L 867 826.1875 L 869 861.1875 L 866 890.1875 L 840 917.1875 L 821 899.1875 L 783 911.1875 L 765 909.1875 L 764 898.1875 L 690 892.1875 L 691 908.1875 L 679 930.1875 L 665 936.1875 L 660 968.1875 L 630 965.1875 L 593 948.1875 L 520 896.1875 L 494 899.1875 L 474 886.1875 L 437 871.1875 L 422 854.1875 L 379 854.1875 L 346 870.1875 L 303 850.1875 L 280 844.1875 L 277 825.1875 L 276 810.1875 L 269 794.1875 L 273 776.1875 L 266 760.1875 L 276 739.1875 L 263 721.1875 L 256 707.1875 L 286 696.1875 L 314 683.1875 L 337 669.1875 L 358 645.1875 Z"/>
-          <!-- LITWA -->
           <path id="r-litwa" class="region" tabindex="0" data-key="litwa" fill="#34d399" d="M 570 413.1875 L 574 393.1875 L 575 381.1875 L 589 376.1875 L 566 346.1875 L 569 328.1875 L 542 303.1875 L 532 302.1875 L 531 297.1875 L 521 294.1875 L 514 291.1875 L 510 263.1875 L 495 263.1875 L 498 243.1875 L 490 220.1875 L 518 216.1875 L 525 220.1875 L 535 211.1875 L 548 211.1875 L 569 203.1875 L 574 208.1875 L 594 198.1875 L 621 210.1875 L 627 222.1875 L 652 204.1875 L 680 216.1875 L 702 209.1875 L 709 217.1875 L 738 214.1875 L 754 233.1875 L 771 244.1875 L 831 236.1875 L 845 221.1875 L 887 219.1875 L 901 229.1875 L 931 207.1875 L 949 205.1875 L 974 200.1875 L 985 208.1875 L 1014 204.1875 L 1044 218.1875 L 1070 219.1875 L 1101 206.1875 L 1121 250.1875 L 1123 284.1875 L 1137 304.1875 L 1134 322.1875 L 1139 357.1875 L 1136 376.1875 L 1178 425.1875 L 1179 456.1875 L 1190 488.1875 L 1183 514.1875 L 1162 529.1875 L 1177 565.1875 L 1163 584.1875 L 1142 600.1875 L 1123 591.1875 L 1103 595.1875 L 1080 603.1875 L 1033 615.1875 L 942 631.1875 L 922 628.1875 L 895 653.1875 L 844 640.1875 L 822 637.1875 L 822 631.1875 L 790 653.1875 L 783 661.1875 L 734 653.1875 L 728 643.1875 L 695 654.1875 L 663 656.1875 L 663 642.1875 L 644 637.1875 L 611 646.1875 L 591 642.1875 L 566 646.1875 L 557 634.1875 L 562 604.1875 L 588 598.1875 L 595 563.1875 L 625 553.1875 L 629 538.1875 L 651 523.1875 L 615 491.1875 L 594 429.1875 L 570 415.1875 Z"/>
-          <!-- UKRAINA -->
           <path id="r-ukraina" class="region" tabindex="0" data-key="ukraina" fill="#f472b6" d="M 661 657.1875 L 680 657.1875 L 704 648.1875 L 717 642.1875 L 734 650.1875 L 783 662.1875 L 791 653.1875 L 820 633.1875 L 839 640.1875 L 892 651.1875 L 920 630.1875 L 954 631.1875 L 1072 602.1875 L 1088 604.1875 L 1128 585.1875 L 1150 613.1875 L 1141 646.1875 L 1179 649.1875 L 1221 652.1875 L 1249 648.1875 L 1267 671.1875 L 1290 674.1875 L 1301 689.1875 L 1303 713.1875 L 1303 731.1875 L 1289 745.1875 L 1332 759.1875 L 1344 794.1875 L 1338 829.1875 L 1360 850.1875 L 1340 897.1875 L 1269 917.1875 L 1251 956.1875 L 1236 981.1875 L 1154 992.1875 L 1123 983.1875 L 1107 981.1875 L 1086 985.1875 L 1048 997.1875 L 1008 988.1875 L 977 959.1875 L 941 956.1875 L 886 965.1875 L 853 979.1875 L 847 953.1875 L 842 912.1875 L 870 881.1875 L 874 863.1875 L 870 854.1875 L 866 825.1875 L 882 809.1875 L 870 807.1875 L 869 798.1875 L 806 815.1875 L 764 793.1875 L 723 783.1875 L 706 799.1875 L 696 783.1875 L 693 763.1875 L 668 746.1875 L 624 758.1875 L 613 755.1875 L 613 734.1875 L 659 705.1875 L 638 675.1875 L 660 657.1875 Z"/>
 
+          <!-- nowa warstwa z boxami -->
+          <g id="boxLayer"></g>
           <!-- warstwa rysunków -->
           <g id="overlay"></g>
         </svg>
@@ -144,7 +148,7 @@
   </main>
 
   <footer>
-    <p class="note">To schemat poglądowy. Konsola na dole pozwala rysować: markery, linie i etykiety, kolorować oraz zaznaczać regiony.</p>
+    <p class="note">To schemat poglądowy. Konsola pozwala rysować oraz kolorować pięć boxów w centrum każdej prowincji.</p>
   </footer>
 
   <!-- KONSOLA -->
@@ -157,7 +161,7 @@
     </div>
     <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
     <form id="cmdForm" autocomplete="off">
-      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "pin prusy '+"'"+`Magazyn zboża'`+"'"+'", "linia prusy litwa", "etykieta 820 540 '+"'"+`Most'`+"'"+'"'>
+      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "box litwa 3 #eab308", "boxreset prusy", "pomoc"'>
       <button type="submit">Wykonaj</button>
     </form>
   </section>
@@ -166,7 +170,7 @@
     // ===================== Dane i narzędzia =====================
     const REGIONS = {
       prusy: { key: "prusy", el: null, aliases: ["prusy"] },
-      wielkopolska: { key: "wielkopolska", el: null, aliases: ["wielkopolska", "wkp"] },
+      wielkopolska: { key: "wielkopolska", el: null, aliases: ["wielkopolska","wkp"] },
       malopolska: { key: "malopolska", el: null, aliases: ["małopolska","malopolska","mlp"] },
       litwa: { key: "litwa", el: null, aliases: ["litwa"] },
       ukraina: { key: "ukraina", el: null, aliases: ["ukraina"] },
@@ -174,6 +178,7 @@
 
     const svg = document.getElementById('mapSvg');
     const overlay = document.getElementById('overlay');
+    const boxLayer = document.getElementById('boxLayer');
     const tooltip = document.getElementById('tooltip') || createTooltip();
     const coordsBadge = document.getElementById('coords');
     const logEl = document.getElementById('log');
@@ -189,7 +194,6 @@
       REGIONS[k].el = el;
     });
 
-    // ===== tooltip (jeśli brak w DOM) =====
     function createTooltip(){
       const t = document.createElement('div');
       t.className = 'tooltip';
@@ -209,7 +213,6 @@
         .toLowerCase()
         .replace(/[ąćęłńóśźż]/g, m => diac[m] || m);
     }
-
     function getRegionByName(name){
       const key = norm(name);
       for(const r of Object.values(REGIONS)){
@@ -217,12 +220,10 @@
       }
       return null;
     }
-
     function bboxCenter(el){
       const b = el.getBBox();
       return { x: b.x + b.width/2, y: b.y + b.height/2 };
     }
-
     function print(msg, cls="entry"){
       const div = document.createElement('div');
       div.className = `entry ${cls}`;
@@ -230,10 +231,8 @@
       logEl.appendChild(div);
       logEl.scrollTop = logEl.scrollHeight;
     }
-
     function ok(msg){ print(msg, "entry ok"); }
     function err(msg){ print(msg, "entry err"); }
-
     function setBodyPaddingToConsole(){
       const h = document.querySelector('.console')?.offsetHeight || 0;
       document.body.style.paddingBottom = `${h}px`;
@@ -281,7 +280,6 @@
       path.addEventListener('blur', hideTooltip);
     });
 
-    // Legendy
     document.querySelectorAll('.legend button').forEach(btn => {
       btn.addEventListener('click', () => {
         const key = btn.getAttribute('data-jump');
@@ -290,7 +288,6 @@
       });
     });
 
-    // Reset i czyszczenie rysunków
     document.getElementById('resetBtn').addEventListener('click', () => {
       document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
       ok("Reset zaznaczenia.");
@@ -302,7 +299,6 @@
       ok("Usunięto wszystkie rysunki.");
     }
 
-    // Współrzędne pod kursorem
     svg.addEventListener('pointermove', (e) => {
       const {x,y} = clientToSvg(e.clientX, e.clientY);
       coordsBadge.textContent = `x: ${x}, y: ${y}`;
@@ -310,7 +306,6 @@
 
     // ===================== Rysowanie =====================
     function makeId(prefix){ return `${prefix}-${idCounter++}`; }
-
     function drawPinAt(x,y,label){
       const g = document.createElementNS('http://www.w3.org/2000/svg','g');
       g.setAttribute('id', makeId('pin'));
@@ -338,7 +333,6 @@
       overlay.appendChild(g);
       return g.id;
     }
-
     function drawLine(x1,y1,x2,y2,withArrow=true,label){
       const g = document.createElementNS('http://www.w3.org/2000/svg','g');
       g.setAttribute('id', makeId('line'));
@@ -360,7 +354,6 @@
       overlay.appendChild(g);
       return g.id;
     }
-
     function drawLabel(x,y,textStr){
       const id = makeId('label');
       const t = document.createElementNS('http://www.w3.org/2000/svg','text');
@@ -372,29 +365,80 @@
       overlay.appendChild(t);
       return id;
     }
-
     function colorRegion(region, color){
       region.el.setAttribute('fill', color);
     }
-
     function selectRegion(region){
       document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
       region.el.classList.add('selected');
     }
 
+    // ===================== 5 boxów w centrum prowincji =====================
+    // Każdy region otrzymuje grupę #boxes-<region> z 5 kwadratami (puste na start).
+    const BOX_COUNT = 5;
+    const BOX_SIZE = 24;     // bok kwadratu (px w układzie viewBox)
+    const BOX_GAP  = 8;      // odstęp między kwadratami
+    const BOX_ROW_OFFSET_Y = 40; // przesunięcie rzędu względem środka regionu
+
+    function createBoxes(){
+      for(const r of Object.values(REGIONS)){
+        if (!r.el) continue;
+        const c = bboxCenter(r.el);
+        const spacing = BOX_SIZE + BOX_GAP;
+        const firstCx = c.x - ((BOX_COUNT-1)/2)*spacing; // środek 1. kwadratu w rzędzie
+        const group = document.createElementNS('http://www.w3.org/2000/svg','g');
+        group.setAttribute('id', `boxes-${r.key}`);
+        group.setAttribute('data-region', r.key);
+
+        for(let i=0;i<BOX_COUNT;i++){
+          const cx = firstCx + i*spacing;
+          const x = cx - BOX_SIZE/2;
+          const y = c.y + BOX_ROW_OFFSET_Y - BOX_SIZE/2;
+
+          const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+          rect.setAttribute('x', x.toFixed(1));
+          rect.setAttribute('y', y.toFixed(1));
+          rect.setAttribute('width', BOX_SIZE);
+          rect.setAttribute('height', BOX_SIZE);
+          rect.setAttribute('data-idx', (i+1)); // 1..5
+          rect.setAttribute('fill', 'none');    // puste na start
+          group.appendChild(rect);
+        }
+        boxLayer.appendChild(group);
+      }
+      ok('Dodano po 5 boxów w centrum każdej prowincji (puste).');
+    }
+
+    function setBox(regionKey, idx, color){
+      const rect = svg.querySelector(`#boxes-${regionKey} rect[data-idx="${idx}"]`);
+      if (!rect) return false;
+      rect.setAttribute('fill', color);
+      return true;
+    }
+    function clearBox(regionKey, idx){
+      const rect = svg.querySelector(`#boxes-${regionKey} rect[data-idx="${idx}"]`);
+      if (!rect) return false;
+      rect.setAttribute('fill', 'none');
+      return true;
+    }
+    function resetBoxes(regionKey){
+      const rects = svg.querySelectorAll(`#boxes-${regionKey} rect`);
+      rects.forEach(r => r.setAttribute('fill', 'none'));
+      return rects.length > 0;
+    }
+    function setAllBoxes(regionKey, color){
+      const rects = svg.querySelectorAll(`#boxes-${regionKey} rect`);
+      rects.forEach(r => r.setAttribute('fill', color));
+      return rects.length > 0;
+    }
+
     // ===================== Parser poleceń =====================
-    // Składnia (przykłady):
-    // pomoc
-    // wyczysc | wyczyść | clear
-    // reset
-    // zaznacz <region>
-    // kolor <region> <#hex|css>
-    // pin <region> "Tekst"    -> znacznik w centrum regionu
-    // pinxy <x> <y> "Tekst"   -> znacznik w punktach x,y
-    // linia <region1> <region2> ["Tekst"]
-    // etykieta <x> <y> "Tekst"
+    // Nowe komendy:
+    // box <region> <1-5> <kolor>   — koloruje wskazany kwadrat
+    // boxclr <region> <1-5>        — czyści wskazany kwadrat
+    // boxreset <region>            — czyści wszystkie 5 w regionie
+    // boxall <region> <kolor>      — koloruje wszystkie 5 w regionie
     function tokenize(input){
-      // split with quotes kept (")
       const m = input.match(/"[^"]*"|\S+/g) || [];
       return m.map(t => t.startsWith('"') && t.endsWith('"') ? t.slice(1,-1) : t);
     }
@@ -406,7 +450,7 @@
       const tokens = tokenize(line);
       const cmd = norm(tokens[0] || "");
 
-      // aliasy
+      // aliasy i istniejące
       if (["pomoc","help","?"].includes(cmd)) return showHelp();
       if (["wyczysc","wyczyść","clear","cls"].includes(cmd)){ clearOverlay(); return; }
       if (cmd === "reset"){ document.getElementById('resetBtn').click(); clearOverlay(); return; }
@@ -416,14 +460,12 @@
         if (!r) return err("Nieznany region.");
         selectRegion(r); ok(`Zaznaczono: ${r.key}`); return;
       }
-
       if (cmd === "kolor"){
         const r = getRegionByName(tokens[1]);
         const color = tokens[2];
         if (!r || !color) return err('Użycie: kolor <region> <kolor>');
         colorRegion(r, color); ok(`Ustawiono kolor ${color} dla: ${r.key}`); return;
       }
-
       if (cmd === "pin"){
         const r = getRegionByName(tokens[1]);
         const label = tokens.slice(2).join(' ') || "";
@@ -432,14 +474,12 @@
         const id = drawPinAt(c.x, c.y, label);
         ok(`Dodano pin (${r.key}) id=${id}`); return;
       }
-
       if (cmd === "pinxy"){
         const x = parseFloat(tokens[1]), y = parseFloat(tokens[2]);
         const label = tokens.slice(3).join(' ') || "";
         if (Number.isNaN(x) || Number.isNaN(y)) return err('Użycie: pinxy <x> <y> "Tekst (opc.)">');
         const id = drawPinAt(x,y,label); ok(`Dodano pin id=${id}`); return;
       }
-
       if (cmd === "linia"){
         const r1 = getRegionByName(tokens[1]);
         const r2 = getRegionByName(tokens[2]);
@@ -449,12 +489,41 @@
         const id = drawLine(c1.x, c1.y, c2.x, c2.y, true, label);
         ok(`Narysowano linię ${r1.key} → ${r2.key} id=${id}`); return;
       }
-
       if (cmd === "etykieta"){
         const x = parseFloat(tokens[1]), y = parseFloat(tokens[2]);
         const text = tokens.slice(3).join(' ');
         if (Number.isNaN(x) || Number.isNaN(y) || !text) return err('Użycie: etykieta <x> <y> "Tekst"');
         const id = drawLabel(x,y,text); ok(`Dodano etykietę id=${id}`); return;
+      }
+
+      // NOWE: obsługa boxów 5x
+      if (cmd === "box"){
+        const r = getRegionByName(tokens[1]);
+        const idx = parseInt(tokens[2], 10);
+        const color = tokens[3];
+        if (!r || !(idx>=1 && idx<=5) || !color) return err('Użycie: box <region> <1-5> <kolor>');
+        setBox(r.key, idx, color) ? ok(`Box ${idx} w ${r.key} = ${color}`) : err('Nie udało się ustawić koloru.');
+        return;
+      }
+      if (cmd === "boxclr" || cmd === "boxclear"){
+        const r = getRegionByName(tokens[1]);
+        const idx = parseInt(tokens[2], 10);
+        if (!r || !(idx>=1 && idx<=5)) return err('Użycie: boxclr <region> <1-5>');
+        clearBox(r.key, idx) ? ok(`Box ${idx} w ${r.key} wyczyszczony.`) : err('Nie udało się wyczyścić.');
+        return;
+      }
+      if (cmd === "boxreset"){
+        const r = getRegionByName(tokens[1]);
+        if (!r) return err('Użycie: boxreset <region>');
+        resetBoxes(r.key) ? ok(`Wyczyszczono 5 boxów w ${r.key}.`) : err('Brak boxów dla regionu.');
+        return;
+      }
+      if (cmd === "boxall"){
+        const r = getRegionByName(tokens[1]);
+        const color = tokens[2];
+        if (!r || !color) return err('Użycie: boxall <region> <kolor>');
+        setAllBoxes(r.key, color) ? ok(`Pokolorowano wszystkie boxy w ${r.key} na ${color}.`) : err('Brak boxów dla regionu.');
+        return;
       }
 
       err('Nieznane polecenie. Wpisz "pomoc".');
@@ -467,10 +536,13 @@
       print('• reset — usuń zaznaczenia i rysunki');
       print('• zaznacz <region> — podświetl region');
       print('• kolor <region> <kolor> — ustaw kolor regionu (np. #ff0, red)');
-      print('• pin <region> "Tekst" — znacznik w centrum regionu');
-      print('• pinxy <x> <y> "Tekst" — znacznik w punktach x,y');
-      print('• linia <region1> <region2> ["Tekst"] — linia pomiędzy regionami');
-      print('• etykieta <x> <y> "Tekst" — podpis w danym punkcie');
+      print('• pin <region> "Tekst", pinxy <x> <y> "Tekst"');
+      print('• linia <region1> <region2> ["Tekst"]');
+      print('• etykieta <x> <y> "Tekst"');
+      print('• box <region> <1-5> <kolor> — pokoloruj wskazany kwadrat');
+      print('• boxclr <region> <1-5> — wyczyść wskazany kwadrat');
+      print('• boxreset <region> — wyczyść wszystkie 5 w regionie');
+      print('• boxall <region> <kolor> — pokoloruj wszystkie 5 w regionie');
     }
 
     // ===================== Obsługa konsoli =====================
@@ -483,7 +555,6 @@
       inputEl.value = '';
       histIdx = history.length;
     });
-
     inputEl.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowUp'){
         if (histIdx > 0){ histIdx--; inputEl.value = history[histIdx] || ''; setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0); e.preventDefault(); }
@@ -491,11 +562,11 @@
         if (histIdx < history.length){ histIdx++; inputEl.value = history[histIdx] || ''; setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0); e.preventDefault(); }
       }
     });
-
     document.getElementById('btnHelp').addEventListener('click', showHelp);
     document.getElementById('btnClearLog').addEventListener('click', () => { logEl.innerHTML=''; ok('Wyczyszczono log.'); });
 
-    // Przy starcie
+    // Start: utwórz boxy + powitanie
+    createBoxes();
     ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
 </body>
