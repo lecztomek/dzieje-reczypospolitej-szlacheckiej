@@ -61,6 +61,18 @@
       stroke:gray; stroke-width:3; vector-effect:non-scaling-stroke;
     }
 
+    /* Warstwa armii (znaczniki) – nad boxLayer, nie zasłania klików */
+    #armiesLayer{ pointer-events:none; }
+    #armiesLayer circle{
+      stroke:gray; stroke-width:3; vector-effect:non-scaling-stroke;
+    }
+    #armiesLayer text{
+      font-size:16px; font-weight:800;
+      fill:#e5e7eb; stroke:#061127; stroke-width:.8;
+      text-anchor:middle; dominant-baseline:middle;
+      pointer-events:none;
+    }
+
     /* Konsola na dole */
     .console{
       position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--panel);
@@ -135,6 +147,8 @@
 
           <!-- warstwa boxów + fortów -->
           <g id="boxLayer"></g>
+          <!-- warstwa armii (nad boxami) -->
+          <g id="armiesLayer"></g>
           <!-- warstwa rysunków -->
           <g id="overlay"></g>
         </svg>
@@ -153,7 +167,7 @@
   </main>
 
   <footer>
-    <p class="note">To schemat poglądowy. Konsola pozwala rysować oraz kolorować pięć boxów + fort (gwiazdka) w każdej prowincji.</p>
+    <p class="note">To schemat poglądowy. Konsola pozwala rysować oraz kolorować pięć boxów + fort (gwiazdka) w każdej prowincji. Dodatkowo można stawiać do 4 znaczników armii nad boxami.</p>
   </footer>
 
   <!-- KONSOLA -->
@@ -166,7 +180,7 @@
     </div>
     <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
     <form id="cmdForm" autocomplete="off">
-      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "box litwa 3 #eab308", "fort litwa #34d399", "boxreset prusy", "pomoc"'>
+      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "armia litwa 2 #34d399 7", "armset prusy 1 12", "armclr malopolska 3", "armreset ukraina", "pomoc"'>
       <button type="submit">Wykonaj</button>
     </form>
   </section>
@@ -184,6 +198,7 @@
     const svg = document.getElementById('mapSvg');
     const overlay = document.getElementById('overlay');
     const boxLayer = document.getElementById('boxLayer');
+    const armiesLayer = document.getElementById('armiesLayer');
     const tooltip = document.getElementById('tooltip') || createTooltip();
     const coordsBadge = document.getElementById('coords');
     const logEl = document.getElementById('log');
@@ -428,7 +443,7 @@
           rect.setAttribute('height', BOX_SIZE);
           rect.setAttribute('data-idx', (i+1)); // 1..5
           rect.setAttribute('fill', 'none');    // startowo puste
-          rect.setAttribute('stroke', 'gray');   
+          rect.setAttribute('stroke', 'gray');
           group.appendChild(rect);
         }
 
@@ -438,7 +453,7 @@
         star.setAttribute('points', starPoints(starCx, rowCy, 5, 12, 5.2));
         star.setAttribute('data-fort', '1');
         star.setAttribute('fill', 'none'); // startowo puste
-        star.setAttribute('stroke', 'gray');  
+        star.setAttribute('stroke', 'gray');
         group.appendChild(star);
 
         boxLayer.appendChild(group);
@@ -483,8 +498,98 @@
       const star = svg.querySelector(`#boxes-${regionKey} polygon[data-fort]`);
       if (!star) return false;
       star.style.fill = 'none';
-      star.style.stroke = 'grey';
+      star.style.stroke = 'gray';
       return true;
+    }
+
+    // ===================== Armie (4 sloty na prowincję) =====================
+    const ARMY_SLOTS = 4;
+    const ARMY_R = 14;                 // promień kółka
+    const ARMY_GAP_ABOVE_BOX = 20;     // o ile wyżej od górnej krawędzi rzędu boxów
+
+    function createArmySlots(){
+      for(const r of Object.values(REGIONS)){
+        if(!r.el) continue;
+
+        const c = bboxCenter(r.el);
+        const spacing = BOX_SIZE + BOX_GAP;
+        const firstCx = c.x - ((BOX_COUNT-1)/2)*spacing;      // wyrównanie do boxów 1..5
+        const boxesRowCy = c.y + BOX_ROW_OFFSET_Y;            // środek rzędu boxów
+        const armyCy = boxesRowCy - BOX_SIZE/2 - ARMY_GAP_ABOVE_BOX; // nad boxami
+
+        const group = document.createElementNS('http://www.w3.org/2000/svg','g');
+        group.setAttribute('id', `armies-${r.key}`);
+        group.setAttribute('data-region', r.key);
+
+        // 4 sloty (nad boxami 1..4)
+        for(let i=1;i<=ARMY_SLOTS;i++){
+          const cx = firstCx + (i-1)*spacing;
+
+          const slotG = document.createElementNS('http://www.w3.org/2000/svg','g');
+          slotG.setAttribute('id', `army-${r.key}-${i}`);
+          slotG.setAttribute('data-slot', i);
+          slotG.style.display = 'none';           // nie pokazuj pustych
+
+          const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+          circle.setAttribute('cx', cx.toFixed(1));
+          circle.setAttribute('cy', armyCy.toFixed(1));
+          circle.setAttribute('r', ARMY_R);
+          circle.setAttribute('fill', 'none');    // będzie nadane przy ustawieniu
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+          text.setAttribute('x', cx.toFixed(1));
+          text.setAttribute('y', armyCy.toFixed(1));
+          text.textContent = '';                  // liczba jednostek
+
+          slotG.appendChild(circle);
+          slotG.appendChild(text);
+          group.appendChild(slotG);
+        }
+        armiesLayer.appendChild(group);
+      }
+      ok('Dodano sloty armii (4 na każdą prowincję).');
+    }
+
+    function getArmySlot(regionKey, slot){
+      return svg.querySelector(`#army-${regionKey}-${slot}`);
+    }
+    function setArmy(regionKey, slot, color, units){
+      const slotG = getArmySlot(regionKey, slot);
+      if(!slotG) return false;
+      const c = slotG.querySelector('circle');
+      const t = slotG.querySelector('text');
+      c.style.fill = color;
+      c.style.stroke = color;
+      t.textContent = String(parseInt(units,10));
+      slotG.style.display = '';
+      return true;
+    }
+    function setArmyCount(regionKey, slot, units){
+      const slotG = getArmySlot(regionKey, slot);
+      if(!slotG || slotG.style.display === 'none') return false; // brak znacznika
+      const t = slotG.querySelector('text');
+      t.textContent = String(parseInt(units,10));
+      return true;
+    }
+    function clearArmy(regionKey, slot){
+      const slotG = getArmySlot(regionKey, slot);
+      if(!slotG) return false;
+      const c = slotG.querySelector('circle');
+      const t = slotG.querySelector('text');
+      c.style.fill = 'none';
+      c.style.stroke = 'gray';
+      t.textContent = '';
+      slotG.style.display = 'none';
+      return true;
+    }
+    function resetArmies(regionKey){
+      const slots = svg.querySelectorAll(`#armies-${regionKey} g[data-slot]`);
+      let okAny = false;
+      slots.forEach(s => {
+        const idx = +s.getAttribute('data-slot');
+        okAny = clearArmy(regionKey, idx) || okAny;
+      });
+      return okAny;
     }
 
     // ===================== Parser poleceń =====================
@@ -494,7 +599,10 @@
     // boxall <region> <kolor>
     // fort <region> <kolor>
     // fortclr <region>
-    // + wcześniejsze: pomoc, wyczyść, reset, zaznacz, kolor, pin, pinxy, linia, etykieta
+    // armia <region> <1-4> <kolor> <liczba>
+    // armset <region> <1-4> <liczba>
+    // armclr <region> <1-4>
+    // armreset <region>
     function tokenize(input){
       const m = input.match(/"[^"]*"|\S+/g) || [];
       return m.map(t => t.startsWith('"') && t.endsWith('"') ? t.slice(1,-1) : t);
@@ -597,6 +705,44 @@
         return;
       }
 
+      // ARMIE
+      if (cmd === "armia"){
+        const r = getRegionByName(tokens[1]);
+        const idx = parseInt(tokens[2],10);
+        const color = tokens[3];
+        const units = parseInt(tokens[4],10);
+        if(!r || !(idx>=1 && idx<=4) || !color || Number.isNaN(units))
+          return err('Użycie: armia <region> <1-4> <kolor> <liczba>');
+        setArmy(r.key, idx, color, units) ? ok(`Armia: ${r.key} slot ${idx} = ${color}, ${units} jednostek.`)
+                                          : err('Nie udało się ustawić armii.');
+        return;
+      }
+      if (cmd === "armset"){
+        const r = getRegionByName(tokens[1]);
+        const idx = parseInt(tokens[2],10);
+        const units = parseInt(tokens[3],10);
+        if(!r || !(idx>=1 && idx<=4) || Number.isNaN(units))
+          return err('Użycie: armset <region> <1-4> <liczba>');
+        setArmyCount(r.key, idx, units) ? ok(`Zmieniono liczebność: ${r.key} slot ${idx} = ${units}.`)
+                                        : err('Najpierw ustaw znacznik: armia <...>');
+        return;
+      }
+      if (cmd === "armclr" || cmd === "armclear"){
+        const r = getRegionByName(tokens[1]);
+        const idx = parseInt(tokens[2],10);
+        if(!r || !(idx>=1 && idx<=4)) return err('Użycie: armclr <region> <1-4>');
+        clearArmy(r.key, idx) ? ok(`Usunięto armię: ${r.key} slot ${idx}.`)
+                              : err('Nie udało się usunąć.');
+        return;
+      }
+      if (cmd === "armreset"){
+        const r = getRegionByName(tokens[1]);
+        if(!r) return err('Użycie: armreset <region>');
+        resetArmies(r.key) ? ok(`Wyczyszczono wszystkie armie w ${r.key}.`)
+                           : err('Brak znaczników do wyczyszczenia.');
+        return;
+      }
+
       err('Nieznane polecenie. Wpisz "pomoc".');
     }
 
@@ -616,6 +762,10 @@
       print('• boxall <region> <kolor> — pokoloruj wszystkie 5 w regionie');
       print('• fort <region> <kolor> — ustaw kolor gwiazdki (Fort)');
       print('• fortclr <region> — wyczyść gwiazdkę (Fort)');
+      print('• armia <region> <1-4> <kolor> <liczba> — postaw/ustaw znacznik armii');
+      print('• armset <region> <1-4> <liczba> — zmień liczbę jednostek');
+      print('• armclr <region> <1-4> — usuń znacznik z danego slotu');
+      print('• armreset <region> — usuń wszystkie 4 znaczniki w prowincji');
     }
 
     // ===================== Obsługa konsoli =====================
@@ -638,8 +788,9 @@
     document.getElementById('btnHelp').addEventListener('click', showHelp);
     document.getElementById('btnClearLog').addEventListener('click', () => { logEl.innerHTML=''; ok('Wyczyszczono log.'); });
 
-    // Start: utwórz boxy + fort i powitanie
+    // Start: utwórz boxy + fort, sloty armii i powitanie
     createBoxes();
+    createArmySlots();
     ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
 </body>
