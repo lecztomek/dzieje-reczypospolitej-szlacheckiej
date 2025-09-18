@@ -11,7 +11,7 @@
       --safe-bottom: env(safe-area-inset-bottom, 0px);
     }
     *{box-sizing:border-box}
-    html,body{height:100%}
+    html,body{min-height:100%}
     body{
       margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
       color:var(--text);
@@ -490,7 +490,6 @@
 
         boxLayer.appendChild(group);
       }
-      ok('Dodano po 5 boxów i gwiazdkę (fort) w każdej prowincji.');
     }
 
     // ===================== *** NOWE: Tory wrogów (X) *** =====================
@@ -528,7 +527,6 @@
       { const x = width - 40; const startY = 340; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Moskwa'; label.setAttribute('x', x); label.setAttribute('y', startY - 40); enemiesLayer.appendChild(label); ENEMIES.moskwa.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const y = startY + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.moskwa.items = arr; }
       // Tatarzy – na dole, poziomo
       { const y = height - 50; const startX = centerX - ((ENEMY_COUNT-1)/2)*ENEMY_SPACING; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Tatarzy'; label.setAttribute('x', centerX); label.setAttribute('y', y + 42); enemiesLayer.appendChild(label); ENEMIES.tatarzy.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const x = startX + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.tatarzy.items = arr; }
-      ok('Dodano tory wrogów: Szwecja (góra), Moskwa (prawa), Tatarzy (dół).');
     }
 
     function colorCross(g, color){ g.querySelectorAll('line').forEach(l=>{ l.style.stroke = color; }); }
@@ -624,7 +622,6 @@
         }
         armiesLayer.appendChild(group);
       }
-      ok('Dodano sloty armii (4 na każdą prowincję).');
     }
 
     function getArmySlot(regionKey, slot){
@@ -697,47 +694,6 @@
       if (["pomoc","help","?"].includes(cmd)) return showHelp();
       if (["wyczysc","wyczyść","clear","cls"].includes(cmd)){ clearOverlay(); return; }
       if (cmd === "reset"){ document.getElementById('resetBtn').click(); clearOverlay(); return; }
-
-      if (cmd === "zaznacz"){
-        const r = getRegionByName(tokens[1]);
-        if (!r) return err("Nieznany region.");
-        selectRegion(r); ok(`Zaznaczono: ${r.key}`); return;
-      }
-      if (cmd === "kolor"){
-        const r = getRegionByName(tokens[1]);
-        const color = tokens[2];
-        if (!r || !color) return err('Użycie: kolor <region> <kolor>');
-        colorRegion(r, color); ok(`Ustawiono kolor ${color} dla: ${r.key}`); return;
-      }
-      if (cmd === "pin"){
-        const r = getRegionByName(tokens[1]);
-        const label = tokens.slice(2).join(' ') || "";
-        if (!r) return err("Nieznany region.");
-        const c = bboxCenter(r.el);
-        const id = drawPinAt(c.x, c.y, label);
-        ok(`Dodano pin (${r.key}) id=${id}`); return;
-      }
-      if (cmd === "pinxy"){
-        const x = parseFloat(tokens[1]), y = parseFloat(tokens[2]);
-        const label = tokens.slice(3).join(' ') || "";
-        if (Number.isNaN(x) || Number.isNaN(y)) return err('Użycie: pinxy <x> <y> "Tekst (opc.)">');
-        const id = drawPinAt(x,y,label); ok(`Dodano pin id=${id}`); return;
-      }
-      if (cmd === "linia"){
-        const r1 = getRegionByName(tokens[1]);
-        const r2 = getRegionByName(tokens[2]);
-        const label = tokens[3] ? tokens.slice(3).join(' ') : "";
-        if (!r1 || !r2) return err('Użycie: linia <region1> <region2> ["Tekst"]');
-        const c1 = bboxCenter(r1.el), c2 = bboxCenter(r2.el);
-        const id = drawLine(c1.x, c1.y, c2.x, c2.y, true, label);
-        ok(`Narysowano linię ${r1.key} → ${r2.key} id=${id}`); return;
-      }
-      if (cmd === "etykieta"){
-        const x = parseFloat(tokens[1]), y = parseFloat(tokens[2]);
-        const text = tokens.slice(3).join(' ');
-        if (Number.isNaN(x) || Number.isNaN(y) || !text) return err('Użycie: etykieta <x> <y> "Tekst"');
-        const id = drawLabel(x,y,text); ok(`Dodano etykietę id=${id}`); return;
-      }
 
       // BOXY
       if (cmd === "box"){
