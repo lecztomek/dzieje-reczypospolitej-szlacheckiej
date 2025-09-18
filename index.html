@@ -49,12 +49,16 @@
     /* Znacznik współrzędnych nad mapą */
     .coords{position:absolute;left:10px;bottom:10px;background:#0a0f1bcc;border:1px solid #172036;border-radius:10px;padding:6px 10px;font-size:.85rem;color:#cbd5e1;pointer-events:none}
 
-    /* Warstwa z pięcioma boxami w każdej prowincji */
-    #boxLayer{pointer-events:none} /* nie zasłania klików na prowincje */
+    /* Warstwa boxów + fortów (nie zasłania klików) */
+    #boxLayer{pointer-events:none}
     #boxLayer rect{
-      /* bez fill tutaj – steruje JS przez style.fill */
-      stroke:#94a3b8; stroke-width:3; vector-effect:non-scaling-stroke;
+      /* brak fill tutaj – kolorem steruje JS (style.fill) */
+      stroke:gray; stroke-width:3; vector-effect:non-scaling-stroke;
       rx:3; ry:3;
+    }
+    #boxLayer polygon[data-fort]{
+      /* gwiazdka (Fort) – też bez fill w CSS */
+      stroke:gray; stroke-width:3; vector-effect:non-scaling-stroke;
     }
 
     /* Konsola na dole */
@@ -108,7 +112,7 @@
           <title id="map-title">Rzeczpospolita Obojga Narodów ok. 1650 r. – uproszczony podział</title>
           <desc id="map-desc">Uproszczona, poglądowa mapa z pięcioma regionami: Prusy, Wielkopolska, Małopolska, Litwa, Ukraina. Granice i kształty są przybliżone, służą wyłącznie interakcji i rysowaniu.</desc>
 
-          <!-- Definicje strzałek do linii -->
+          <!-- Definicje -->
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#eab308"/>
@@ -129,7 +133,7 @@
           <path id="r-litwa" class="region" tabindex="0" data-key="litwa" fill="#34d399" d="M 570 413.1875 L 574 393.1875 L 575 381.1875 L 589 376.1875 L 566 346.1875 L 569 328.1875 L 542 303.1875 L 532 302.1875 L 531 297.1875 L 521 294.1875 L 514 291.1875 L 510 263.1875 L 495 263.1875 L 498 243.1875 L 490 220.1875 L 518 216.1875 L 525 220.1875 L 535 211.1875 L 548 211.1875 L 569 203.1875 L 574 208.1875 L 594 198.1875 L 621 210.1875 L 627 222.1875 L 652 204.1875 L 680 216.1875 L 702 209.1875 L 709 217.1875 L 738 214.1875 L 754 233.1875 L 771 244.1875 L 831 236.1875 L 845 221.1875 L 887 219.1875 L 901 229.1875 L 931 207.1875 L 949 205.1875 L 974 200.1875 L 985 208.1875 L 1014 204.1875 L 1044 218.1875 L 1070 219.1875 L 1101 206.1875 L 1121 250.1875 L 1123 284.1875 L 1137 304.1875 L 1134 322.1875 L 1139 357.1875 L 1136 376.1875 L 1178 425.1875 L 1179 456.1875 L 1190 488.1875 L 1183 514.1875 L 1162 529.1875 L 1177 565.1875 L 1163 584.1875 L 1142 600.1875 L 1123 591.1875 L 1103 595.1875 L 1080 603.1875 L 1033 615.1875 L 942 631.1875 L 922 628.1875 L 895 653.1875 L 844 640.1875 L 822 637.1875 L 822 631.1875 L 790 653.1875 L 783 661.1875 L 734 653.1875 L 728 643.1875 L 695 654.1875 L 663 656.1875 L 663 642.1875 L 644 637.1875 L 611 646.1875 L 591 642.1875 L 566 646.1875 L 557 634.1875 L 562 604.1875 L 588 598.1875 L 595 563.1875 L 625 553.1875 L 629 538.1875 L 651 523.1875 L 615 491.1875 L 594 429.1875 L 570 415.1875 Z"/>
           <path id="r-ukraina" class="region" tabindex="0" data-key="ukraina" fill="#f472b6" d="M 661 657.1875 L 680 657.1875 L 704 648.1875 L 717 642.1875 L 734 650.1875 L 783 662.1875 L 791 653.1875 L 820 633.1875 L 839 640.1875 L 892 651.1875 L 920 630.1875 L 954 631.1875 L 1072 602.1875 L 1088 604.1875 L 1128 585.1875 L 1150 613.1875 L 1141 646.1875 L 1179 649.1875 L 1221 652.1875 L 1249 648.1875 L 1267 671.1875 L 1290 674.1875 L 1301 689.1875 L 1303 713.1875 L 1303 731.1875 L 1289 745.1875 L 1332 759.1875 L 1344 794.1875 L 1338 829.1875 L 1360 850.1875 L 1340 897.1875 L 1269 917.1875 L 1251 956.1875 L 1236 981.1875 L 1154 992.1875 L 1123 983.1875 L 1107 981.1875 L 1086 985.1875 L 1048 997.1875 L 1008 988.1875 L 977 959.1875 L 941 956.1875 L 886 965.1875 L 853 979.1875 L 847 953.1875 L 842 912.1875 L 870 881.1875 L 874 863.1875 L 870 854.1875 L 866 825.1875 L 882 809.1875 L 870 807.1875 L 869 798.1875 L 806 815.1875 L 764 793.1875 L 723 783.1875 L 706 799.1875 L 696 783.1875 L 693 763.1875 L 668 746.1875 L 624 758.1875 L 613 755.1875 L 613 734.1875 L 659 705.1875 L 638 675.1875 L 660 657.1875 Z"/>
 
-          <!-- warstwa boxów -->
+          <!-- warstwa boxów + fortów -->
           <g id="boxLayer"></g>
           <!-- warstwa rysunków -->
           <g id="overlay"></g>
@@ -149,7 +153,7 @@
   </main>
 
   <footer>
-    <p class="note">To schemat poglądowy. Konsola pozwala rysować oraz kolorować pięć boxów w centrum każdej prowincji.</p>
+    <p class="note">To schemat poglądowy. Konsola pozwala rysować oraz kolorować pięć boxów + fort (gwiazdka) w każdej prowincji.</p>
   </footer>
 
   <!-- KONSOLA -->
@@ -162,7 +166,7 @@
     </div>
     <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
     <form id="cmdForm" autocomplete="off">
-      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "box litwa 3 #eab308", "boxreset prusy", "pomoc"'>
+      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "box litwa 3 #eab308", "fort litwa #34d399", "boxreset prusy", "pomoc"'>
       <button type="submit">Wykonaj</button>
     </form>
   </section>
@@ -374,26 +378,48 @@
       region.el.classList.add('selected');
     }
 
-    // ===================== 5 boxów w centrum prowincji =====================
+    // ===================== Boxy + Fort =====================
     const BOX_COUNT = 5;
-    const BOX_SIZE = 24;
-    const BOX_GAP  = 8;
+    const BOX_SIZE  = 24;
+    const BOX_GAP   = 8;
     const BOX_ROW_OFFSET_Y = 40;
+
+    // generuje punkty gwiazdy 5-ramiennej (polygon)
+    function starPoints(cx, cy, spikes = 5, outerR = 12, innerR = 5){
+      let rot = Math.PI / 2 * 3;
+      const step = Math.PI / spikes;
+      const pts = [];
+      for (let i = 0; i < spikes; i++){
+        let x = cx + Math.cos(rot) * outerR;
+        let y = cy + Math.sin(rot) * outerR;
+        pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+        rot += step;
+        x = cx + Math.cos(rot) * innerR;
+        y = cy + Math.sin(rot) * innerR;
+        pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+        rot += step;
+      }
+      return pts.join(' ');
+    }
 
     function createBoxes(){
       for(const r of Object.values(REGIONS)){
         if (!r.el) continue;
+
         const c = bboxCenter(r.el);
         const spacing = BOX_SIZE + BOX_GAP;
         const firstCx = c.x - ((BOX_COUNT-1)/2)*spacing;
+        const rowCy   = c.y + BOX_ROW_OFFSET_Y;
+
         const group = document.createElementNS('http://www.w3.org/2000/svg','g');
         group.setAttribute('id', `boxes-${r.key}`);
         group.setAttribute('data-region', r.key);
 
+        // 5 kwadratów
         for(let i=0;i<BOX_COUNT;i++){
           const cx = firstCx + i*spacing;
           const x = cx - BOX_SIZE/2;
-          const y = c.y + BOX_ROW_OFFSET_Y - BOX_SIZE/2;
+          const y = rowCy - BOX_SIZE/2;
 
           const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
           rect.setAttribute('x', x.toFixed(1));
@@ -402,18 +428,30 @@
           rect.setAttribute('height', BOX_SIZE);
           rect.setAttribute('data-idx', (i+1)); // 1..5
           rect.setAttribute('fill', 'none');    // startowo puste
+          rect.setAttribute('stroke', 'gray');   
           group.appendChild(rect);
         }
+
+        // Fort (gwiazdka) po 5. kwadracie – „szóste miejsce” w rzędzie
+        const starCx = firstCx + BOX_COUNT*spacing;
+        const star = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+        star.setAttribute('points', starPoints(starCx, rowCy, 5, 12, 5.2));
+        star.setAttribute('data-fort', '1');
+        star.setAttribute('fill', 'none'); // startowo puste
+        star.setAttribute('stroke', 'gray');  
+        group.appendChild(star);
+
         boxLayer.appendChild(group);
       }
-      ok('Dodano po 5 boxów w centrum każdej prowincji (puste).');
+      ok('Dodano po 5 boxów i gwiazdkę (fort) w każdej prowincji.');
     }
 
-    // Kolorowanie przez style.fill (przebija ewentualny CSS)
+    // ========== API kolorowania boxów ==========
     function setBox(regionKey, idx, color){
       const rect = svg.querySelector(`#boxes-${regionKey} rect[data-idx="${idx}"]`);
       if (!rect) return false;
       rect.style.fill = color;
+      rect.style.stroke = color;
       return true;
     }
     function clearBox(regionKey, idx){
@@ -433,12 +471,30 @@
       return rects.length > 0;
     }
 
+    // ========== API kolorowania fortu (gwiazdki) ==========
+    function setFort(regionKey, color){
+      const star = svg.querySelector(`#boxes-${regionKey} polygon[data-fort]`);
+      if (!star) return false;
+      star.style.fill = color;
+      star.style.stroke = color;
+      return true;
+    }
+    function clearFort(regionKey){
+      const star = svg.querySelector(`#boxes-${regionKey} polygon[data-fort]`);
+      if (!star) return false;
+      star.style.fill = 'none';
+      star.style.stroke = 'grey';
+      return true;
+    }
+
     // ===================== Parser poleceń =====================
     // box <region> <1-5> <kolor>
     // boxclr <region> <1-5>
     // boxreset <region>
     // boxall <region> <kolor>
-    // + poprzednie: pomoc, wyczyść, reset, zaznacz, kolor, pin, pinxy, linia, etykieta
+    // fort <region> <kolor>
+    // fortclr <region>
+    // + wcześniejsze: pomoc, wyczyść, reset, zaznacz, kolor, pin, pinxy, linia, etykieta
     function tokenize(input){
       const m = input.match(/"[^"]*"|\S+/g) || [];
       return m.map(t => t.startsWith('"') && t.endsWith('"') ? t.slice(1,-1) : t);
@@ -526,6 +582,21 @@
         return;
       }
 
+      // FORT (gwiazdka)
+      if (cmd === "fort"){
+        const r = getRegionByName(tokens[1]);
+        const color = tokens[2];
+        if (!r || !color) return err('Użycie: fort <region> <kolor>');
+        setFort(r.key, color) ? ok(`Fort w ${r.key} = ${color}`) : err('Nie udało się ustawić koloru fortu.');
+        return;
+      }
+      if (cmd === "fortclr" || cmd === "fortclear"){
+        const r = getRegionByName(tokens[1]);
+        if (!r) return err('Użycie: fortclr <region>');
+        clearFort(r.key) ? ok(`Fort w ${r.key} wyczyszczony.`) : err('Nie udało się wyczyścić fortu.');
+        return;
+      }
+
       err('Nieznane polecenie. Wpisz "pomoc".');
     }
 
@@ -543,6 +614,8 @@
       print('• boxclr <region> <1-5> — wyczyść wskazany kwadrat');
       print('• boxreset <region> — wyczyść wszystkie 5 w regionie');
       print('• boxall <region> <kolor> — pokoloruj wszystkie 5 w regionie');
+      print('• fort <region> <kolor> — ustaw kolor gwiazdki (Fort)');
+      print('• fortclr <region> — wyczyść gwiazdkę (Fort)');
     }
 
     // ===================== Obsługa konsoli =====================
@@ -565,7 +638,7 @@
     document.getElementById('btnHelp').addEventListener('click', showHelp);
     document.getElementById('btnClearLog').addEventListener('click', () => { logEl.innerHTML=''; ok('Wyczyszczono log.'); });
 
-    // Start: utwórz boxy + powitanie
+    // Start: utwórz boxy + fort i powitanie
     createBoxes();
     ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
