@@ -495,7 +495,7 @@
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = label;
-        b.addEventListener('click', () => pushToConsole(cmd, true));
+        b.addEventListener('click', () => pushToConsole(cmd, false));
         actionsWrap.appendChild(b);
       });
     }
