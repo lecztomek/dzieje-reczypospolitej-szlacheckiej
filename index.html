@@ -180,7 +180,7 @@
     </div>
     <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
     <form id="cmdForm" autocomplete="off">
-      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "armia litwa 2 #34d399 7", "armset prusy 1 12", "armclr malopolska 3", "armreset ukraina", "pomoc"'>
+      <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "wealth litwa 3", "wealthall 1", "armia litwa 2 #34d399 7", "armset prusy 1 12", "armclr malopolska 3", "armreset ukraina", "pomoc"'>
       <button type="submit">Wykonaj</button>
     </form>
   </section>
@@ -194,6 +194,27 @@
       litwa: { key: "litwa", el: null, aliases: ["litwa"] },
       ukraina: { key: "ukraina", el: null, aliases: ["ukraina"] },
     };
+
+    // ======= NOWE: skala zamożności prowincji (0..3) =======
+    // 0 = jasnoszary (najuboższe), 3 = zielony (najbogatsze)
+    const REGION_WEALTH_COLORS = [
+      '#d1d5db', // 0 - jasnoszary
+      '#a3e635', // 1 - żółtozielony (pośredni)
+      '#4ade80', // 2 - średnia zieleń (pośredni)
+      '#16a34a'  // 3 - zielony (najbogatsze)
+    ];
+    function wealthColor(level){
+      const n = Math.max(0, Math.min(3, Number(level)));
+      return REGION_WEALTH_COLORS[n];
+    }
+    function setRegionWealth(regionOrKey, level){
+      const region = typeof regionOrKey === 'string'
+        ? REGIONS[regionOrKey]
+        : regionOrKey;
+      if(!region || !region.el) return false;
+      region.el.setAttribute('fill', wealthColor(level));
+      return true;
+    }
 
     const svg = document.getElementById('mapSvg');
     const overlay = document.getElementById('overlay');
@@ -400,7 +421,7 @@
     const BOX_ROW_OFFSET_Y = 40;
 
     // generuje punkty gwiazdy 5-ramiennej (polygon)
-    function starPoints(cx, cy, spikes = 5, outerR = 12, innerR = 5){
+    function starPoints(cx, cy, spikes = 5, outerR = 12, innerR = 5.2){
       let rot = Math.PI / 2 * 3;
       const step = Math.PI / spikes;
       const pts = [];
@@ -603,6 +624,8 @@
     // armset <region> <1-4> <liczba>
     // armclr <region> <1-4>
     // armreset <region>
+    // wealth|bogactwo|zamoznosc <region> <0-3>
+    // wealthall <0-3>
     function tokenize(input){
       const m = input.match(/"[^"]*"|\S+/g) || [];
       return m.map(t => t.startsWith('"') && t.endsWith('"') ? t.slice(1,-1) : t);
@@ -743,6 +766,33 @@
         return;
       }
 
+      // ======= NOWE KOMENDY: zamożność (0..3) =======
+      // wealth|bogactwo|zamoznosc <region> <0-3>
+      if (["wealth","bogactwo","zamoznosc","zamożność"].includes(cmd)){
+        const r = getRegionByName(tokens[1]);
+        const level = parseInt(tokens[2], 10);
+        if(!r || Number.isNaN(level) || level < 0 || level > 3){
+          return err('Użycie: wealth <region> <0-3>');
+        }
+        setRegionWealth(r, level)
+          ? ok(`Ustawiono zamożność ${r.key} = ${level} (${wealthColor(level)})`)
+          : err('Nie udało się ustawić zamożności.');
+        return;
+      }
+      // wealthall <0-3>
+      if (cmd === "wealthall"){
+        const level = parseInt(tokens[1], 10);
+        if(Number.isNaN(level) || level < 0 || level > 3){
+          return err('Użycie: wealthall <0-3>');
+        }
+        let count = 0;
+        for(const r of Object.values(REGIONS)){
+          if (setRegionWealth(r, level)) count++;
+        }
+        ok(`Ustawiono zamożność = ${level} dla ${count} prowincji.`);
+        return;
+      }
+
       err('Nieznane polecenie. Wpisz "pomoc".');
     }
 
@@ -766,6 +816,9 @@
       print('• armset <region> <1-4> <liczba> — zmień liczbę jednostek');
       print('• armclr <region> <1-4> — usuń znacznik z danego slotu');
       print('• armreset <region> — usuń wszystkie 4 znaczniki w prowincji');
+      // NOWE:
+      print('• wealth|bogactwo <region> <0-3> — pokoloruj prowincję wg skali (0=jasnoszary, 3=zielony)');
+      print('• wealthall <0-3> — ustaw jeden poziom dla wszystkich prowincji');
     }
 
     // ===================== Obsługa konsoli =====================
