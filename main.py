@@ -76,6 +76,11 @@ class RoundStatus:
     prusy_estate_income_penalty: int = 0           # „Wojna północna”: -1 do dochodu z posiadłości w Prusach (min 0)
     discount_litwa_wplyw_pos: int = 0              # „Wojna z Moskwą”: -1 zł do kosztu Wpływ/Posiadłość w Litwie
     extra_honor_vs_tatars: bool = False
+    recruit_cost_override: Optional[int] = None     # „Zaciąg pospolity”: Rekrutacja kosztuje dokładnie X zł (np. 1)
+    zamoznosc_cost_override: Optional[int] = None   # „Susza/Urodzaj”: Zamożność kosztuje dokładnie X zł (np. 3/1)
+    fairs_plus_one_income: bool = False             # „Jarmarki królewskie”: +1 zł dla każdego na początku Dochodu
+    artillery_defense_active: bool = False          # „Artyleria koronna”: aktywna w tej rundzie
+    artillery_defense_used: List[bool] = field(default_factory=list) 
 
 @dataclass
 class Province:
@@ -511,6 +516,13 @@ class EventsPhase(BasePhase):
         self.events[9]  = self._ev_wojna_z_moskwa          # Wojna z Moskwą
         self.events[10] = self._ev_bitwa_pod_wiedniem      # Bitwa pod Wiedniem
         self.events[11] = self._ev_pokoj_w_oliwie          # Pokój w Oliwie
+        self.events[12] = self._ev_zaciag_pospolity            # Zaciąg pospolity
+        self.events[13] = self._ev_fortyfikacja_pogranicza     # Fortyfikacja pogranicza
+        self.events[14] = self._ev_artyleria_koronna           # Artyleria koronna
+        self.events[15] = self._ev_glod_ekonomia               # Głód (ekonomia)
+        self.events[16] = self._ev_susza                       # Susza
+        self.events[17] = self._ev_urodzaj                     # Urodzaj
+        self.events[18] = self._ev_jarmarki_krolewskie         # Jarmarki królewskie
 
     def enter(self, ctx: GameContext) -> None:
         println("[Wydarzenia] Podaj numer wydarzenia 1–20. Następnie rozpatrzymy jego efekt.")
@@ -663,6 +675,88 @@ class EventsPhase(BasePhase):
         add_raid(ctx, RaidTrackID.N, -1)
         println("[Wydarzenia] Pokój w Oliwie — Szwecja −1.")
 
+    @staticmethod
+    def _ev_zaciag_pospolity(ctx: GameContext) -> None:
+        """
+        Zaciąg pospolity.
+        W tej rundzie Rekrutacja kosztuje 1 zł (zamiast 2).
+        """
+        ctx.round_status.recruit_cost_override = 1
+        println("[Wydarzenia] Zaciąg pospolity — w tej rundzie Rekrutacja kosztuje 1 zł.")
+
+    @staticmethod
+    def _ev_fortyfikacja_pogranicza(ctx: GameContext) -> None:
+        """
+        Fortyfikacja pogranicza.
+        Losowa prowincja przygraniczna dostaje fort.
+        Przygraniczne: Prusy, Litwa, Ukraina, Małopolska.
+        """
+        border = [ProvinceID.PRUSY, ProvinceID.LITWA, ProvinceID.UKRAINA, ProvinceID.MALOPOLSKA]
+        no_fort = [pid for pid in border if not ctx.provinces[pid].has_fort]
+        pool = no_fort if no_fort else border  # jeśli wszędzie są forty, wybieramy mimo to
+        pid = ctx.rng.choice(pool) if pool else None
+        if pid is None:
+            println("[Wydarzenia] Fortyfikacja pogranicza — brak dostępnych prowincji.")
+            return
+        toggle_fort(ctx, pid, True)
+        println(f"[Wydarzenia] Fortyfikacja pogranicza — fort w {pid.value}.")
+
+    @staticmethod
+    def _ev_artyleria_koronna(ctx: GameContext) -> None:
+        """
+        Artyleria koronna.
+        W tej rundzie: w PIERWSZEJ bitwie, w której uczestniczysz jako obrońca,
+        rzucasz +1 kością.
+        """
+        ctx.round_status.artillery_defense_active = True
+        # bezpieczeństwo: dopasuj listę do liczby graczy
+        ctx.round_status.artillery_defense_used = [False] * len(ctx.settings.players)
+        println("[Wydarzenia] Artyleria koronna — w tej rundzie pierwszy raz w obronie: +1 kość do rzutów.")
+
+    @staticmethod
+    def _ev_glod_ekonomia(ctx: GameContext) -> None:
+        """
+        Głód (ekonomia).
+        Natychmiast: w każdej prowincji o zamożności 3 obniż ją do 2.
+        """
+        changed = []
+        for pid, prov in ctx.provinces.items():
+            if prov.wealth >= 3:
+                prov.wealth = 2
+                changed.append(pid.value)
+        if changed:
+            println("[Wydarzenia] Głód — zamożność 3 → 2 w: " + ", ".join(changed) + ".")
+        else:
+            println("[Wydarzenia] Głód — brak prowincji o zamożności 3.")
+
+    @staticmethod
+    def _ev_susza(ctx: GameContext) -> None:
+        """
+        Susza.
+        W tej rundzie akcja Zamożność +1 kosztuje 3 zł (zamiast 2).
+        """
+        ctx.round_status.zamoznosc_cost_override = 3
+        println("[Wydarzenia] Susza — w tej rundzie Zamożność kosztuje 3 zł.")
+
+    @staticmethod
+    def _ev_urodzaj(ctx: GameContext) -> None:
+        """
+        Urodzaj.
+        W tej rundzie akcja Zamożność +1 kosztuje 1 zł (zamiast 2).
+        """
+        ctx.round_status.zamoznosc_cost_override = 1
+        println("[Wydarzenia] Urodzaj — w tej rundzie Zamożność kosztuje 1 zł.")
+
+    @staticmethod
+    def _ev_jarmarki_krolewskie(ctx: GameContext) -> None:
+        """
+        Jarmarki królewskie.
+        Na początku Dochodu każdy gracz dostaje +1 zł.
+        """
+        ctx.round_status.fairs_plus_one_income = True
+        println("[Wydarzenia] Jarmarki królewskie — na początku Dochodu każdy otrzyma +1 zł.")
+
+
 # --- Phases: #
 class IncomePhase(BasePhase):
     name = "IncomePhase"
@@ -686,6 +780,11 @@ class IncomePhase(BasePhase):
         pcount = len(players)
         gained_control = [0]*pcount
         gained_estates = [0]*pcount
+
+        if ctx.round_status.fairs_plus_one_income:
+            for p in ctx.settings.players:
+                p.gold += 1
+            println("[Dochód] Jarmarki królewskie: każdy gracz +1 zł na start.")
 
         for pid, prov in ctx.provinces.items():
             controllers = influence_winners_in_province(ctx, pid)
@@ -1156,10 +1255,14 @@ class ActionPhase(BasePhase):
                 if not pid:
                     println("Nie rozpoznano prowincji.")
                     continue
-                add_nobles(ctx, pid, pidx, 1)
+                cost = self.COST_PAID[action]
                 actual_cost = cost
                 if pid == ProvinceID.LITWA and ctx.round_status.discount_litwa_wplyw_pos > 0:
                     actual_cost = max(0, cost - ctx.round_status.discount_litwa_wplyw_pos)
+                if player.gold < actual_cost:
+                    println(f"Za mało złota. Akcja 'wplyw' kosztuje {actual_cost}, masz {player.gold}.")
+                    continue
+                add_nobles(ctx, pid, pidx, 1)
                 player.gold -= actual_cost
                 ok = True
                 msg = f"{player.name} stawia szlachcica w {pid.value}. (złoto {player.gold}, koszt {actual_cost})"
@@ -1172,10 +1275,14 @@ class ActionPhase(BasePhase):
                 if not self._has_noble(ctx, pid, pidx):
                     println("Musisz mieć szlachcica na tej prowincji.")
                     continue
+                cost = self.COST_PAID[action]
+                actual_cost = cost
+                if pid == ProvinceID.LITWA and ctx.round_status.discount_litwa_wplyw_pos > 0:
+                    actual_cost = max(0, cost - ctx.round_status.discount_litwa_wplyw_pos)
+                if player.gold < actual_cost:
+                    println(f"Za mało złota. Akcja 'posiadlosc' kosztuje {actual_cost}, masz {player.gold}.")
+                    continue
                 if build_estate(ctx, pid, pidx):
-                    actual_cost = cost
-                    if pid == ProvinceID.LITWA and ctx.round_status.discount_litwa_wplyw_pos > 0:
-                        actual_cost = max(0, cost - ctx.round_status.discount_litwa_wplyw_pos)
                     player.gold -= actual_cost
                     ok = True
                     msg = f"{player.name} buduje posiadłość w {pid.value}. (złoto {player.gold}, koszt {actual_cost})"
@@ -1191,10 +1298,16 @@ class ActionPhase(BasePhase):
                 if not self._has_noble(ctx, pid, pidx):
                     println("Musisz mieć szlachcica na tej prowincji.")
                     continue
+                base = self.COST_PAID[action]
+                actual_cost = ctx.round_status.recruit_cost_override if ctx.round_status.recruit_cost_override is not None else base
+                if player.gold < actual_cost:
+                    println(f"Za mało złota. Akcja 'rekrutacja' kosztuje {actual_cost}, masz {player.gold}.")
+                    continue
                 add_units(ctx, pid, pidx, 1)
-                player.gold -= cost
+                player.gold -= actual_cost
                 ok = True
-                msg = f"{player.name} rekrutuje 1 jednostkę w {pid.value}. (złoto {player.gold})"
+                msg = f"{player.name} rekrutuje 1 jednostkę w {pid.value}. (złoto {player.gold}, koszt {actual_cost})"
+
 
             elif action == "marsz":
                 if "->" not in args:
@@ -1225,10 +1338,15 @@ class ActionPhase(BasePhase):
                 if before >= 3:
                     println("Zamożność już wynosi 3 (maksimum).")
                     continue
+                base = self.COST_PAID[action]
+                actual_cost = ctx.round_status.zamoznosc_cost_override if ctx.round_status.zamoznosc_cost_override is not None else base
+                if player.gold < actual_cost:
+                    println(f"Za mało złota. Akcja 'zamoznosc' kosztuje {actual_cost}, masz {player.gold}.")
+                    continue
                 add_province_wealth(ctx, pid, 1)
-                player.gold -= cost
+                player.gold -= actual_cost
                 ok = True
-                msg = f"{player.name} podnosi zamożność {pid.value} z {before} do {ctx.provinces[pid].wealth}. (złoto {player.gold})"
+                msg = f"{player.name} podnosi zamożność {pid.value} z {before} do {ctx.provinces[pid].wealth}. (złoto {player.gold}, koszt {actual_cost})"
 
             if ok:
                 println(msg)
@@ -1503,29 +1621,42 @@ class AttackInvadersPhase(BasePhase):
             return
 
         println(f"[Atak] {player.name} atakuje {rid.value} z {src.value}. Masz {units_here} jednostek.")
-        # Rzucamy dla KAŻDEJ jednostki aktualnie na prowincji (stan na start ataku)
+
+        # Ile kości? Normalnie = liczba jednostek; „Artyleria koronna” daje +1 raz na rundę przeciw NAJEŹDŹCOM.
+        rolls_count = units_here
+        if ctx.round_status.artillery_defense_active:
+            used = ctx.round_status.artillery_defense_used
+            pidx_local = ctx.settings.players.index(player)
+            if not used[pidx_local]:
+                rolls_count += 1
+                used[pidx_local] = True
+                println("  (+1 kość dzięki Artylerii koronnej — obrona przed najazdem)")
+
+        # Zbierz rzuty
         rolls = []
-        for i in range(units_here):
+        # Iteracyjnie: po każdym rzucie stosujemy efekt; jeśli tor spadnie do 0, przerywamy tę akcję
+        for i in range(rolls_count):
+            if ctx.raid_tracks[rid].value <= 0:
+                println("  Tor już ma 0 — dalsze ataki w tej akcji są zabronione.")
+                break
+
+            # pobierz pojedynczy rzut
             while True:
                 val = (prompt(f"  Rzut #{i+1} (1–6): ") or "").strip()
                 try:
                     r = int(val)
                     if 1 <= r <= 6:
-                        rolls.append(r)
                         break
                     raise ValueError
                 except ValueError:
                     println("Nieprawidłowe — wpisz liczbę 1–6.")
 
-        # Przetwarzamy rzuty w kolejności
-        for r in rolls:
-            if ctx.raid_tracks[rid].value <= 0:
-                println("  Cel już zbity do 0 — dalsze sukcesy nie obniżą więcej.")
+            # zastosuj efekt rzutu
             if r == 1:
                 add_units(ctx, src, pidx, -1)
                 player.honor += 1
                 if rid == RaidTrackID.S and ctx.round_status.extra_honor_vs_tatars:
-                    player.honor += 1
+                    player.honor += 1  # bonus z „Bitwy pod Wiedniem” (jeśli aktywny)
                 println("  Wynik 1 → porażka, tracisz 1 jednostkę.")
             elif 2 <= r <= 5:
                 add_raid(ctx, rid, -1)
@@ -1540,6 +1671,12 @@ class AttackInvadersPhase(BasePhase):
                 if rid == RaidTrackID.S and ctx.round_status.extra_honor_vs_tatars:
                     player.honor += 1
                 println("  Wynik 6 → sukces: tor -1 i jednostka pozostaje.")
+
+            # po zastosowaniu rzutu sprawdź, czy tor nie spadł do 0 i ewentualnie przerwij
+            if ctx.raid_tracks[rid].value <= 0:
+                println("  Tor zbity do 0 — kończysz tę akcję.")
+                break
+
 
         println(f"  Po ataku: {rid.value} = {ctx.raid_tracks[rid].value}, jednostek w {src.value} = {ctx.troops.per_province[src][pidx]}")
 
@@ -1802,6 +1939,12 @@ class GameplayState(BaseState):
         ctx.round_status.prusy_estate_income_penalty = 0
         ctx.round_status.discount_litwa_wplyw_pos = 0
         ctx.round_status.extra_honor_vs_tatars = False
+        ctx.round_status.recruit_cost_override = None
+        ctx.round_status.zamoznosc_cost_override = None
+        ctx.round_status.fairs_plus_one_income = False
+        ctx.round_status.artillery_defense_active = False
+        ctx.round_status.artillery_defense_used = [False] * len(ctx.settings.players)
+
         println(f"=== ROUND {ctx.round_status.current_round} / {ctx.round_status.total_rounds} ===")
         self.round_engine = RoundEngine([
             EventsPhase(),  
