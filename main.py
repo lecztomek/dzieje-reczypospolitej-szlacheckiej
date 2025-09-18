@@ -71,6 +71,8 @@ class RoundStatus:
     marshal_index: int = 0
     last_law: Optional[int] = None           # 1..6
     last_law_choice: Optional[str] = None    # 'A' / 'B' (jeśli dotyczy)
+    sejm_canceled: bool = False   # <--- NOWE: gdy True, pomijamy Auction/Sejm w tej rundzie
+    admin_yield: int = 2        # <--- NOWE: ile zł daje "administracja" w tej rundzie (domyślnie 2)
 
 @dataclass
 class Province:
@@ -481,9 +483,96 @@ class BasePhase:
         return PhaseResult(done=True)
 
     def exit(self, ctx: GameContext) -> None:
-        # Po każdej fazie pokaż zaktualizowane staty (zostawiamy jak było)
-        show_player_stats(ctx)
+        # Po każdej fazie pytamy, czy wyświetlić statystyki
+        ans = (prompt("Wyświetlić statystyki po tej fazie? [T/n]: ") or "").strip().lower()
+        yes_tokens = {"", "t", "tak", "y", "yes"}
+        if ans in yes_tokens:
+            show_player_stats(ctx)
 
+class EventsPhase(BasePhase):
+    name = "EventsPhase"
+
+    def __init__(self) -> None:
+        self._ran = False
+        # mapa: numer (1..20) -> funkcja efektu wydarzenia
+        self.events: Dict[int, Any] = {}
+        # === Rejestr pierwszego wydarzenia ===
+        self.events[1] = self._ev_liberum_veto  
+        self.events[2] = self._ev_elekcja_viritim
+        self.events[3] = self._ev_skarb_pusty          # Skarb pusty
+        self.events[4] = self._ev_reformy_skarbowe     # Reformy skarbowe
+
+    def enter(self, ctx: GameContext) -> None:
+        println("[Wydarzenia] Podaj numer wydarzenia 1–20. Następnie rozpatrzymy jego efekt.")
+
+    def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        # faza sterowana centralnie; brak pytań per gracz
+        return ""
+
+    def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
+        # --- DODANE: jeśli już rozpatrzyliśmy wydarzenie w tej rundzie, nic nie rób ---
+        if self._ran:
+            return PhaseResult(done=True)
+        self._ran = True
+
+        # Jedno pytanie na całą rundę:
+        while True:
+            tok = (prompt("Numer wydarzenia [1–20]: ") or "").strip()
+            try:
+                n = int(tok)
+                if 1 <= n <= 20:
+                    break
+                raise ValueError
+            except ValueError:
+                println("Nieprawidłowe — wpisz liczbę 1–20.")
+
+        effect = self.events.get(n)
+        if effect is None:
+            println(f"[Wydarzenia] Brak zdefiniowanego efektu dla #{n}. (Na razie nic się nie dzieje.)")
+        else:
+            effect(ctx)
+
+        return PhaseResult(done=True)
+
+    def exit(self, ctx: GameContext) -> None:
+        super().exit(ctx)  # pokaż stan po wydarzeniu
+
+    # --- KONKRETNE WYDARZENIA --- #
+
+    @staticmethod
+    def _ev_liberum_veto(ctx: GameContext) -> None:
+        """
+        Liberum veto – Sejm zerwany.
+        Natychmiast. W tej rundzie nie ma Sejmu (pomijacie licytację i efekt uchwały).
+        """
+        ctx.round_status.sejm_canceled = True
+        println("[Wydarzenia] Liberum veto – Sejm zerwany. W tej rundzie pomijacie licytację i ustawę.")
+
+    @staticmethod
+    def _ev_elekcja_viritim(ctx: GameContext) -> None:
+        """
+        Elekcja viritim.
+        W tej rundzie: Zwycięzca sejmu ciągnie 2 różne uchwały i wybiera 1 do zastosowania.
+        """
+        println("[Wydarzenia] Elekcja viritim — w tej rundzie zwycięzca sejmu ciągnie 2 różne uchwały i wybiera 1 do zastosowania.")
+
+    @staticmethod
+    def _ev_skarb_pusty(ctx: GameContext) -> None:
+        """
+        Skarb pusty.
+        Administracja daje 0 zł w tej rundzie.
+        """
+        ctx.round_status.admin_yield = 0
+        println("[Wydarzenia] Skarb pusty — w tej rundzie Administracja daje 0 zł.")
+
+    @staticmethod
+    def _ev_reformy_skarbowe(ctx: GameContext) -> None:
+        """
+        Reformy skarbowe.
+        Administracja daje +3 zł (zamiast 2) w tej rundzie.
+        """
+        ctx.round_status.admin_yield = 3
+        println("[Wydarzenia] Reformy skarbowe — w tej rundzie Administracja daje +3 zł (zamiast 2).")
 
 # --- Phases: #
 class IncomePhase(BasePhase):
@@ -551,6 +640,9 @@ class AuctionPhase(BasePhase):
     name = "AuctionPhase"
 
     def enter(self, ctx: GameContext) -> None:
+        if ctx.round_status.sejm_canceled:
+            println("[Auction] Sejm zerwany w wydarzeniach — pomijamy licytację w tej rundzie.")
+            return
         # reset większości i ostatnich ofert na początku rundy
         for p in ctx.settings.players:
             p.majority = False
@@ -558,12 +650,14 @@ class AuctionPhase(BasePhase):
         println("[Auction] Każdy gracz wpisuje ofertę w złocie. Najwyższa oferta wygrywa większość.")
 
     def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        if ctx.round_status.sejm_canceled:
+            return ""  # nic nie pytamy
         if player:
             return f"{player.name}, podaj ofertę (0..{player.gold}): "
         return ""
 
     def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
-        if not player:
+        if ctx.round_status.sejm_canceled or not player:
             return PhaseResult(done=True)
         raw = (raw or "").strip()
         # walidacja — pytamy dopóki nieprawidłowe
@@ -580,6 +674,9 @@ class AuctionPhase(BasePhase):
         return PhaseResult(message=f"{player.name} licytuje {bid} złota.", done=True)
 
     def exit(self, ctx: GameContext) -> None:
+        if ctx.round_status.sejm_canceled:
+            super().exit(ctx)  # tylko podsumowanie stanu
+            return
         # wyłonienie zwycięzcy
         bids = [(p.last_bid, idx) for idx, p in enumerate(ctx.settings.players)]
         if not bids:
@@ -607,6 +704,10 @@ class SejmPhase(BasePhase):
     name = "SejmPhase"
 
     def enter(self, ctx: GameContext) -> None:
+        if ctx.round_status.sejm_canceled:
+            println("[Sejm] Sejm zerwany w wydarzeniach — faza Sejmu pominięta w tej rundzie.")
+            return
+
         println("[Sejm] Gracz z większością wybiera ustawę (1..6).")
         println("1–2 Podatek: A) każdy +2 zł  |  B) zwycięzca +4 zł, pozostali +1 zł")
         println("3–4 Pospolite ruszenie: A) każdy stawia 1 wojsko w kontrolowanej prowincji  |  B) −2 na wybranym torze (N/E/S)")
@@ -614,12 +715,14 @@ class SejmPhase(BasePhase):
         println("6 Pokój: A) wszystkie tory N/E/S −1  |  B) jeden wybrany tor −2")
 
     def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
+        if ctx.round_status.sejm_canceled:
+            return ""
         if player and player.majority:
             return f"{player.name}, wybierz numer ustawy (1..6): "
         return ""
 
     def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
-        if not player or not player.majority:
+        if ctx.round_status.sejm_canceled or not player or not player.majority:
             return PhaseResult(done=True)
         raw = (raw or "").strip()
         while True:
@@ -634,6 +737,9 @@ class SejmPhase(BasePhase):
                 raw = prompt("Nieprawidłowe. Wpisz liczbę 1..6: ")
 
     def exit(self, ctx: GameContext) -> None:
+        if ctx.round_status.sejm_canceled:
+            super().exit(ctx)
+            return
         law = ctx.round_status.last_law
         if law is None:
             println("[Sejm] Brak większości — żadna ustawa nie przeszła.")
@@ -947,9 +1053,10 @@ class ActionPhase(BasePhase):
             msg = ""
 
             if action == "administracja":
-                player.gold += 2
+                gain = ctx.round_status.admin_yield
+                player.gold += gain
                 ok = True
-                msg = f"{player.name} otrzymuje +2 złota (teraz {player.gold})."
+                msg = f"{player.name} otrzymuje +{gain} zł (teraz {player.gold})."
 
             elif action == "wplyw":
                 pid = self._parse_province(args)
@@ -1585,8 +1692,11 @@ class GameplayState(BaseState):
         self._start_round(ctx)
 
     def _start_round(self, ctx: GameContext) -> None:
+        ctx.round_status.sejm_canceled = False
+        ctx.round_status.admin_yield = 2   # <--- reset do domyślnej wartości
         println(f"=== ROUND {ctx.round_status.current_round} / {ctx.round_status.total_rounds} ===")
         self.round_engine = RoundEngine([
+            EventsPhase(),  
             IncomePhase(),
             AuctionPhase(),
             SejmPhase(),
