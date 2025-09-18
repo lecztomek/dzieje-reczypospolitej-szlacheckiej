@@ -73,6 +73,9 @@ class RoundStatus:
     last_law_choice: Optional[str] = None    # 'A' / 'B' (jeśli dotyczy)
     sejm_canceled: bool = False   # <--- NOWE: gdy True, pomijamy Auction/Sejm w tej rundzie
     admin_yield: int = 2        # <--- NOWE: ile zł daje "administracja" w tej rundzie (domyślnie 2)
+    prusy_estate_income_penalty: int = 0           # „Wojna północna”: -1 do dochodu z posiadłości w Prusach (min 0)
+    discount_litwa_wplyw_pos: int = 0              # „Wojna z Moskwą”: -1 zł do kosztu Wpływ/Posiadłość w Litwie
+    extra_honor_vs_tatars: bool = False
 
 @dataclass
 class Province:
@@ -501,6 +504,13 @@ class EventsPhase(BasePhase):
         self.events[2] = self._ev_elekcja_viritim
         self.events[3] = self._ev_skarb_pusty          # Skarb pusty
         self.events[4] = self._ev_reformy_skarbowe     # Reformy skarbowe
+        self.events[5]  = self._ev_potop_szwedzki          # Potop szwedzki
+        self.events[6]  = self._ev_wojna_polnocna          # Wojna północna
+        self.events[7]  = self._ev_powstanie_chmielnickiego# Powstanie Chmielnickiego
+        self.events[8]  = self._ev_kozacy_na_sluzbie       # Kozacy na służbie
+        self.events[9]  = self._ev_wojna_z_moskwa          # Wojna z Moskwą
+        self.events[10] = self._ev_bitwa_pod_wiedniem      # Bitwa pod Wiedniem
+        self.events[11] = self._ev_pokoj_w_oliwie          # Pokój w Oliwie
 
     def enter(self, ctx: GameContext) -> None:
         println("[Wydarzenia] Podaj numer wydarzenia 1–20. Następnie rozpatrzymy jego efekt.")
@@ -574,6 +584,85 @@ class EventsPhase(BasePhase):
         ctx.round_status.admin_yield = 3
         println("[Wydarzenia] Reformy skarbowe — w tej rundzie Administracja daje +3 zł (zamiast 2).")
 
+    @staticmethod
+    def _ev_potop_szwedzki(ctx: GameContext) -> None:
+        """
+        Potop szwedzki.
+        Natychmiast: tor Północ (N/Szwecja) +2.
+        """
+        add_raid(ctx, RaidTrackID.N, +2)
+        println("[Wydarzenia] Potop szwedzki — Szwecja +2.")
+
+    @staticmethod
+    def _ev_wojna_polnocna(ctx: GameContext) -> None:
+        """
+        Wojna północna.
+        N +1 natychmiast. W tej rundzie: dochód z POSIADŁOŚCI w Prusach −1 każda (min. 0).
+        """
+        add_raid(ctx, RaidTrackID.N, +1)
+        ctx.round_status.prusy_estate_income_penalty = 1
+        println("[Wydarzenia] Wojna północna — Szwecja +1; w tej rundzie posiadłości w Prusach płacą o 1 mniej (min. 0).")
+
+    @staticmethod
+    def _ev_powstanie_chmielnickiego(ctx: GameContext) -> None:
+        """
+        Powstanie Chmielnickiego.
+        Natychmiast: E +1, S +1.
+        """
+        add_raid(ctx, RaidTrackID.E, +1)
+        add_raid(ctx, RaidTrackID.S, +1)
+        println("[Wydarzenia] Powstanie Chmielnickiego — Moskwa +1, Tatarzy +1.")
+
+    @staticmethod
+    def _ev_kozacy_na_sluzbie(ctx: GameContext) -> None:
+        """
+        Kozacy na służbie.
+        Każdy gracz, który MA armię na Ukrainie, natychmiast dostaje tam +1 jednostkę.
+        """
+        pid = ProvinceID.UKRAINA
+        arr = ctx.troops.per_province.get(pid, [])
+        if not arr:
+            println("[Wydarzenia] (Brak tablicy wojsk — nic nie zrobiono.)")
+            return
+        gains = []
+        for i, units in enumerate(arr):
+            if units > 0:
+                add_units(ctx, pid, i, +1)
+                gains.append(ctx.settings.players[i].name)
+        if gains:
+            println("[Wydarzenia] Kozacy na służbie — +1 jednostka na Ukrainie dla: " + ", ".join(gains) + ".")
+        else:
+            println("[Wydarzenia] Kozacy na służbie — nikt nie ma tam armii (brak efektu).")
+
+    @staticmethod
+    def _ev_wojna_z_moskwa(ctx: GameContext) -> None:
+        """
+        Wojna z Moskwą.
+        E +2 natychmiast. W tej rundzie Wpływ/Posiadłość w Litwie kosztują −1 zł (min. 0).
+        """
+        add_raid(ctx, RaidTrackID.E, +2)
+        ctx.round_status.discount_litwa_wplyw_pos = 1
+        println("[Wydarzenia] Wojna z Moskwą — Moskwa +2; w tej rundzie Wpływ/Posiadłość w Litwie tańsze o 1 zł.")
+
+    @staticmethod
+    def _ev_bitwa_pod_wiedniem(ctx: GameContext) -> None:
+        """
+        Bitwa pod Wiedniem.
+        S −1 natychmiast. W tej rundzie: za ataki na Tatarów dostajesz +1 honor DODATKOWO.
+        """
+        add_raid(ctx, RaidTrackID.S, -1)
+        ctx.round_status.extra_honor_vs_tatars = True
+        println("[Wydarzenia] Bitwa pod Wiedniem — Tatarzy −1; w tej rundzie dodatkowy +1 honor za ataki na Tatarów.")
+
+    @staticmethod
+    def _ev_pokoj_w_oliwie(ctx: GameContext) -> None:
+        """
+        Pokój w Oliwie.
+        N −1 natychmiast.
+        """
+        add_raid(ctx, RaidTrackID.N, -1)
+        println("[Wydarzenia] Pokój w Oliwie — Szwecja −1.")
+
 # --- Phases: #
 class IncomePhase(BasePhase):
     name = "IncomePhase"
@@ -609,6 +698,10 @@ class IncomePhase(BasePhase):
 
             # (B) dochód z posiadłości
             per_estate = estate_income_by_wealth(prov.wealth)
+            # Wojna północna: w tej rundzie posiadłości w Prusach płacą o 1 mniej (min. 0)
+            if pid == ProvinceID.PRUSY and ctx.round_status.prusy_estate_income_penalty > 0:
+                per_estate = max(0, per_estate - ctx.round_status.prusy_estate_income_penalty)
+
             if per_estate > 0:
                 if pid == ProvinceID.WIELKOPOLSKA:
                     # Wielkopolska płaci tylko, gdy jest JEDEN kontrolujący.
@@ -1064,9 +1157,12 @@ class ActionPhase(BasePhase):
                     println("Nie rozpoznano prowincji.")
                     continue
                 add_nobles(ctx, pid, pidx, 1)
-                player.gold -= cost
+                actual_cost = cost
+                if pid == ProvinceID.LITWA and ctx.round_status.discount_litwa_wplyw_pos > 0:
+                    actual_cost = max(0, cost - ctx.round_status.discount_litwa_wplyw_pos)
+                player.gold -= actual_cost
                 ok = True
-                msg = f"{player.name} stawia szlachcica w {pid.value}. (złoto {player.gold})"
+                msg = f"{player.name} stawia szlachcica w {pid.value}. (złoto {player.gold}, koszt {actual_cost})"
 
             elif action == "posiadlosc":
                 pid = self._parse_province(args)
@@ -1077,9 +1173,12 @@ class ActionPhase(BasePhase):
                     println("Musisz mieć szlachcica na tej prowincji.")
                     continue
                 if build_estate(ctx, pid, pidx):
-                    player.gold -= cost
+                    actual_cost = cost
+                    if pid == ProvinceID.LITWA and ctx.round_status.discount_litwa_wplyw_pos > 0:
+                        actual_cost = max(0, cost - ctx.round_status.discount_litwa_wplyw_pos)
+                    player.gold -= actual_cost
                     ok = True
-                    msg = f"{player.name} buduje posiadłość w {pid.value}. (złoto {player.gold})"
+                    msg = f"{player.name} buduje posiadłość w {pid.value}. (złoto {player.gold}, koszt {actual_cost})"
                 else:
                     println("Brak wolnych slotów posiadłości w tej prowincji.")
                     continue
@@ -1425,15 +1524,21 @@ class AttackInvadersPhase(BasePhase):
             if r == 1:
                 add_units(ctx, src, pidx, -1)
                 player.honor += 1
+                if rid == RaidTrackID.S and ctx.round_status.extra_honor_vs_tatars:
+                    player.honor += 1
                 println("  Wynik 1 → porażka, tracisz 1 jednostkę.")
             elif 2 <= r <= 5:
                 add_raid(ctx, rid, -1)
                 add_units(ctx, src, pidx, -1)
                 player.honor += 1
+                if rid == RaidTrackID.S and ctx.round_status.extra_honor_vs_tatars:
+                    player.honor += 1
                 println("  Wynik 2–5 → sukces: tor -1 i tracisz 1 jednostkę.")
             else:  # r == 6
                 add_raid(ctx, rid, -1)
                 player.honor += 1
+                if rid == RaidTrackID.S and ctx.round_status.extra_honor_vs_tatars:
+                    player.honor += 1
                 println("  Wynik 6 → sukces: tor -1 i jednostka pozostaje.")
 
         println(f"  Po ataku: {rid.value} = {ctx.raid_tracks[rid].value}, jednostek w {src.value} = {ctx.troops.per_province[src][pidx]}")
@@ -1693,7 +1798,10 @@ class GameplayState(BaseState):
 
     def _start_round(self, ctx: GameContext) -> None:
         ctx.round_status.sejm_canceled = False
-        ctx.round_status.admin_yield = 2   # <--- reset do domyślnej wartości
+        ctx.round_status.admin_yield = 2  
+        ctx.round_status.prusy_estate_income_penalty = 0
+        ctx.round_status.discount_litwa_wplyw_pos = 0
+        ctx.round_status.extra_honor_vs_tatars = False
         println(f"=== ROUND {ctx.round_status.current_round} / {ctx.round_status.total_rounds} ===")
         self.round_engine = RoundEngine([
             EventsPhase(),  
