@@ -68,8 +68,9 @@ class Settings:
 class RoundStatus:
     current_round: int = 1
     total_rounds: int = 3
-    marshal_index: int = 0  # kto jest marszałkiem
-    last_law: Optional[int] = None  # numer ustawy wybranej w sejmie (1..10)
+    marshal_index: int = 0
+    last_law: Optional[int] = None           # 1..6
+    last_law_choice: Optional[str] = None    # 'A' / 'B' (jeśli dotyczy)
 
 @dataclass
 class Province:
@@ -387,7 +388,6 @@ def estate_income_by_wealth(wealth: int) -> int:
         return 1
     return 2  # w == 3
 
-
 def compute_final_scores(ctx: GameContext) -> str:
     """
     Zasady:
@@ -607,12 +607,15 @@ class SejmPhase(BasePhase):
     name = "SejmPhase"
 
     def enter(self, ctx: GameContext) -> None:
-        println("[Sejm] Gracz z większością wybiera ustawę (1..10).")
+        println("[Sejm] Gracz z większością wybiera ustawę (1..6).")
+        println("1–2 Podatek: A) każdy +2 zł  |  B) zwycięzca +4 zł, pozostali +1 zł")
+        println("3–4 Pospolite ruszenie: A) każdy stawia 1 wojsko w kontrolowanej prowincji  |  B) −2 na wybranym torze (N/E/S)")
+        println("5 Fortyfikacje (A i B): połóż fort w kontrolowanej przez siebie prowincji")
+        println("6 Pokój: A) wszystkie tory N/E/S −1  |  B) jeden wybrany tor −2")
 
     def ask(self, ctx: GameContext, player: Optional[Player] = None) -> str:
-        # tylko gracz z większością będzie pytany
         if player and player.majority:
-            return f"{player.name}, wybierz numer ustawy (1..10): "
+            return f"{player.name}, wybierz numer ustawy (1..6): "
         return ""
 
     def handle_input(self, ctx: GameContext, raw: str, player: Optional[Player] = None) -> PhaseResult:
@@ -622,17 +625,149 @@ class SejmPhase(BasePhase):
         while True:
             try:
                 val = int(raw)
-                if 1 <= val <= 10:
+                if 1 <= val <= 6:
                     ctx.round_status.last_law = val
+                    ctx.round_status.last_law_choice = None
                     return PhaseResult(message=f"[Sejm] {player.name} wybrał ustawę nr {val}.", done=True)
                 raise ValueError
             except ValueError:
-                raw = prompt("Nieprawidłowe. Wpisz liczbę 1..10: ")
+                raw = prompt("Nieprawidłowe. Wpisz liczbę 1..6: ")
 
     def exit(self, ctx: GameContext) -> None:
-        if ctx.round_status.last_law is None:
+        law = ctx.round_status.last_law
+        if law is None:
             println("[Sejm] Brak większości — żadna ustawa nie przeszła.")
+            super().exit(ctx)
+            return
+
+        majority = self._majority_player(ctx)
+        if not majority:
+            println("[Sejm] Nikt nie ma większości — ustawa nie wchodzi w życie.")
+            super().exit(ctx)
+            return
+
+        # wygodny indeks gracza z większością
+        maj_idx = ctx.settings.players.index(majority)
+
+        # ====== USTAWY 1..6 ======
+        if law in (1, 2):  # Podatek
+            println("[Sejm] Podatek.")
+            choice = self._prompt_choice_ab()
+            ctx.round_status.last_law_choice = choice
+
+            if choice == "A":
+                for p in ctx.settings.players:
+                    p.gold += 2
+                println("Każdy otrzymuje +2 zł.")
+            else:  # B
+                for p in ctx.settings.players:
+                    p.gold += 1
+                majority.gold += 3  # 1 już dostał z pętli powyżej => 1+3 = 4
+                println(f"{majority.name} (zwycięzca licytacji) otrzymuje łącznie +4 zł, pozostali +1 zł.")
+
+        elif law in (3, 4):  # Pospolite ruszenie
+            println("[Sejm] Pospolite ruszenie.")
+            choice = self._prompt_choice_ab()
+            ctx.round_status.last_law_choice = choice
+
+            if choice == "A":
+                # Każdy gracz, który kontroluje jakąś prowincję, kładzie 1 wojsko w JEDNEJ kontrolowanej prowincji
+                for i, p in enumerate(ctx.settings.players):
+                    choices = self._controlled_provinces(ctx, i)
+                    if not choices:
+                        continue
+                    labels = [pid.value for pid in choices]
+                    pick = self._prompt_pick_from(labels, f"{p.name}: wybierz prowincję kontrolowaną do postawienia 1 jednostki")
+                    if pick is not None:
+                        add_units(ctx, choices[pick], i, 1)
+                        println(f"  {p.name}: +1 jednostka w {choices[pick].value}")
+            else:  # B: −2 na jednym wybranym torze
+                rid = self._prompt_track()
+                if rid:
+                    add_raid(ctx, rid, -2)
+                    println(f"Tor {rid.value} −2.")
+
+        elif law == 5:  # Fortyfikacje (A i B to samo)
+            println("[Sejm] Fortyfikacje: połóż fort w kontrolowanej prowincji.")
+            for i, p in enumerate(ctx.settings.players):
+                choices = [pid for pid in self._controlled_provinces(ctx, i) if not ctx.provinces[pid].has_fort]
+                if not choices:
+                    continue
+                labels = [pid.value for pid in choices]
+                pick = self._prompt_pick_from(labels, f"{p.name}: wybierz prowincję do położenia fortu")
+                if pick is not None:
+                    toggle_fort(ctx, choices[pick], True)
+                    println(f"  {p.name}: fort w {choices[pick].value}")
+
+        elif law == 6:  # Pokój
+            println("[Sejm] Pokój.")
+            choice = self._prompt_choice_ab()
+            ctx.round_status.last_law_choice = choice
+
+            if choice == "A":
+                # Wszystkie tory −1
+                for rid in (RaidTrackID.N, RaidTrackID.E, RaidTrackID.S):
+                    add_raid(ctx, rid, -1)
+                println("Wszystkie tory N/E/S −1.")
+            else:  # B: jeden wybrany tor −2
+                rid = self._prompt_track()
+                if rid:
+                    add_raid(ctx, rid, -2)
+                    println(f"Tor {rid.value} −2.")
+
         super().exit(ctx)
+
+
+    @staticmethod
+    def _majority_player(ctx: GameContext) -> Optional[Player]:
+        for p in ctx.settings.players:
+            if p.majority:
+                return p
+        return None
+
+    @staticmethod
+    def _controlled_provinces(ctx: GameContext, pidx: int) -> List[ProvinceID]:
+        out: List[ProvinceID] = []
+        for pid in ProvinceID:
+            winners = influence_winners_in_province(ctx, pid)
+            if len(winners) == 1 and winners[0] == pidx:
+                out.append(pid)
+        return out
+
+    @staticmethod
+    def _prompt_choice_ab() -> str:
+        while True:
+            ans = (prompt("Wybierz wariant [A/B]: ") or "").strip().upper()
+            if ans in ("A", "B"):
+                return ans
+            println("Wpisz 'A' lub 'B'.")
+
+    @staticmethod
+    def _prompt_pick_from(options: List[str], title: str) -> Optional[int]:
+        if not options:
+            return None
+        println(title)
+        for i, opt in enumerate(options, 1):
+            println(f"  {i}) {opt}")
+        while True:
+            raw = (prompt("Wybór (nr): ") or "").strip()
+            try:
+                k = int(raw)
+                if 1 <= k <= len(options):
+                    return k - 1
+            except ValueError:
+                pass
+            println("Nieprawidłowe — podaj numer z listy.")
+
+    @staticmethod
+    def _prompt_track() -> Optional[RaidTrackID]:
+        mapping = {"n": RaidTrackID.N, "e": RaidTrackID.E, "s": RaidTrackID.S}
+        println("Wybierz tor: N (Szwecja), E (Moskwa), S (Tatarzy)")
+        while True:
+            tok = (prompt("Tor [N/E/S]: ") or "").strip().lower()
+            if tok in mapping:
+                return mapping[tok]
+            println("Podaj N/E/S.")
 
 class ActionPhase(BasePhase):
     name = "ActionPhase"
