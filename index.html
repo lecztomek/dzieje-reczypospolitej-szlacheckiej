@@ -9,6 +9,7 @@
       --bg:#0f172a;--panel:#111827ee;--card:#0b1221cc;--accent:#eab308;--muted:#94a3b8;--text:#e5e7eb;--stroke:#061127;--shadow:0 10px 30px rgba(0,0,0,.4);
       --console-h: 220px;
       --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --sidebar-w: 320px;
     }
     *{box-sizing:border-box}
     html,body{min-height:100%}
@@ -25,6 +26,31 @@
     .note{color:var(--muted);font-size:.95rem;margin-left:auto}
 
     main{max-width:1200px;margin:18px auto 40px;padding:0 20px;display:block}
+    .layout{display:grid;grid-template-columns:var(--sidebar-w) 1fr;gap:16px}
+    @media (max-width: 980px){ .layout{grid-template-columns:1fr} }
+    
+    /* === [CSS] SIDEBAR === */
+    .sidebar{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);overflow:hidden;height:100%}
+    .sidebar .head{padding:14px 16px;border-bottom:1px solid #1f2937;display:flex;justify-content:space-between;align-items:center}
+    .sidebar h2{margin:0;font-size:1.05rem;color:#cbd5e1}
+    .sidebar .section{padding:14px 16px;border-bottom:1px solid #1f2937}
+    .sidebar .section:last-child{border-bottom:none}
+    
+    /* Marszałek */
+    .marshal-row{display:flex;align-items:center;gap:10px}
+    .marshal-label{min-width:88px;color:#cbd5e1;font-weight:700}
+    .marshal-box{width:34px;height:34px;border-radius:8px;border:2px solid #475569;background:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+    .marshal-reset{margin-left:auto;border:1px solid #334155;background:#0f172a;color:#e2e8f0;padding:6px 10px;border-radius:10px;font-weight:600;cursor:pointer}
+    .marshal-reset:hover{background:#111827;border-color:#475569}
+    
+    /* Szlachcice */
+    .nobles-table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .nobles-table th,.nobles-table td{padding:6px 6px;vertical-align:middle}
+    .nobles-table thead th{color:#9ca3af;font-size:.9rem;font-weight:700;text-align:center}
+    .nobles-table tbody th{font-weight:700;color:#e2e8f0;text-align:left;white-space:nowrap}
+    .noble-slot{width:34px;height:34px;border-radius:999px;border:2px solid #475569;background:none;display:grid;place-items:center;font-weight:800;font-size:.95rem;line-height:1;color:#e5e7eb;user-select:none}
+    .noble-slot[data-empty="1"]{opacity:.65}
+    
     .map-card{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
     .map-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #1f2937}
     .map-header h2{margin:0;font-size:1.05rem;color:#cbd5e1}
@@ -113,15 +139,38 @@
 <body>
   <header>
     <div class="wrap">
-      <h1>Mapa Polski ok. 1650 r. – interaktywne prowincje (schemat)</h1>
-      <p class="note">Korzystaj z konsoli na dole (wpisz <code>pomoc</code>).</p>
+      <h1>Dzieje Rzeczypospolitej szlacheckiej</h1>
     </div>
   </header>
 
   <main>
+    <div class="layout">
+    <aside class="sidebar" aria-label="Menu boczne">
+      <div class="head"><h2>Panel dowodzenia</h2></div>
+  
+      <!-- Marszałek -->
+      <div class="section" aria-label="Marszałek">
+        <div class="marshal-row">
+          <span class="marshal-label">Marszałek:</span>
+          <div id="marshalBox" class="marshal-box" role="img" aria-label="Kolor Marszałka"></div>
+          <button id="marshalResetBtn" class="marshal-reset" type="button">Wyczyść</button>
+        </div>
+      </div>
+  
+      <!-- Szlachcice -->
+      <div class="section" aria-label="Tabela Szlachciców">
+        <h2 style="font-size:1rem;margin:0 0 10px;color:#cbd5e1">Szlachcice</h2>
+        <table class="nobles-table" id="noblesTable" aria-describedby="nobles-desc">
+          <caption id="nobles-desc" style="clip:rect(0 0 0 0);position:absolute">Tabela 4 slotów dla każdej prowincji</caption>
+          <thead>
+          </thead>
+          <tbody id="noblesBody"></tbody>
+        </table>
+      </div>
+    </aside>
+  
     <section class="map-card" aria-describedby="map-desc">
       <div class="map-header">
-        <h2>Mapa (schemat niegeograficzny)</h2>
         <div class="actions">
           <button id="resetBtn" type="button" aria-label="Wyczyść zaznaczenie">Reset</button>
           <button id="clearDrawBtn" type="button" aria-label="Usuń rysunki z mapy">Wyczyść rysunki</button>
@@ -165,20 +214,9 @@
 
         <div class="coords" id="coords">x: –, y: –</div>
       </div>
-
-      <div class="legend" aria-label="Legenda – skróty do regionów">
-        <button data-jump="prusy" aria-label="Zaznacz: Prusy">Prusy</button>
-        <button data-jump="wielkopolska" aria-label="Zaznacz: Wielkopolska">Wielkopolska</button>
-        <button data-jump="malopolska" aria-label="Zaznacz: Małopolska">Małopolska</button>
-        <button data-jump="litwa" aria-label="Zaznacz: Litwa">Litwa</button>
-        <button data-jump="ukraina" aria-label="Zaznacz: Ukraina">Ukraina</button>
-      </div>
     </section>
+    </div>
   </main>
-
-  <footer>
-    <p class="note">To schemat poglądowy. Konsola pozwala rysować oraz kolorować pięć boxów + fort (gwiazdka) w każdej prowincji. Dodatkowo można stawiać do 4 znaczników armii nad boxami.</p>
-  </footer>
 
   <!-- KONSOLA -->
   <section class="console" aria-label="Konsola poleceń">
@@ -236,6 +274,9 @@
     const logEl = document.getElementById('log');
     const inputEl = document.getElementById('cmdInput');
     const formEl = document.getElementById('cmdForm');
+    const noblesBody = document.getElementById('noblesBody');
+    const marshalBox = document.getElementById('marshalBox');
+    const marshalResetBtn = document.getElementById('marshalResetBtn');
     const history = [];
     let histIdx = -1;
     let idCounter = 1;
@@ -425,6 +466,53 @@
       region.el.classList.add('selected');
     }
 
+    // ===== PANEL: Marszałek + Szlachcice =====
+    const NOBLE_SLOTS = 4;
+    function humanize(key){ return key.charAt(0).toUpperCase() + key.slice(1); }
+    
+    // zbuduj tabelę (wiersze = prowincje, kolumny 1..4)
+    function buildNoblesTable(){
+      const order = ['prusy','wielkopolska','malopolska','litwa','ukraina'];
+      order.forEach(k => {
+        const tr = document.createElement('tr');
+        const th = document.createElement('th'); th.textContent = humanize(k); tr.appendChild(th);
+        for(let i=1;i<=NOBLE_SLOTS;i++){
+          const td = document.createElement('td');
+          const slot = document.createElement('div');
+          slot.className = 'noble-slot';
+          slot.setAttribute('data-region', k);
+          slot.setAttribute('data-slot', i);
+          slot.setAttribute('data-empty', '1');
+          slot.title = `${humanize(k)} – Szlachcic ${i}`;
+          td.appendChild(slot); tr.appendChild(td);
+        }
+        noblesBody.appendChild(tr);
+      });
+    }
+    
+    // Marszałek
+    function setMarshal(color){ marshalBox.style.background = color; marshalBox.style.borderColor = color; return true; }
+    function clearMarshal(){ marshalBox.style.background = 'none'; marshalBox.style.borderColor = '#475569'; }
+    marshalResetBtn?.addEventListener('click', () => { clearMarshal(); ok('Wyczyszczono kolor Marszałka.'); });
+    
+    // Szlachcice
+    function getNobleSlot(regionKey, slot){ return document.querySelector(`.noble-slot[data-region="${regionKey}"][data-slot="${slot}"]`); }
+    function setNoble(regionKey, slot, color, value){
+      const el = getNobleSlot(regionKey, slot); if(!el) return false;
+      el.style.background = color; el.style.borderColor = color; el.textContent = String(parseInt(value,10));
+      el.setAttribute('data-empty','0'); return true;
+    }
+    function setNobleCount(regionKey, slot, value){
+      const el = getNobleSlot(regionKey, slot); if(!el || el.getAttribute('data-empty')==='1') return false;
+      el.textContent = String(parseInt(value,10)); return true;
+    }
+    function clearNoble(regionKey, slot){
+      const el = getNobleSlot(regionKey, slot); if(!el) return false;
+      el.style.background = 'none'; el.style.borderColor = '#475569'; el.textContent = ''; el.setAttribute('data-empty','1'); return true;
+    }
+    function resetNobles(regionKey){ let okAny=false; for(let i=1;i<=NOBLE_SLOTS;i++){ okAny = clearNoble(regionKey, i) || okAny; } return okAny; }
+
+
     // ===================== Boxy + Fort =====================
     const BOX_COUNT = 5;
     const BOX_SIZE  = 24;
@@ -496,6 +584,8 @@
     const ENEMY_COUNT = 6; // zawsze 6 X
     const ENEMY_SPACING = 42; // odległość między X
     const ENEMY_SIZE = 16; // długość ramienia X
+    const ENEMY_ALERT_THRESHOLD = 3;
+    const ENEMY_ALERT_COLOR = '#ef4444'; // czerwony przy >= 3
     const ENEMY_DEFAULT_COLOR = getComputedStyle(document.documentElement).getPropertyValue('--accent')?.trim() || '#eab308';
 
     const ENEMIES = {
@@ -532,8 +622,19 @@
     function colorCross(g, color){ g.querySelectorAll('line').forEach(l=>{ l.style.stroke = color; }); }
 
     // Ustaw liczbę pokolorowanych X (0..6). Liczymy od lewej/góry.
-    function setEnemyCount(which, n, color=ENEMY_DEFAULT_COLOR){ const key = norm(which); const enemy = ENEMIES[key]; if(!enemy){ return false; } const count = Math.max(0, Math.min(ENEMY_COUNT, parseInt(n,10))); enemy.items.forEach((g, idx)=>{ colorCross(g, idx < count ? color : 'gray'); }); return true; }
-
+    function setEnemyCount(which, n, color = ENEMY_DEFAULT_COLOR){
+      const key = norm(which);
+      const enemy = ENEMIES[key];
+      if(!enemy) return false;
+    
+      const count = Math.max(0, Math.min(ENEMY_COUNT, parseInt(n,10)));
+      const activeColor = count >= ENEMY_ALERT_THRESHOLD ? ENEMY_ALERT_COLOR : color;
+    
+      enemy.items.forEach((g, idx) => {
+        colorCross(g, idx < count ? activeColor : 'gray');
+      });
+      return true;
+    }
     function clearEnemy(which){ return setEnemyCount(which, 0, 'gray'); }
 
     // ========== API kolorowania boxów ==========
@@ -811,19 +912,46 @@
       if (cmd === 'enemyclr' || cmd === 'enemyclear' || cmd === 'enemyrst'){
         const who = tokens[1]; if(!who) return err('Użycie: enemyclr <szwecja|moskwa|tatarzy>'); clearEnemy(who) ? ok(`Wyczyszczono tor: ${who}.`) : err('Nieznany wróg.'); return; }
 
+      // Marszałek
+      if (cmd === 'marszalek' || cmd === 'marszałek'){
+        const color = tokens[1]; if(!color) return err('Użycie: marszalek <kolor>');
+        setMarshal(color); ok(`Marszałek = ${color}`); return;
+      }
+      
+      // Szlachcice
+      if (cmd === 'noble' || cmd === 'szlachcic'){
+        const r = getRegionByName(tokens[1]); const idx = parseInt(tokens[2],10);
+        const color = tokens[3]; const val = parseInt(tokens[4],10);
+        if(!r || !(idx>=1 && idx<=4) || !color || Number.isNaN(val))
+          return err('Użycie: noble <region> <1-4> <kolor> <liczba>');
+        setNoble(r.key, idx, color, val) ? ok(`Szlachcic: ${r.key} slot ${idx} = ${color}, ${val}.`) : err('Nie udało się ustawić.');
+        return;
+      }
+      if (cmd === 'nobleset'){
+        const r = getRegionByName(tokens[1]); const idx = parseInt(tokens[2],10); const val = parseInt(tokens[3],10);
+        if(!r || !(idx>=1 && idx<=4) || Number.isNaN(val)) return err('Użycie: nobleset <region> <1-4> <liczba>');
+        setNobleCount(r.key, idx, val) ? ok(`Zmieniono liczbę (Szlachcic): ${r.key} slot ${idx} = ${val}.`) : err('Najpierw ustaw slot: noble <...>');
+        return;
+      }
+      if (cmd === 'nobleclr' || cmd === 'nobleclear'){
+        const r = getRegionByName(tokens[1]); const idx = parseInt(tokens[2],10);
+        if(!r || !(idx>=1 && idx<=4)) return err('Użycie: nobleclr <region> <1-4>');
+        clearNoble(r.key, idx) ? ok(`Usunięto Szlachcica: ${r.key} slot ${idx}.`) : err('Nie udało się usunąć.');
+        return;
+      }
+      if (cmd === 'noblereset'){
+        const r = getRegionByName(tokens[1]); if(!r) return err('Użycie: noblereset <region>');
+        resetNobles(r.key) ? ok(`Wyczyszczono Szlachciców w ${r.key}.`) : err('Brak znaczników do wyczyszczenia.');
+        return;
+      }
+
+
       err('Nieznane polecenie. Wpisz "pomoc".');
     }
 
     function showHelp(){
       ok('Dostępne polecenia:');
       print('• pomoc — lista komend');
-      print('• wyczyść | clear — usuń wszystkie rysunki');
-      print('• reset — usuń zaznaczenia i rysunki');
-      print('• zaznacz <region> — podświetl region');
-      print('• kolor <region> <kolor> — ustaw kolor regionu (np. #ff0, red)');
-      print('• pin <region> "Tekst", pinxy <x> <y> "Tekst"');
-      print('• linia <region1> <region2> ["Tekst"]');
-      print('• etykieta <x> <y> "Tekst"');
       print('• box <region> <1-5> <kolor> — pokoloruj wskazany kwadrat');
       print('• boxclr <region> <1-5> — wyczyść wskazany kwadrat');
       print('• boxreset <region> — wyczyść wszystkie 5 w regionie');
@@ -864,6 +992,7 @@
     createBoxes();
     createArmySlots();
     createEnemyTracks();
+    buildNoblesTable();
     ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
   </script>
 </body>
