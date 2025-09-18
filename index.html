@@ -98,7 +98,7 @@
       stroke:gray; stroke-width:3; vector-effect:non-scaling-stroke;
     }
     #armiesLayer text{
-      font-size:16px; font-weight:800;
+      font-size:20px; font-weight:800;
       fill:#e5e7eb; stroke:#061127; stroke-width:.8;
       text-anchor:middle; dominant-baseline:middle;
       pointer-events:none;
@@ -691,44 +691,42 @@
     }
 
     // ===================== Armie (4 sloty na prowincję) =====================
-    const ARMY_SLOTS = 4;
-    const ARMY_R = 14;                 // promień kółka
-    const ARMY_GAP_ABOVE_BOX = 20;     // o ile wyżej od górnej krawędzi rzędu boxów
+    const ARMY_SLOTS = 4;          // bez zmian
+    const ARMY_R = 18;             // większe znaczniki
+    const ARMY_COL_SPACING = 46;   // odstęp poziomy między znacznikami
+    const ARMY_OFFSET_Y = 30;      // ile pikseli POWYŻEJ środka regionu
 
     function createArmySlots(){
-      for(const r of Object.values(REGIONS)){
-        if(!r.el) continue;
-
-        const c = bboxCenter(r.el);
-        const spacing = BOX_SIZE + BOX_GAP;
-        const firstCx = c.x - ((BOX_COUNT-1)/2)*spacing;      // wyrównanie do boxów 1..5
-        const boxesRowCy = c.y + BOX_ROW_OFFSET_Y;            // środek rzędu boxów
-        const armyCy = boxesRowCy - BOX_SIZE/2 - ARMY_GAP_ABOVE_BOX; // nad boxami
-
+      for (const r of Object.values(REGIONS)) {
+        if (!r.el) continue;
+      
+        const c = bboxCenter(r.el);                           // środek regionu
+        const firstCx = c.x - ((ARMY_SLOTS - 1) / 2) * ARMY_COL_SPACING;
+        const armyCy  = c.y - ARMY_OFFSET_Y;                  // rząd armii nad środkiem
+      
         const group = document.createElementNS('http://www.w3.org/2000/svg','g');
         group.setAttribute('id', `armies-${r.key}`);
         group.setAttribute('data-region', r.key);
-
-        // 4 sloty (nad boxami 1..4)
-        for(let i=1;i<=ARMY_SLOTS;i++){
-          const cx = firstCx + (i-1)*spacing;
-
+      
+        for (let i = 1; i <= ARMY_SLOTS; i++) {
+          const cx = firstCx + (i - 1) * ARMY_COL_SPACING;
+      
           const slotG = document.createElementNS('http://www.w3.org/2000/svg','g');
           slotG.setAttribute('id', `army-${r.key}-${i}`);
           slotG.setAttribute('data-slot', i);
-          slotG.style.display = 'none';           // nie pokazuj pustych
-
+          slotG.style.display = 'none';
+      
           const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
           circle.setAttribute('cx', cx.toFixed(1));
           circle.setAttribute('cy', armyCy.toFixed(1));
           circle.setAttribute('r', ARMY_R);
-          circle.setAttribute('fill', 'none');    // będzie nadane przy ustawieniu
-
+          circle.setAttribute('fill', 'none');
+      
           const text = document.createElementNS('http://www.w3.org/2000/svg','text');
           text.setAttribute('x', cx.toFixed(1));
           text.setAttribute('y', armyCy.toFixed(1));
-          text.textContent = '';                  // liczba jednostek
-
+          text.textContent = '';
+      
           slotG.appendChild(circle);
           slotG.appendChild(text);
           group.appendChild(slotG);
