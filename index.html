@@ -107,7 +107,7 @@
     /* *** NOWE: Tory wrogów (X) *** */
     #enemiesLayer{ pointer-events:none; }
     #enemiesLayer text.label{
-      font-size:22px; font-weight:800; fill:#cbd5e1; stroke:#061127; stroke-width:.8;
+      font-size:clamp(30px, 2.4vw, 34px); font-weight:800; fill:#cbd5e1; stroke:#061127; stroke-width:.8;
       text-anchor:middle; dominant-baseline:middle;
     }
     #enemiesLayer g.cross line{ stroke:gray; stroke-width:6; vector-effect:non-scaling-stroke; stroke-linecap:round }
@@ -626,7 +626,7 @@
       // Szwecja – nad mapą, poziomo
       { const y = 60; const startX = centerX - ((ENEMY_COUNT-1)/2)*ENEMY_SPACING; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Szwecja'; label.setAttribute('x', centerX); label.setAttribute('y', y - 28); enemiesLayer.appendChild(label); ENEMIES.szwecja.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const x = startX + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.szwecja.items = arr; }
       // Moskwa – po prawej, pionowo
-      { const x = width - 40; const startY = 340; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Moskwa'; label.setAttribute('x', x); label.setAttribute('y', startY - 40); enemiesLayer.appendChild(label); ENEMIES.moskwa.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const y = startY + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.moskwa.items = arr; }
+      { const x = width - 60; const startY = 340; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Moskwa'; label.setAttribute('x', x); label.setAttribute('y', startY - 40); enemiesLayer.appendChild(label); ENEMIES.moskwa.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const y = startY + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.moskwa.items = arr; }
       // Tatarzy – na dole, poziomo
       { const y = height - 50; const startX = centerX - ((ENEMY_COUNT-1)/2)*ENEMY_SPACING; const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.classList.add('label'); label.textContent = 'Tatarzy'; label.setAttribute('x', centerX); label.setAttribute('y', y + 42); enemiesLayer.appendChild(label); ENEMIES.tatarzy.label = label; const arr=[]; for(let i=0;i<ENEMY_COUNT;i++){ const x = startX + i*ENEMY_SPACING; const cross = makeCross(x, y, ENEMY_SIZE, 'gray'); enemiesLayer.appendChild(cross); arr.push(cross); } ENEMIES.tatarzy.items = arr; }
     }
