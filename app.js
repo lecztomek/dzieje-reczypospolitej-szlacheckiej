@@ -208,7 +208,7 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód','Sejm','Akcje','Starcia', "Wzmacnanie", 'Wyprawy','Najazdy'];
+const PHASES = ['Wydarzenia','Dochód','Aukcje', 'Sejm','Akcje','Starcia', 'Wzmacnanie', 'Wyprawy','Najazdy'];
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -236,7 +236,7 @@ const phaseActionsEl = document.getElementById('phaseActions');
 const PHASE_CMD_BUTTONS = {
   // 1. Wydarzenia
   1: [
-    { label: 'gstart 6 3',  cmd: 'gstart 6 3' },
+    { label: 'gstart 5 6',  cmd: 'gstart 6 3' },
     { label: 'gracz Tomek red',  cmd: 'gracz Tomek red' },    
     { label: 'gracz Magda yellow',  cmd: 'gracz Magda yellow' },    
     { label: 'gracz Mariola blue',  cmd: 'gracz Mariola blue' },     
@@ -248,16 +248,22 @@ const PHASE_CMD_BUTTONS = {
     { label: 'gincome', cmd: 'gincome' },
     { label: 'gnext',   cmd: 'gnext' },
   ],
-  // 3. Sejm
+  // 3. Aukcje
   3: [
-    { label: 'gbid',     cmd: 'gbid ' },    // gbid <kto> <kwota>
+    { label: 'gbid Tomek',     cmd: 'gbid Tomek ' },    // gbid <kto> <kwota>
+    { label: 'gbid Magda',     cmd: 'gbid Magda ' },    // gbid <kto> <kwota>
+    { label: 'gbid Mariola',     cmd: 'gbid Mariola ' },    // gbid <kto> <kwota>
     { label: 'gauction', cmd: 'gauction' },
+    { label: 'gnext',    cmd: 'gnext' },
+  ],
+  // 4. Sejm
+  4: [
     { label: 'glaw',     cmd: 'glaw ' },    // glaw <1-6>
     { label: 'gchoice',  cmd: 'gchoice ' }, // gchoice A|B
     { label: 'gnext',    cmd: 'gnext' },
   ],
-  // 4. Akcje
-  4: [
+  // 5. Akcje
+  5: [
     { label: 'gact administracja', cmd: 'gact administracja' },
     { label: 'gact wplyw',         cmd: 'gact wplyw ' },        // gact wplyw <prow>
     { label: 'gact posiadlosc',    cmd: 'gact posiadlosc ' },   // gact posiadlosc <prow>
@@ -266,23 +272,23 @@ const PHASE_CMD_BUTTONS = {
     { label: 'gact zamoznosc',     cmd: 'gact zamoznosc ' },    // gact zamoznosc <prow>
     { label: 'gnext',              cmd: 'gnext' },
   ],
-  // 5. Starcia
-  5: [
+  // 6. Starcia
+  6: [
     { label: 'gattack', cmd: 'gattack ' },  // gattack <wróg> <z_prowincji> <r1> ...
     { label: 'gnext',   cmd: 'gnext' },
   ],
-  // 6. Wzmacanie
-  6: [
+  // 7. Wzmacanie
+  7: [
     { label: 'greinf', cmd: 'greinf ' }, // greinf <N S E>
     { label: 'gnext',  cmd: 'gnext' },
   ],
-  // 7. Najazdy
-  7: [
+  // 8. Najazdy
+  8: [
     { label: 'gattack', cmd: 'gattack ' },  // gattack <wróg> <z_prowincji> <r1> ...
     { label: 'gnext',  cmd: 'gnext' },
   ],
-  // 8. Spustoszenia
-  8: [
+  // 9. Spustoszenia
+  9: [
     { label: 'gdevast', cmd: 'gdevast ' }, // gdevast <N S E>
     { label: 'gnext',   cmd: 'gnext' },
   ],
