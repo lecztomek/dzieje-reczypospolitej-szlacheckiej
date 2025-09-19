@@ -61,11 +61,6 @@ function updateRoundUI(){
   if (maxEl) maxEl.textContent = String(roundMax);
 }
 
-function uiFindPlayerByName(name){
-  const k = norm(name);
-  return PLAYERS.find(p => norm(p.name) === k) || null;
-}
-
 function updatePlayersUIFromState(s){
   const players = (s.settings?.players || []);
   players.forEach(sp => {
@@ -140,6 +135,12 @@ const diac = { "ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","�
 function norm(s){
   return (s||"").toString().trim().toLowerCase().replace(/[ąćęłńóśźż]/g, m => diac[m] || m);
 }
+
+function uiFindPlayerByName(name){
+  const k = norm(name);
+  return PLAYERS.find(p => norm(p.name) === k) || null;
+}
+
 function getRegionByName(name){
   const key = norm(name);
   for(const r of Object.values(REGIONS)){
