@@ -504,6 +504,7 @@ function syncUIFromGame(){
 setEnemyCount('szwecja', Math.max(0, Math.min(6, s.raid_tracks.N)));
 setEnemyCount('moskwa',  Math.max(0, Math.min(6, s.raid_tracks.E)));
 setEnemyCount('tatarzy', Math.max(0, Math.min(6, s.raid_tracks.S)));
+}
 
 // ===================== Parser poleceń =====================
 function tokenize(input){
