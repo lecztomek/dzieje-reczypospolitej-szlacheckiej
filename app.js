@@ -61,6 +61,11 @@ function updateRoundUI(){
   if (maxEl) maxEl.textContent = String(roundMax);
 }
 
+function uiFindPlayerByName(name){
+  const k = norm(name);
+  return PLAYERS.find(p => norm(p.name) === k) || null;
+}
+
 function updatePlayersUIFromState(s){
   const players = (s.settings?.players || []);
   players.forEach(sp => {
@@ -443,10 +448,12 @@ function syncUIFromGame(){
   updateRoundUI();
   updatePlayersUIFromState(s);
 
-  if (s.marshal){
-    const ui = PLAYERS.find(x => x.name === s.marshal);
+  const midx = s.round_status?.marshal_index ?? -1;
+  if (midx >= 0 && s.settings?.players?.[midx]) {
+    const mname = s.settings.players[midx].name;
+    const ui = uiFindPlayerByName(mname);
     if (ui) setMarshal(ui.color);
-    else clearMarshal();
+    else clearMarshal(); // nie znaleziono odpowiednika w UI
   } else {
     clearMarshal();
   }
