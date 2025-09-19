@@ -401,6 +401,45 @@ function drawLabel(x,y,textStr){
   t.textContent = textStr; overlay.appendChild(t); return id;
 }
 
+// === Obramowanie prowincji zależne od kontroli ===
+function setProvinceControlBorder(regionKey, color){
+  const el = REGIONS[regionKey]?.el; if(!el) return false;
+  el.style.stroke = color;
+  el.style.strokeWidth = '5';
+  el.style.filter = 'url(#softGlow)'; // delikatna poświata, opcjonalnie
+  el.setAttribute('data-controlled','1');
+  return true;
+}
+function clearProvinceControlBorder(regionKey){
+  const el = REGIONS[regionKey]?.el; if(!el) return false;
+  el.style.stroke = 'var(--map-stroke, #475569)'; // domyślny kontur mapy
+  el.style.strokeWidth = '1.5';
+  el.style.filter = '';
+  el.removeAttribute('data-controlled');
+  return true;
+}
+
+// liczymy kontrolującego tak samo jak w silniku:
+// - max szlachty > 0 → jeśli jeden lider, on wygrywa
+// - przy remisie: jeśli tylko część liderów ma wojska > 0 i jest dokładnie jeden taki, on wygrywa
+// - inaczej: brak jednoznacznej kontroli
+function controllerIndexFromState(s, provinceIdStr){
+  const nobles = (s.nobles?.[provinceIdStr]) || [];
+  const troops = (s.troops?.[provinceIdStr]) || [];
+  if (!Array.isArray(nobles) || nobles.length === 0) return null;
+
+  const maxN = Math.max(...nobles);
+  if (maxN <= 0) return null;
+
+  const leaders = nobles.map((v,i)=>[v,i]).filter(([v])=>v===maxN).map(([,i])=>i);
+  if (leaders.length === 1) return leaders[0];
+
+  const withTroops = leaders.filter(i => (troops[i]||0) > 0);
+  if (withTroops.length === 1) return withTroops[0];
+
+  return null;
+}
+
 // ===== PANEL: Marszałek + Szlachcice (na potrzeby sync UI) =====
 const NOBLE_SLOTS = 4;
 function humanize(key){ return key.charAt(0).toUpperCase() + key.slice(1); }
@@ -617,10 +656,12 @@ function syncUIFromGame(){
     clearMarshal();
   }
 
-  // PROWINCJE: zamożność + fort + posiadłości
-  for (const [_, prov] of Object.entries(s.provinces)){
-    const key = provKeyFromId(prov.id);
+  // PROWINCJE: zamożność + fort + posiadłości + OBRAMOWANIE KONTROLI
+  for (const [pid, prov] of Object.entries(s.provinces)){
+    const key = provKeyFromId(prov.id); // np. "prusy"
     if (!key) continue;
+
+    // istniejący kod:
     setRegionWealth(key, prov.wealth);
     if (prov.has_fort) setFort(key, '#eab308'); else clearFort(key);
     resetBoxes(key);
@@ -631,6 +672,17 @@ function syncUIFromGame(){
       const color = uiPlayer?.color || '#eab308';
       setBox(key, i+1, color);
     });
+
+    // NOWE: obramowanie kontroli
+    const ctrlIdx = controllerIndexFromState(s, pid); // UWAGA: tu używamy klucza "pid" = ID z silnika ("Prusy", "Litwa", ...)
+    if (ctrlIdx != null) {
+      const ctrlName = s.settings.players[ctrlIdx]?.name;
+      const ui = PLAYERS.find(p => p.name === ctrlName);
+      const color = ui?.color || '#f59e0b';
+      setProvinceControlBorder(key, color);
+    } else {
+      clearProvinceControlBorder(key);
+    }
   }
 
   // ARMIE (top4)
