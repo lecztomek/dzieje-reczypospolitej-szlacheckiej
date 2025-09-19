@@ -166,6 +166,14 @@ function getRegionByName(name){
   }
   return null;
 }
+function logEngine(out){
+  if (!out) return;
+  if (Array.isArray(out)) {
+    out.forEach(line => { if (line) ok(line); });
+  } else if (typeof out === 'string') {
+    ok(out);
+  }
+}
 function bboxCenter(el){ const b = el.getBBox(); return { x: b.x + b.width/2, y: b.y + b.height/2 }; }
 function print(msg, cls="entry"){ const div = document.createElement('div'); div.className = `entry ${cls}`; div.textContent = msg; logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight; }
 function ok(msg){ print(msg, "entry ok"); }
@@ -600,17 +608,31 @@ function execCommand(raw){
   if (cmd === 'gphase'){ const cur = game.round.currentPhaseId(); ok(`Faza silnika: ${cur}`); return; }
 
   // gnext — przejście do kolejnej fazy
-  if (cmd === 'gnext'){ game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${game.round.currentPhaseId()}`); syncUIFromGame(); return; }
+  if (cmd === 'gnext'){
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+    return;
+  }
 
-  // gevent <1-25>
   if (cmd === 'gevent'){
     const ev = parseInt(tokens[1],10);
     if (!Number.isFinite(ev) || ev < 1 || ev > 25) return err('Użycie: gevent <1-25>.');
-    game.events.apply(ev); ok(`Wydarzenie #${ev} zastosowane.`); syncUIFromGame(); return;
+    const lines = game.events.apply(ev);
+    ok(`Wydarzenie #${ev} zastosowane.`);
+    logEngine(lines);
+    syncUIFromGame();
+    return;
   }
 
   // gincome
-  if (cmd === 'gincome'){ game.income.collect(); ok('Zebrano dochód.'); syncUIFromGame(); return; }
+  if (cmd === 'gincome'){
+    const lines = game.income.collect();
+    ok('Zebrano dochód.');
+    logEngine(lines);
+    syncUIFromGame();
+    return;
+  }
 
   // gbid <imię|indeks> <kwota>
   if (cmd === 'gbid'){
@@ -619,57 +641,92 @@ function execCommand(raw){
     const asNum = parseInt(who,10); let pidx;
     if (!Number.isNaN(asNum)) pidx = asNum-1;
     else { const i = PLAYERS.findIndex(p => p.name === who); if (i < 0) return err(`Nie ma gracza "${who}".`); pidx = i; }
-    game.auction.setBid(pidx, bid); ok(`Licytacja: ${who} -> ${bid}.`); return;
+    const msg = game.auction.setBid(pidx, bid);
+    logEngine(msg || `Licytacja: ${who} -> ${bid}.`);
+    return;
   }
 
   // gauction
-  if (cmd === 'gauction'){ game.auction.resolve(); ok('Rozstrzygnięto licytację.'); syncUIFromGame(); return; }
+  if (cmd === 'gauction'){
+    const lines = game.auction.resolve();
+    ok('Rozstrzygnięto licytację.');
+    logEngine(lines);
+    syncUIFromGame();
+    return;
+  }
+
 
   // glaw <1-6>
   if (cmd === 'glaw'){
     const n = parseInt(tokens[1],10);
     if (!Number.isFinite(n) || n < 1 || n > 6) return err('Użycie: glaw <1-6>.');
-    game.sejm.setLaw(n); ok(`Sejm: wybrano ustawę #${n}.`); return;
+    const lines = game.sejm.setLaw(n);
+    logEngine(lines);
+    return;
   }
 
   // gchoice <A|B>
   if (cmd === 'gchoice'){
     const v = (tokens[1]||'').toUpperCase();
     if (!['A','B'].includes(v)) return err('Użycie: gchoice <A|B>.');
-    game.sejm.chooseVariant(v); ok(`Sejm: wariant ${v}.`); syncUIFromGame(); return;
+    const lines = game.sejm.chooseVariant(v);
+    ok(`Sejm: wariant ${v}.`);
+    logEngine(lines);
+    syncUIFromGame();
+    return;
   }
 
   // gact …
   if (cmd === 'gact'){
     if (curPlayerIdx < 0) return err('Najpierw ustaw aktywnego gracza: turn <imię|indeks>.');
     const sub = norm(tokens[1]||''); const pidx = curPlayerIdx;
-
-    if (sub === 'administracja'){ game.actions.administracja(pidx); ok('Administracja OK.'); syncUIFromGame(); return; }
-
+  
+    if (sub === 'administracja'){
+      const msg = game.actions.administracja(pidx);
+      logEngine(msg);
+      syncUIFromGame();
+      return;
+    }
+  
     if (['wplyw','wpływ','posiadlosc','posiadłość','rekrutacja','zamoznosc','zamożność'].includes(sub)){
       const prov = toProvEnum(tokens[2]); if (!prov) return err('Podaj prowincję.');
-      if (sub.startsWith('wpl'))       game.actions.wplyw(pidx, prov);
-      else if (sub.startsWith('pos'))  game.actions.posiadlosc(pidx, prov);
-      else if (sub.startsWith('rek'))  game.actions.rekrutacja(pidx, prov);
-      else                             game.actions.zamoznosc(pidx, prov);
-      ok(`Akcja ${sub} ${tokens[2]} OK.`); syncUIFromGame(); return;
+      if (sub.startsWith('wpl')){
+        const m = game.actions.wplyw(pidx, prov); logEngine(m);
+      } else if (sub.startsWith('pos')){
+        const m = game.actions.posiadlosc(pidx, prov); logEngine(m);
+      } else if (sub.startsWith('rek')){
+        const m = game.actions.rekrutacja(pidx, prov); logEngine(m);
+      } else {
+        const m = game.actions.zamoznosc(pidx, prov); logEngine(m);
+      }
+      syncUIFromGame();
+      return;
     }
-
+  
     if (sub === 'marsz'){
       const provA = toProvEnum(tokens[2]); const provB = toProvEnum(tokens[3]);
       if (!provA || !provB) return err('Użycie: gact marsz <z> <do>.');
-      game.actions.marsz(pidx, provA, provB); ok(`Marsz: ${tokens[2]} -> ${tokens[3]} OK.`); syncUIFromGame(); return;
+      const msg = game.actions.marsz(pidx, provA, provB);
+      logEngine(msg);
+      syncUIFromGame();
+      return;
     }
-
+  
     return err('Użycie: gact <administracja|wplyw <prow>|posiadlosc <prow>|rekrutacja <prow>|marsz <z> <do>|zamoznosc <prow>>');
   }
+
 
   // greinf <N> <S> <E>
   if (cmd === 'greinf'){
     const N = parseInt(tokens[1],10), S = parseInt(tokens[2],10), E = parseInt(tokens[3],10);
     if (![N,S,E].every(x => Number.isFinite(x) && x>=1 && x<=6)) return err('Użycie: greinf <N 1-6> <S 1-6> <E 1-6>.');
-    game.reinforce.reinforce({ N, S, E }); ok('Wzmocnienia wrogów rozpatrzone.'); syncUIFromGame(); return;
+    const lines = game.reinforce.reinforce({ N, S, E });
+    ok('Wzmocnienia wrogów rozpatrzone.');
+    logEngine(lines);
+    syncUIFromGame();
+    return;
   }
+
 
   // gattack <wróg> <z_prowincji> <rzuty...>
   if (cmd === 'gattack'){
@@ -677,15 +734,23 @@ function execCommand(raw){
     const enemy = toEnemyEnum(tokens[1]); const src = toProvEnum(tokens[2]);
     const rolls = tokens.slice(3).map(x => parseInt(x,10)).filter(Number.isFinite);
     if (!enemy || !src || rolls.length === 0) return err('Użycie: gattack <szwecja|moskwa|tatarzy> <prowincja> <r1> [r2] ...');
-    game.attacks.attack({ playerIndex: curPlayerIdx, enemy, from: src, rolls });
-    ok('Atak rozpatrzony.'); syncUIFromGame(); return;
+    const lines = game.attacks.attack({ playerIndex: curPlayerIdx, enemy, from: src, rolls });
+    ok('Atak rozpatrzony.');
+    logEngine(lines);
+    syncUIFromGame();
+    return;
   }
+
 
   // gdevast <N> <S> <E>
   if (cmd === 'gdevast'){
     const N = parseInt(tokens[1],10), S = parseInt(tokens[2],10), E = parseInt(tokens[3],10);
     if (![N,S,E].every(x => Number.isFinite(x) && x>=1 && x<=6)) return err('Użycie: gdevast <N 1-6> <S 1-6> <E 1-6>.');
-    game.devastation.resolve({ N, S, E }); ok('Spustoszenia rozpatrzone.'); syncUIFromGame(); return;
+    const lines = game.devastation.resolve({ N, S, E });
+    ok('Spustoszenia rozpatrzone.');
+    logEngine(lines);
+    syncUIFromGame();
+    return;
   }
 
   // gstate — log do konsoli
