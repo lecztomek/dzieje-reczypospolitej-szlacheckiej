@@ -167,13 +167,14 @@ function getRegionByName(name){
   return null;
 }
 function logEngine(out){
-  if (!out) return;
-  if (Array.isArray(out)) {
-    out.forEach(line => { if (line) ok(line); });
-  } else if (typeof out === 'string') {
-    ok(out);
+  if (!out || (Array.isArray(out) && out.length === 0)) { 
+    ok('(brak szczegółów z silnika)'); 
+    return; 
   }
+  if (Array.isArray(out)) out.forEach(line => { if (line) ok(line); });
+  else if (typeof out === 'string') ok(out);
 }
+
 function bboxCenter(el){ const b = el.getBBox(); return { x: b.x + b.width/2, y: b.y + b.height/2 }; }
 function print(msg, cls="entry"){ const div = document.createElement('div'); div.className = `entry ${cls}`; div.textContent = msg; logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight; }
 function ok(msg){ print(msg, "entry ok"); }
