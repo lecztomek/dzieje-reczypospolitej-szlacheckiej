@@ -42,6 +42,10 @@ const noblesBody = document.getElementById('noblesBody');
 const marshalBox = document.getElementById('marshalBox');
 const marshalResetBtn = document.getElementById('marshalResetBtn');
 const playersBody = document.getElementById('playersBody');
+const turnSwatch = document.getElementById('turnSwatch');
+const turnNameEl = document.getElementById('turnName');
+
+let curPlayerIdx = -1; // -1 = brak aktywnego gracza
 
 const history = [];
 let histIdx = -1;
@@ -56,6 +60,34 @@ function updateRoundUI(){
   if (curEl) curEl.textContent = roundCur;
   if (maxEl) maxEl.textContent = roundMax;
 }
+
+function updateTurnUI(){
+  if (PLAYERS.length === 0 || curPlayerIdx < 0 || curPlayerIdx >= PLAYERS.length){
+    if (turnSwatch){ turnSwatch.style.background = 'none'; turnSwatch.style.borderColor = '#475569'; }
+    if (turnNameEl){ turnNameEl.textContent = '–'; }
+    return;
+  }
+  const p = PLAYERS[curPlayerIdx];
+  if (turnSwatch){ turnSwatch.style.background = p.color; turnSwatch.style.borderColor = p.color; }
+  if (turnNameEl){ turnNameEl.textContent = p.name; }
+}
+
+function setTurnByIndex(idx){
+  if (PLAYERS.length === 0) { curPlayerIdx = -1; updateTurnUI(); return false; }
+  const n = Math.max(0, Math.min(PLAYERS.length - 1, idx));
+  curPlayerIdx = n;
+  updateTurnUI();
+  ok(`Tura gracza: ${PLAYERS[curPlayerIdx].name}`);
+  return true;
+}
+
+function setTurnByName(name){
+  const p = findPlayer(name);
+  if (!p) { err(`Nie ma gracza "${name}".`); return false; }
+  const i = PLAYERS.findIndex(x => x.key === p.key);
+  return setTurnByIndex(i);
+}
+
 
 // Podłącz elementy regionów
 Object.keys(REGIONS).forEach(k => {
@@ -946,6 +978,21 @@ function execCommand(raw){
     phasePrev(); return;
   }
 
+    if (cmd === 'turn' || cmd === 'tura'){
+      const who = tokens[1];
+      if (!who) return err('Użycie: turn <imię|indeks>');
+      const asNum = parseInt(who, 10);
+      if (!Number.isNaN(asNum)) return setTurnByIndex(asNum - 1);
+      return setTurnByName(who);
+    }
+
+    // turnclear — wyczyść aktywnego gracza (np. między akcjami)
+    if (cmd === 'turnclear' || cmd === 'tclear'){
+      curPlayerIdx = -1;
+      updateTurnUI();
+      return ok('Brak aktywnego gracza.');
+    }
+
   err('Nieznane polecenie. Wpisz "pomoc".');
 }
 
@@ -978,6 +1025,8 @@ function showHelp(){
   print(`• faza <1-${PHASES.length}> — ustaw aktualną fazę gry`);
   print('• fnext — przejdź do następnej fazy');
   print('• fprev — wróć do poprzedniej fazy');
+  print('• turn <imię|indeks> — ustaw aktywnego gracza (indeks od 1)');
+  print('• turnclear — wyczyść aktywnego gracza');
 }
 
 // ===================== Obsługa konsoli =====================
@@ -1008,5 +1057,6 @@ createEnemyTracks();
 buildNoblesTable();
 buildPhaseBar();
 renderPhaseButtons();
+updateTurnUI();
 ok('Witaj! Wpisz "pomoc", aby zobaczyć komendy.');
 
