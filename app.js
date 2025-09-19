@@ -497,14 +497,6 @@ function syncUIFromGame(){
   setEnemyCount('moskwa',  Math.max(0, Math.min(6, s.raid_tracks.E.value)));
   setEnemyCount('tatarzy', Math.max(0, Math.min(6, s.raid_tracks.S.value)));
 
-  // Marszałek (majority)
-  const withMaj = (s.settings.players || []).find(p => p.majority);
-  if (withMaj){
-    const uiPlayer = PLAYERS.find(x => x.name === withMaj.name);
-    if (uiPlayer) setMarshal(uiPlayer.color); else clearMarshal();
-  } else { clearMarshal(); }
-}
-
 // ===================== Parser poleceń =====================
 function tokenize(input){
   const m = input.match(/"[^"]*"|\S+/g) || [];
