@@ -922,7 +922,7 @@ document.querySelectorAll('.region').forEach(path => {
   const key = path.getAttribute('data-key'); const name = key[0].toUpperCase() + key.slice(1);
   path.addEventListener('click', () => {
     document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
-    path.classList.add('selected'); inputEl.value = key + ' '; inputEl.focus();
+    path.classList.add('selected'); inputEl.value = inputEl.value + key + ' '; inputEl.focus();
     setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0);
     const pickedRegionEl = document.getElementById('pickedRegion'); if (pickedRegionEl) pickedRegionEl.textContent = key;
   });
