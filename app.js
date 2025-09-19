@@ -17,6 +17,27 @@ const REGIONS = {
   ukraina: { key: "ukraina", el: null, aliases: ["ukraina"] },
 };
 
+// === [DODAJ] Odwrotna mapa z enumów do kluczy UI ===
+const REV_PROV_MAP = {
+  [ProvinceID.PRUSY]: 'prusy',
+  [ProvinceID.LITWA]: 'litwa',
+  [ProvinceID.UKRAINA]: 'ukraina',
+  [ProvinceID.WIELKOPOLSKA]: 'wielkopolska',
+  [ProvinceID.MALOPOLSKA]: 'malopolska',
+};
+
+// === [DODAJ] Bezpieczna normalizacja identyfikatora prowincji ===
+function provKeyFromId(id){
+  // jeżeli string, przyjmij np. "LITWA" / "litwa"
+  if (typeof id === 'string') return norm(id);
+  // jeżeli number/enum, sięgnij do odwrotnej mapy
+  if (typeof id === 'number') return REV_PROV_MAP[id] || null;
+  // fallback (np. obiekt z polem id)
+  if (id && typeof id.id !== 'undefined') return provKeyFromId(id.id);
+  return null;
+}
+
+
 // ======= Skala zamożności prowincji (0..3) =======
 const REGION_WEALTH_COLORS = ['#d1d5db','#a3e635','#4ade80','#16a34a'];
 function wealthColor(level){ const n = Math.max(0, Math.min(3, Number(level))); return REGION_WEALTH_COLORS[n]; }
@@ -511,7 +532,8 @@ function syncUIFromGame(){
 
   // PROWINCJE: zamożność + fort + posiadłości
   for (const [_, prov] of Object.entries(s.provinces)){
-    const key = norm(prov.id.toLowerCase());
+    const key = provKeyFromId(prov.id);
+    if (!key) continue;
     setRegionWealth(key, prov.wealth);
     if (prov.has_fort) setFort(key, '#eab308'); else clearFort(key);
     resetBoxes(key);
@@ -526,7 +548,9 @@ function syncUIFromGame(){
 
   // ARMIE (top4)
   for (const [pid, arr] of Object.entries(s.troops || {})) {
-    const key = norm(pid.toLowerCase()); resetArmies(key);
+    const key = provKeyFromId(pid);
+    if (!key) continue;
+    resetArmies(key);
     const tuples = arr.map((units, idx) => ({ units, idx }))
                       .filter(t => t.units > 0)
                       .sort((a,b) => b.units - a.units)
@@ -541,7 +565,9 @@ function syncUIFromGame(){
 
   // SZLACHCICE (top4)
   for (const [pid, arr] of Object.entries(s.nobles || {})) {
-    const key = norm(pid.toLowerCase()); resetNobles(key);
+    const key = provKeyFromId(pid);
+    if (!key) continue;
+    resetNobles(key);
     const tuples = arr.map((cnt, idx) => ({ cnt, idx }))
                       .filter(t => t.cnt > 0)
                       .sort((a,b) => b.cnt - a.cnt)
