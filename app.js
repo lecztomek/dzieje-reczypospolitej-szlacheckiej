@@ -77,6 +77,30 @@ function updatePlayersUIFromState(s){
   });
 }
 
+function applyCurrentTurnFromState(s){
+  // faza z silnika (fallback do game.round.currentPhaseId())
+  const phase = s.current_phase || game.round?.currentPhaseId?.();
+
+  // domyślnie brak aktywnego
+  let idx = -1;
+
+  // w fazie akcji — aktywny gracz
+  if (phase === 'actions' && Number.isInteger(s.active_player_index)) {
+    idx = s.active_player_index;
+  }
+
+  // w fazie ataków — aktywny atakujący
+  if (phase === 'attacks' && Number.isInteger(s.active_attacker_index)) {
+    idx = s.active_attacker_index;
+  }
+
+  // ustaw w UI (bez spamowania loga)
+  if (idx !== curPlayerIdx) {
+    curPlayerIdx = idx;
+    updateTurnUI(); // to podmieni nazwę oraz kolor w polu „Tura”
+  }
+}
+
 function updateTurnUI(){
   if (PLAYERS.length === 0 || curPlayerIdx < 0 || curPlayerIdx >= PLAYERS.length){
     if (turnSwatch){ turnSwatch.style.background = 'none'; turnSwatch.style.borderColor = '#475569'; }
@@ -448,6 +472,7 @@ function syncUIFromGame(){
   roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; 
   updateRoundUI();
   updatePlayersUIFromState(s);
+  applyCurrentTurnFromState(s);
 
   const midx = s.round_status?.marshal_index ?? -1;
   if (midx >= 0 && s.settings?.players?.[midx]) {
