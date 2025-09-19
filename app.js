@@ -236,6 +236,10 @@ const phaseActionsEl = document.getElementById('phaseActions');
 const PHASE_CMD_BUTTONS = {
   // 1. Wydarzenia
   1: [
+    { label: 'gstart 6 3',  cmd: 'gstart 6 3' },
+    { label: 'gracz Tomek red',  cmd: 'gracz Tomek red' },    
+    { label: 'gracz Magda yellow',  cmd: 'gracz Magda yellow' },    
+    { label: 'gracz Mariola blue',  cmd: 'gracz Mariola blue' },     
     { label: 'gevent', cmd: 'gevent ' }, // np. gevent 5
     { label: 'gnext',  cmd: 'gnext' },
   ],
