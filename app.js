@@ -78,26 +78,20 @@ function updatePlayersUIFromState(s){
 }
 
 function applyCurrentTurnFromState(s){
-  // faza z silnika (fallback do game.round.currentPhaseId())
   const phase = s.current_phase || game.round?.currentPhaseId?.();
-
-  // domyślnie brak aktywnego
   let idx = -1;
 
-  // w fazie akcji — aktywny gracz
   if (phase === 'actions' && Number.isInteger(s.active_player_index)) {
     idx = s.active_player_index;
-  }
-
-  // w fazie ataków — aktywny atakujący
-  if (phase === 'attacks' && Number.isInteger(s.active_attacker_index)) {
+  } else if (phase === 'attacks' && Number.isInteger(s.active_attacker_index)) {
     idx = s.active_attacker_index;
+  } else {
+    idx = -1; // w innych fazach czyścimy
   }
 
-  // ustaw w UI (bez spamowania loga)
   if (idx !== curPlayerIdx) {
     curPlayerIdx = idx;
-    updateTurnUI(); // to podmieni nazwę oraz kolor w polu „Tura”
+    updateTurnUI();
   }
 }
 
