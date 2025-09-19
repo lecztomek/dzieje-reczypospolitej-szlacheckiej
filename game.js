@@ -82,6 +82,7 @@ class GameContext {
     this.round_status = new RoundStatus(3, 0);
     this.last_output = ""; // optional log aggregator
     this.turn = null;
+    this.attackTurn = null; 
     
     this.provinces = {
       [ProvinceID.PRUSY]: new Province(ProvinceID.PRUSY),
@@ -607,7 +608,65 @@ class AttackInvadersAPI {
   constructor(ctx) { this.ctx = ctx; }
   // Perform one attack action with an array of rolls (processed sequentially, stops early if track hits 0).
   // { playerIndex, enemy: RaidTrackID, from: ProvinceID, rolls: number[] }
+
+  #ensurePhase() {
+    if (!this.ctx.attackTurn) throw new Error("To nie jest faza ataków.");
+    if (this.ctx.attackTurn.done) throw new Error("Faza ataków już zakończona.");
+  }
+  // NEW:
+  #requireActive(playerIndex) {
+    this.#ensurePhase();
+    const t = this.ctx.attackTurn;
+    const expected = t.order[t.idx];
+    if (playerIndex !== expected) {
+      const want = this.ctx.settings.players[expected]?.name ?? `#${expected}`;
+      const you  = this.ctx.settings.players[playerIndex]?.name ?? `#${playerIndex}`;
+      throw new Error(`Teraz atakuje ${want}. (Akcja ${you} zablokowana.)`);
+    }
+  }
+  // NEW:
+  #anyEligibleAttacksLeft() {
+    const { raid_tracks, troops } = this.ctx;
+    // ktoś ma wojsko w zasięgu i istnieje cel (tor > 0)
+    const hasTarget = raid_tracks.N.value > 0 || raid_tracks.S.value > 0 || raid_tracks.E.value > 0;
+    if (!hasTarget) return false;
+
+    const pcount = this.ctx.settings.players.length;
+    const sources = {
+      N: [ProvinceID.PRUSY, ProvinceID.LITWA],
+      E: [ProvinceID.LITWA, ProvinceID.UKRAINA],
+      S: [ProvinceID.MALOPOLSKA, ProvinceID.UKRAINA],
+    };
+    for (let pidx = 0; pidx < pcount; pidx++) {
+      if (raid_tracks.N.value > 0 && sources.N.some(pid => (troops.per_province[pid]?.[pidx] | 0) > 0)) return true;
+      if (raid_tracks.E.value > 0 && sources.E.some(pid => (troops.per_province[pid]?.[pidx] | 0) > 0)) return true;
+      if (raid_tracks.S.value > 0 && sources.S.some(pid => (troops.per_province[pid]?.[pidx] | 0) > 0)) return true;
+    }
+    return false;
+  }
+  // NEW:
+  #advance(turnWasAttack) {
+    const t = this.ctx.attackTurn;
+    // po udanym "attack" nie oznaczamy passa — tylko zmieniamy indeks
+    // po "pass" oznaczamy passed[current]=true
+    const n = t.order.length;
+
+    // koniec, jeśli wszyscy passed ALBO nie ma już sensownych ataków
+    const allPassed = t.passed.every(Boolean);
+    if (allPassed || !this.#anyEligibleAttacksLeft()) {
+      t.done = true; return;
+    }
+
+    // znajdź następnego, który nie spassował
+    for (let step = 1; step <= n; step++) {
+      const nextIdx = (t.idx + step) % n;
+      const pidx = t.order[nextIdx];
+      if (!t.passed[pidx]) { t.idx = nextIdx; break; }
+    }
+  }
+
   attack({ playerIndex, enemy, from, rolls }) {
+    this.#requireActive(playerIndex);
     const c = this.ctx; ensurePerProvinceArrays(c);
     const pidx = Number(playerIndex) | 0; const pl = c.settings.players[pidx];
     const allowed = { [RaidTrackID.N]: new Set([ProvinceID.PRUSY, ProvinceID.LITWA]), [RaidTrackID.E]: new Set([ProvinceID.LITWA, ProvinceID.UKRAINA]), [RaidTrackID.S]: new Set([ProvinceID.MALOPOLSKA, ProvinceID.UKRAINA]) };
@@ -630,7 +689,17 @@ class AttackInvadersAPI {
       else { addRaid(c, enemy, -1); pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1; out.push("6 → sukces: tor -1 i jednostka pozostaje."); }
     }
     out.push(`Po ataku: ${track.id}=${track.value}, ${from}: jednostek=${c.troops.per_province[from][pidx]}`);
+
+    this.#advance(true);
     return out;
+  }
+
+  passTurn(playerIndex) {
+    this.#requireActive(playerIndex);
+    const t = this.ctx.attackTurn;
+    t.passed[playerIndex] = true;
+    this.#advance(false);
+    return `PASS (${this.ctx.settings.players[playerIndex].name})`;
   }
 }
 
@@ -759,7 +828,23 @@ export class ConsoleGame {
     // NEW: gdy wychodzimy z "actions" – wyczyść wskaźniki tury
     if (prev === "actions" && next !== "actions") this.ctx.turn = null;
 
+    if (next === "attacks") this._initAttacksTurn();
+    // NEW: porządki po fazie ataków
+    if (prev === "attacks" && next !== "attacks") this.ctx.attackTurn = null;
+
     return this.currentPhaseId?.() ?? next;
+  }
+
+  _initAttacksTurn() {
+    const pcount = this.ctx.settings.players.length;
+    const start = this.ctx.round_status.marshal_index;
+    const order = Array.from({ length: pcount }, (_, k) => (start + k) % pcount);
+    this.ctx.attackTurn = {
+      order,
+      idx: 0,
+      passed: Array(pcount).fill(false),
+      done: false,
+    };
   }
 
   // NEW: inicjalizacja tury akcji – kolejność od marszałka, każdy ma wykonać 2 akcje
@@ -798,9 +883,15 @@ export class ConsoleGame {
 
   // ------------ Introspection helpers ------------
   getPublicState() { 
-    const activeIdx =
-      (this.round?.currentPhaseId() === "actions" && this.ctx.turn && !this.ctx.turn.done)
+    const phase = this.round?.currentPhaseId() ?? null;
+    const activeActionIdx =
+      (phase === "actions" && this.ctx.turn && !this.ctx.turn.done)
         ? this.ctx.turn.order[this.ctx.turn.idx]
+        : null;
+  
+    const activeAttackIdx =
+      (phase === "attacks" && this.ctx.attackTurn && !this.ctx.attackTurn.done)
+        ? this.ctx.attackTurn.order[this.ctx.attackTurn.idx]
         : null;
 
     return deepClone({
@@ -823,7 +914,11 @@ export class ConsoleGame {
       active_player_index: activeIdx,
       active_player: activeIdx != null ? this.ctx.settings.players[activeIdx].name : null,
       actions_turn: this.ctx.turn ? deepClone(this.ctx.turn) : null,
-    });
+
+      active_attacker_index: activeAttackIdx,
+      active_attacker: activeAttackIdx != null ? this.ctx.settings.players[activeAttackIdx].name : null,
+      attacks_turn: this.ctx.attackTurn ? deepClone(this.ctx.attackTurn) : null,
+      });
   }
 }
 
