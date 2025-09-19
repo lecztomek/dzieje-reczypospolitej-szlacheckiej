@@ -446,6 +446,27 @@ function setEnemyCount(which, n, color = ENEMY_DEFAULT_COLOR){
   return true;
 }
 
+const ENGINE_TO_UI_PHASE = {
+  events: 1,
+  income: 2,
+  auction: 3,
+  sejm: 3,
+  actions: 4,
+  battles: 5,
+  attacks: 6,
+  reinforcements: 7,
+  devastation: 7, // nie mamy osobnej pozycji w UI — podpinamy pod „Najazdy”
+};
+
+function applyPhaseFromEngineState(s){
+  const id = s.current_phase || game.round?.currentPhaseId?.();
+  const idx = ENGINE_TO_UI_PHASE[id];
+  if (Number.isInteger(idx) && idx !== phaseCur){
+    phaseCur = idx;
+    updatePhaseUI();
+  }
+}
+
 // ===================== MAPOWANIE enumów silnika =====================
 const PROV_MAP = {
   prusy: ProvinceID.PRUSY,
@@ -467,6 +488,7 @@ function syncUIFromGame(){
   updateRoundUI();
   updatePlayersUIFromState(s);
   applyCurrentTurnFromState(s);
+  applyPhaseFromEngineState(s);
 
   const midx = s.round_status?.marshal_index ?? -1;
   if (midx >= 0 && s.settings?.players?.[midx]) {
