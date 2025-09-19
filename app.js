@@ -208,7 +208,7 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód','Sejm','Akcje','Starcia','Wyprawy','Najazdy'];
+const PHASES = ['Wydarzenia','Dochód','Sejm','Akcje','Starcia', "Wzmacnanie", 'Wyprawy','Najazdy'];
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -226,6 +226,87 @@ function buildPhaseBar(){
   });
   updatePhaseUI();
 }
+
+// ===== Panel akcji fazy (przyciski, które tylko wpisują komendy) =====
+const phaseActionsEl = document.getElementById('phaseActions');
+
+// Konfiguracja: które przyciski mają być widoczne w danej fazie UI (1..7)
+// Uwaga: przyciski tylko wpisują tekst do konsoli, bez potwierdzania (submit=false).
+// Dla komend wymagających argumentów zostawiamy spację na końcu, by łatwiej dopisać resztę.
+const PHASE_CMD_BUTTONS = {
+  // 1. Wydarzenia
+  1: [
+    { label: 'gevent', cmd: 'gevent ' }, // np. gevent 5
+    { label: 'gnext',  cmd: 'gnext' },
+  ],
+  // 2. Dochód
+  2: [
+    { label: 'gincome', cmd: 'gincome' },
+    { label: 'gnext',   cmd: 'gnext' },
+  ],
+  // 3. Sejm
+  3: [
+    { label: 'gbid',     cmd: 'gbid ' },    // gbid <kto> <kwota>
+    { label: 'gauction', cmd: 'gauction' },
+    { label: 'glaw',     cmd: 'glaw ' },    // glaw <1-6>
+    { label: 'gchoice',  cmd: 'gchoice ' }, // gchoice A|B
+    { label: 'gnext',    cmd: 'gnext' },
+  ],
+  // 4. Akcje
+  4: [
+    { label: 'gact administracja', cmd: 'gact administracja' },
+    { label: 'gact wplyw',         cmd: 'gact wplyw ' },        // gact wplyw <prow>
+    { label: 'gact posiadlosc',    cmd: 'gact posiadlosc ' },   // gact posiadlosc <prow>
+    { label: 'gact rekrutacja',    cmd: 'gact rekrutacja ' },   // gact rekrutacja <prow>
+    { label: 'gact marsz',         cmd: 'gact marsz ' },        // gact marsz <z> <do>
+    { label: 'gact zamoznosc',     cmd: 'gact zamoznosc ' },    // gact zamoznosc <prow>
+    { label: 'gnext',              cmd: 'gnext' },
+  ],
+  // 5. Starcia
+  5: [
+    { label: 'gattack', cmd: 'gattack ' },  // gattack <wróg> <z_prowincji> <r1> ...
+    { label: 'gnext',   cmd: 'gnext' },
+  ],
+  // 6. Wzmacanie
+  6: [
+    { label: 'greinf', cmd: 'greinf ' }, // greinf <N S E>
+    { label: 'gnext',  cmd: 'gnext' },
+  ],
+  // 7. Najazdy
+  7: [
+    { label: 'gattack', cmd: 'gattack ' },  // gattack <wróg> <z_prowincji> <r1> ...
+    { label: 'gnext',  cmd: 'gnext' },
+  ],
+  // 8. Spustoszenia
+  8: [
+    { label: 'gdevast', cmd: 'gdevast ' }, // gdevast <N S E>
+    { label: 'gnext',   cmd: 'gnext' },
+  ],
+};
+
+// Renderer: tworzy przyciski dla bieżącej fazy (phaseCur)
+function renderPhaseActions() {
+  if (!phaseActionsEl) return;
+  phaseActionsEl.innerHTML = '';
+  const list = PHASE_CMD_BUTTONS[phaseCur] || [];
+  list.forEach(({ label, cmd }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'phase-action';
+    btn.textContent = label;
+    btn.title = `Wpisz: ${cmd}`;
+    btn.addEventListener('click', () => pushToConsole(cmd, false)); // bez submitu
+    phaseActionsEl.appendChild(btn);
+  });
+}
+
+// Podpinamy do cyklu UI: po zmianie fazy odśwież panel
+const _origUpdatePhaseUI = updatePhaseUI;
+updatePhaseUI = function(){
+  _origUpdatePhaseUI.call(this);
+  renderPhaseActions();
+};
+
 function updatePhaseUI(){
   const items = phaseBarEl?.querySelectorAll('.phase') || [];
   items.forEach(el => {
@@ -483,9 +564,9 @@ const ENGINE_TO_UI_PHASE = {
   sejm: 3,
   actions: 4,
   battles: 5,
-  attacks: 6,
-  reinforcements: 7,
-  devastation: 7, // nie mamy osobnej pozycji w UI — podpinamy pod „Najazdy”
+  attacks: 7,
+  reinforcements: 6,
+  devastation: 8, // nie mamy osobnej pozycji w UI — podpinamy pod „Najazdy”
 };
 
 function applyPhaseFromEngineState(s){
@@ -866,5 +947,6 @@ createArmySlots();
 createEnemyTracks();
 buildNoblesTable();
 buildPhaseBar();
+renderPhaseActions();
 updateTurnUI();
 ok('Witaj! Dodaj graczy komendą „gracz <imię> <kolor>”, potem „gstart”. „pomoc” pokaże listę komend.');
