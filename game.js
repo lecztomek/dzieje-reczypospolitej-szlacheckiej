@@ -766,7 +766,10 @@ class RoundEngine {
     "events", "income", "auction", "sejm", "actions", "battles", "reinforcements", "attacks", "devastation"
   ]; }
   currentPhaseId() { return this.phases[this.phaseIndex] ?? null; }
-  nextPhase() { this.phaseIndex = Math.min(this.phaseIndex + 1, this.phases.length); return this.currentPhaseId(); }
+  nextPhase() {
+    this.phaseIndex += 1;              // po ostatniej fazie currentPhaseId() zwróci null
+    return this.currentPhaseId();
+  }
   isFinished() { return this.phaseIndex >= this.phases.length; }
 }
 
@@ -820,19 +823,30 @@ export class ConsoleGame {
     // zapamiętaj poprzednią fazę
     const prev = this.round.currentPhaseId();
     // przejdź do kolejnej
-    const next = this.round.nextPhase();
+    let next = this.round.nextPhase();   // może zwrócić null po ostatniej fazie
 
-    // NEW: gdy wchodzimy w "actions" – zainicjalizuj kolejkę 2× po 1 akcji
+    // jeśli skończyliśmy listę faz → kończymy rundę i startujemy nową
+    if (next == null) {
+      const wasLastRound = (this.ctx.round_status.current_round >= this.ctx.round_status.total_rounds);
+      const endRes = this.endRoundOrGame();   // _startRound() wywoła się, jeśli to nie był koniec gry
+      
+      if (wasLastRound) {
+        // koniec gry — nie ma już faz
+        this.ctx.turn = null;
+        this.ctx.attackTurn = null;
+        return "GAME_OVER";
+      }
+      // świeża runda wystartowała; wracamy do pierwszej fazy nowej rundy
+      next = this.round.currentPhaseId();  // powinno być "events"
+    }
+
+    // wejście/wyjście w tryby faz specjalnych dla nowej/aktualnej fazy
     if (next === "actions") this._initActionsTurn();
-
-    // NEW: gdy wychodzimy z "actions" – wyczyść wskaźniki tury
     if (prev === "actions" && next !== "actions") this.ctx.turn = null;
-
     if (next === "attacks") this._initAttacksTurn();
-    // NEW: porządki po fazie ataków
     if (prev === "attacks" && next !== "attacks") this.ctx.attackTurn = null;
 
-    return this.currentPhaseId?.() ?? next;
+    return this.round.currentPhaseId();
   }
 
   _initAttacksTurn() {
