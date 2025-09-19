@@ -525,28 +525,32 @@ function syncUIFromGame(){
   }
 
   // ARMIE (top4)
-  for (const [pid, arr] of Object.entries(s.troops.per_province || {})){
+  for (const [pid, arr] of Object.entries(s.troops || {})) {
     const key = norm(pid.toLowerCase()); resetArmies(key);
     const tuples = arr.map((units, idx) => ({ units, idx }))
                       .filter(t => t.units > 0)
                       .sort((a,b) => b.units - a.units)
                       .slice(0,4);
     tuples.forEach((t, slot) => {
-      const p = s.settings.players[t.idx]; const uiPlayer = PLAYERS.find(x => x.name === p.name);
-      const color = uiPlayer?.color || '#60a5fa'; setArmy(key, slot+1, color, t.units);
+      const p = s.settings.players[t.idx];
+      const uiPlayer = PLAYERS.find(x => x.name === p.name);
+      const color = uiPlayer?.color || '#60a5fa';
+      setArmy(key, slot+1, color, t.units);
     });
   }
 
   // SZLACHCICE (top4)
-  for (const [pid, arr] of Object.entries(s.nobles.per_province || {})){
+  for (const [pid, arr] of Object.entries(s.nobles || {})) {
     const key = norm(pid.toLowerCase()); resetNobles(key);
     const tuples = arr.map((cnt, idx) => ({ cnt, idx }))
                       .filter(t => t.cnt > 0)
                       .sort((a,b) => b.cnt - a.cnt)
                       .slice(0,4);
     tuples.forEach((t, slot) => {
-      const p = s.settings.players[t.idx]; const uiPlayer = PLAYERS.find(x => x.name === p.name);
-      const color = uiPlayer?.color || '#f59e0b'; setNoble(key, slot+1, color, t.cnt);
+      const p = s.settings.players[t.idx];
+      const uiPlayer = PLAYERS.find(x => x.name === p.name);
+      const color = uiPlayer?.color || '#f59e0b';
+      setNoble(key, slot+1, color, t.cnt);
     });
   }
 
