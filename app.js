@@ -61,6 +61,22 @@ function updateRoundUI(){
   if (maxEl) maxEl.textContent = String(roundMax);
 }
 
+function updatePlayersUIFromState(s){
+  const players = (s.settings?.players || []);
+  players.forEach(sp => {
+    const ui = PLAYERS.find(p => p.name === sp.name);
+    if (!ui) return;
+    const row = document.getElementById(`player-${ui.key}`);
+    if (!row) return;
+    const tdGold  = row.querySelector('[data-col="gold"]');
+    const tdHonor = row.querySelector('[data-col="honor"]');
+    const tdFinal = row.querySelector('[data-col="final"]');
+    if (tdGold)  tdGold.textContent  = String(sp.gold ?? "0");
+    if (tdHonor) tdHonor.textContent = String(sp.honor ?? "0");
+    if (tdFinal) tdFinal.textContent = String(sp.score ?? "0");
+  });
+}
+
 function updateTurnUI(){
   if (PLAYERS.length === 0 || curPlayerIdx < 0 || curPlayerIdx >= PLAYERS.length){
     if (turnSwatch){ turnSwatch.style.background = 'none'; turnSwatch.style.borderColor = '#475569'; }
@@ -423,7 +439,9 @@ function syncUIFromGame(){
   const s = game.getPublicState?.(); if (!s) return;
 
   // RUNDY
-  roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; updateRoundUI();
+  roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; 
+  updateRoundUI();
+  updatePlayersUIFromState(s);
 
   // PROWINCJE: zamożność + fort + posiadłości
   for (const [_, prov] of Object.entries(s.provinces)){
