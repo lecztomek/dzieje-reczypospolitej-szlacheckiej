@@ -493,9 +493,9 @@ function syncUIFromGame(){
   }
 
   // WROGOWIE
-  setEnemyCount('szwecja', Math.max(0, Math.min(6, s.raid_tracks.N.value)));
-  setEnemyCount('moskwa',  Math.max(0, Math.min(6, s.raid_tracks.E.value)));
-  setEnemyCount('tatarzy', Math.max(0, Math.min(6, s.raid_tracks.S.value)));
+setEnemyCount('szwecja', Math.max(0, Math.min(6, s.raid_tracks.N)));
+setEnemyCount('moskwa',  Math.max(0, Math.min(6, s.raid_tracks.E)));
+setEnemyCount('tatarzy', Math.max(0, Math.min(6, s.raid_tracks.S)));
 
 // ===================== Parser poleceń =====================
 function tokenize(input){
