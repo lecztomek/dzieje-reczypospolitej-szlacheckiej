@@ -859,6 +859,70 @@ function execCommand(raw){
     return;
   }
 
+  // gduel <prowincja> <graczA> <graczB> <rzutyA...> | <rzutyB...>
+  // gduelauto <prowincja> <graczA> <graczB>
+  if (cmd === 'gduel' || cmd === 'gbattle' || cmd === 'gduelauto') {
+    const auto = (cmd === 'gduelauto');
+    const pid = toProvEnum(tokens[1]);
+    const nameA = tokens[2];
+    const nameB = tokens[3];
+
+    if (!pid || !nameA || !nameB) {
+      return err('Użycie: gduel <prowincja> <graczA> <graczB> <rzutyA...> | <rzutyB...>  lub  gduelauto <prowincja> <graczA> <graczB>');
+    }
+
+    const s = game.getPublicState?.();
+    if (!s) return err('Brak stanu gry.');
+
+    // indeksy graczy wg nazw w silniku
+    const iA = s.settings.players.findIndex(p => p.name === nameA);
+    const iB = s.settings.players.findIndex(p => p.name === nameB);
+    if (iA < 0) return err(`Nie znaleziono gracza "${nameA}" w silniku.`);
+    if (iB < 0) return err(`Nie znaleziono gracza "${nameB}" w silniku.`);
+    if (iA === iB) return err('Podaj dwóch różnych graczy.');
+
+    const unitsA = (s.troops?.[pid]?.[iA] ?? 0) | 0;
+    const unitsB = (s.troops?.[pid]?.[iB] ?? 0) | 0;
+    if (unitsA <= 0 || unitsB <= 0) {
+      return err(`W ${pid} brak jednostek do walki: ${nameA}=${unitsA}, ${nameB}=${unitsB}.`);
+    }
+
+    function randRolls(n){ return Array.from({length:n}, () => 1 + Math.floor(Math.random()*6)); }
+    function parseRolls(arr){ 
+      const nums = arr.map(x => parseInt(x,10)).filter(Number.isFinite);
+      if (!nums.every(r => r>=1 && r<=6)) return null;
+      return nums;
+    }
+
+    let rollsA, rollsB;
+
+    if (auto) {
+      rollsA = randRolls(unitsA);
+      rollsB = randRolls(unitsB);
+    } else {
+      // oczekujemy separatora '|'
+      const sep = tokens.indexOf('|');
+      if (sep < 0) return err('Brakuje separatora "|". Użycie: gduel <prowincja> <graczA> <graczB> <rzutyA...> | <rzutyB...>');
+      rollsA = parseRolls(tokens.slice(4, sep));
+      rollsB = parseRolls(tokens.slice(sep+1));
+      if (!rollsA || !rollsB) return err('Rzuty muszą być liczbami 1–6.');
+      if (rollsA.length !== unitsA || rollsB.length !== unitsB) {
+        return err(`Liczba rzutów musi odpowiadać jednostkom: ${nameA}=${unitsA}, ${nameB}=${unitsB}.`);
+      }
+    }
+
+    try {
+      const line = game.battles.resolveDuel(pid, iA, iB, rollsA, rollsB);
+      ok('Walka rozpatrzona.');
+      ok(`Rzuty ${nameA}: [${rollsA.join(', ')}]`);
+      ok(`Rzuty ${nameB}: [${rollsB.join(', ')}]`);
+      logEngine(line);
+      syncUIFromGame();
+    } catch(ex) {
+      err('Błąd walki: ' + ex.message);
+    }
+    return;
+  }
 
   // gdevast <N> <S> <E>
   if (cmd === 'gdevast'){
@@ -897,6 +961,9 @@ function showHelp(){
   print('• gdevast <N S E> — rzuty spustoszeń (1–6)');
   print('• gstate — wypisz stan silnika do konsoli');
   print('• clear — wyczyść rysunki • reset — pełny reset UI');
+  print('• gduel <prow> <A> <B> <rzutyA...> | <rzutyB...> — potyczka między graczami w prowincji (rzuty 1–6, liczba = ich jednostkom)');
+  print('• gduelauto <prow> <A> <B> — szybka potyczka (losowe rzuty w liczbie = jednostkom)');
+
 }
 
 // ===================== Obsługa konsoli =====================
