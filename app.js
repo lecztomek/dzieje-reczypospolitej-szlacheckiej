@@ -54,8 +54,11 @@ let roundCur = 1;
 let roundMax = 10;
 
 function updateRoundUI(){
-  document.getElementById('roundCur')?.textContent = roundCur;
-  document.getElementById('roundMax')?.textContent = roundMax;
+  const curEl = document.getElementById('roundCur');
+  if (curEl) curEl.textContent = String(roundCur);
+
+  const maxEl = document.getElementById('roundMax');
+  if (maxEl) maxEl.textContent = String(roundMax);
 }
 
 function updateTurnUI(){
