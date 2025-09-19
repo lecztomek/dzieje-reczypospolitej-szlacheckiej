@@ -208,7 +208,7 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód','Aukcje', 'Sejm','Akcje','Starcia', 'Wzmacnanie', 'Wyprawy','Najazdy'];
+const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Wzmacnanie', 'Wyprawy','Najazdy'];
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -248,22 +248,18 @@ const PHASE_CMD_BUTTONS = {
     { label: 'gincome', cmd: 'gincome' },
     { label: 'gnext',   cmd: 'gnext' },
   ],
-  // 3. Aukcje
+  // 3. Sejm
   3: [
     { label: 'gbid Tomek',     cmd: 'gbid Tomek ' },    // gbid <kto> <kwota>
     { label: 'gbid Magda',     cmd: 'gbid Magda ' },    // gbid <kto> <kwota>
     { label: 'gbid Mariola',     cmd: 'gbid Mariola ' },    // gbid <kto> <kwota>
     { label: 'gauction', cmd: 'gauction' },
-    { label: 'gnext',    cmd: 'gnext' },
-  ],
-  // 4. Sejm
-  4: [
     { label: 'glaw',     cmd: 'glaw ' },    // glaw <1-6>
     { label: 'gchoice',  cmd: 'gchoice ' }, // gchoice A|B
     { label: 'gnext',    cmd: 'gnext' },
   ],
-  // 5. Akcje
-  5: [
+  // 4. Akcje
+  4: [
     { label: 'gact administracja', cmd: 'gact administracja' },
     { label: 'gact wplyw',         cmd: 'gact wplyw ' },        // gact wplyw <prow>
     { label: 'gact posiadlosc',    cmd: 'gact posiadlosc ' },   // gact posiadlosc <prow>
@@ -272,23 +268,23 @@ const PHASE_CMD_BUTTONS = {
     { label: 'gact zamoznosc',     cmd: 'gact zamoznosc ' },    // gact zamoznosc <prow>
     { label: 'gnext',              cmd: 'gnext' },
   ],
-  // 6. Starcia
-  6: [
+  // 5. Starcia
+  5: [
     { label: 'gattack', cmd: 'gattack ' },  // gattack <wróg> <z_prowincji> <r1> ...
     { label: 'gnext',   cmd: 'gnext' },
   ],
-  // 7. Wzmacanie
-  7: [
+  // 6. Wzmacanie
+  6: [
     { label: 'greinf', cmd: 'greinf ' }, // greinf <N S E>
     { label: 'gnext',  cmd: 'gnext' },
   ],
-  // 8. Najazdy
-  8: [
+  // 7. Najazdy
+  7: [
     { label: 'gattack', cmd: 'gattack ' },  // gattack <wróg> <z_prowincji> <r1> ...
     { label: 'gnext',  cmd: 'gnext' },
   ],
-  // 9. Spustoszenia
-  9: [
+  // 8. Spustoszenia
+  8: [
     { label: 'gdevast', cmd: 'gdevast ' }, // gdevast <N S E>
     { label: 'gnext',   cmd: 'gnext' },
   ],
