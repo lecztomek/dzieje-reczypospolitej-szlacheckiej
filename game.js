@@ -81,7 +81,8 @@ class GameContext {
     this.settings = { players: [], max_rounds: 3 };
     this.round_status = new RoundStatus(3, 0);
     this.last_output = ""; // optional log aggregator
-
+    this.turn = null;
+    
     this.provinces = {
       [ProvinceID.PRUSY]: new Province(ProvinceID.PRUSY),
       [ProvinceID.LITWA]: new Province(ProvinceID.LITWA),
@@ -451,54 +452,117 @@ class ActionAPI {
   #pidx(playerIndex) { if (playerIndex < 0 || playerIndex >= this.ctx.settings.players.length) throw new Error("Bad player"); return playerIndex; }
   #hasNoble(pid, pidx) { ensurePerProvinceArrays(this.ctx); return (this.ctx.nobles.per_province[pid][pidx] || 0) > 0; }
 
+  #ensureActionsPhase() {
+    const phase = this.ctx?.round_status && (this.ctx?.gamePhase ?? this.ctx?.round?.currentPhaseId?.());
+    if (this.ctx?.turn?.phase !== "actions") throw new Error("Akcje niedostępne — to nie jest faza 'actions'.");
+    if (this.ctx.turn.done) throw new Error("Faza 'actions' zakończona — każdy wykonał 2 akcje.");
+  }
+  #requireActive(playerIndex) {
+    this.#ensureActionsPhase();
+    const expected = this.ctx.turn.order[this.ctx.turn.idx];
+    if (playerIndex !== expected) {
+      const want = this.ctx.settings.players[expected]?.name ?? `#${expected}`;
+      const you = this.ctx.settings.players[playerIndex]?.name ?? `#${playerIndex}`;
+      throw new Error(`Teraz ruch ma ${want}. (Próba akcji przez ${you} została zablokowana.)`);
+    }
+  }
+  #advanceAfterAction(playerIndex) {
+    const t = this.ctx.turn;
+    // policz akcję
+    t.counts[playerIndex] = Math.min(2, (t.counts[playerIndex] | 0) + 1);
+
+    // sprawdź, czy zamknęliśmy bieżącą kolejkę (pass=1 albo pass=2)
+    const target = t.pass; // każdy ma mieć >= target
+    const allReachedTarget = t.counts.every(c => c >= target);
+
+    if (allReachedTarget) {
+      if (t.pass === 1) {
+        // zaczynamy drugą kolejkę
+        t.pass = 2;
+        t.idx = 0; // wracamy do pierwszego w order
+      } else {
+        // wszyscy mają 2 akcje — koniec fazy
+        t.done = true;
+        return;
+      }
+    } else {
+      // przejdź do kolejnego gracza (z tych, którzy nie osiągnęli jeszcze targetu)
+      for (let step = 1; step <= t.order.length; step++) {
+        const nextIdx = (t.idx + step) % t.order.length;
+        const pidx = t.order[nextIdx];
+        if (t.counts[pidx] < target) { t.idx = nextIdx; break; }
+      }
+    }
+  }
+
   administracja(playerIndex) {
+    this.#requireActive(playerIndex);
     const p = this.ctx.settings.players[this.#pidx(playerIndex)];
-    const gain = this.ctx.round_status.admin_yield; p.gold += gain; return `${p.name} otrzymuje +${gain} zł (złoto=${p.gold}).`;
+    const gain = this.ctx.round_status.admin_yield; p.gold += gain; 
+    
+    this.#advanceAfterAction(playerIndex);
+    return `${p.name} otrzymuje +${gain} zł (złoto=${p.gold}).`;
   }
 
   wplyw(playerIndex, provinceId) {
+    this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); const p = c.settings.players[pidx];
     let cost = ActionAPI.COST.wplyw;
     if (provinceId === ProvinceID.WIELKOPOLSKA && c.round_status.wlkp_influence_cost_override != null) cost = c.round_status.wlkp_influence_cost_override;
     if (provinceId === ProvinceID.LITWA && c.round_status.discount_litwa_wplyw_pos > 0) cost = Math.max(0, cost - c.round_status.discount_litwa_wplyw_pos);
     if (p.gold < cost) throw new Error(`Za mało złota. Koszt=${cost}, masz ${p.gold}.`);
-    ensurePerProvinceArrays(c); c.nobles.per_province[provinceId][pidx] += 1; p.gold -= cost; return `${p.name} stawia szlachcica w ${provinceId}. (koszt ${cost}, złoto=${p.gold})`;
+    ensurePerProvinceArrays(c); c.nobles.per_province[provinceId][pidx] += 1; p.gold -= cost; 
+    this.#advanceAfterAction(playerIndex);
+    return `${p.name} stawia szlachcica w ${provinceId}. (koszt ${cost}, złoto=${p.gold})`;
   }
 
   posiadlosc(playerIndex, provinceId) {
+    this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); const p = c.settings.players[pidx];
     if (!this.#hasNoble(provinceId, pidx)) throw new Error("Musisz mieć szlachcica w tej prowincji.");
     let cost = ActionAPI.COST.posiadlosc;
     if (provinceId === ProvinceID.WIELKOPOLSKA && c.round_status.wlkp_estate_cost_override != null) cost = c.round_status.wlkp_estate_cost_override;
     if (provinceId === ProvinceID.LITWA && c.round_status.discount_litwa_wplyw_pos > 0) cost = Math.max(0, cost - c.round_status.discount_litwa_wplyw_pos);
     if (p.gold < cost) throw new Error(`Za mało złota. Koszt=${cost}, masz ${p.gold}.`);
-    const ok = buildEstate(c, provinceId, pidx); if (!ok) throw new Error("Brak wolnych slotów posiadłości."); p.gold -= cost; return `${p.name} buduje posiadłość w ${provinceId}. (koszt ${cost}, złoto=${p.gold})`;
+    const ok = buildEstate(c, provinceId, pidx); if (!ok) throw new Error("Brak wolnych slotów posiadłości."); p.gold -= cost; 
+    this.#advanceAfterAction(playerIndex);
+    return `${p.name} buduje posiadłość w ${provinceId}. (koszt ${cost}, złoto=${p.gold})`;
   }
 
   rekrutacja(playerIndex, provinceId) {
+    this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); const p = c.settings.players[pidx];
     if (!this.#hasNoble(provinceId, pidx)) throw new Error("Musisz mieć szlachcica w tej prowincji.");
     const base = ActionAPI.COST.rekrutacja;
     const actual = c.round_status.recruit_cost_override != null ? c.round_status.recruit_cost_override : base;
     if (p.gold < actual) throw new Error(`Za mało złota. Koszt=${actual}, masz ${p.gold}.`);
-    ensurePerProvinceArrays(c); c.troops.per_province[provinceId][pidx] += 1; p.gold -= actual; return `${p.name} rekrutuje 1 jednostkę w ${provinceId}. (koszt ${actual}, złoto=${p.gold})`;
+    ensurePerProvinceArrays(c); c.troops.per_province[provinceId][pidx] += 1; p.gold -= actual; 
+    
+    this.#advanceAfterAction(playerIndex);
+    return `${p.name} rekrutuje 1 jednostkę w ${provinceId}. (koszt ${actual}, złoto=${p.gold})`;
   }
 
   marsz(playerIndex, fromPid, toPid, amount = 1) {
+    this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); ensurePerProvinceArrays(c);
     if (!this.#hasNoble(fromPid, pidx) || !this.#hasNoble(toPid, pidx)) throw new Error("Marsz tylko między prowincjami, gdzie masz szlachciców na obu.");
     const fromArr = c.troops.per_province[fromPid]; const toArr = c.troops.per_province[toPid];
     const amt = Math.max(1, Number(amount) | 0);
     if ((fromArr[pidx] | 0) < amt) throw new Error("Brak jednostek do przesunięcia.");
-    fromArr[pidx] -= amt; toArr[pidx] += amt; return `${c.settings.players[pidx].name} maszeruje ${amt} j.: ${fromPid} -> ${toPid}.`;
+    fromArr[pidx] -= amt; toArr[pidx] += amt; 
+    this.#advanceAfterAction(playerIndex);
+    return `${c.settings.players[pidx].name} maszeruje ${amt} j.: ${fromPid} -> ${toPid}.`;
   }
 
   zamoznosc(playerIndex, provinceId) {
+    this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); const p = c.settings.players[pidx];
     const before = c.provinces[provinceId].wealth; if (before >= 3) throw new Error("Zamożność już 3 (MAX).");
     const base = ActionAPI.COST.zamoznosc; const actual = c.round_status.zamoznosc_cost_override != null ? c.round_status.zamoznosc_cost_override : base;
     if (p.gold < actual) throw new Error(`Za mało złota. Koszt=${actual}, masz ${p.gold}.`);
-    addProvinceWealth(c, provinceId, +1); p.gold -= actual; return `${p.name} podnosi zamożność ${provinceId}: ${before}→${c.provinces[provinceId].wealth}. (koszt ${actual}, złoto=${p.gold})`;
+    addProvinceWealth(c, provinceId, +1); p.gold -= actual; 
+    this.#advanceAfterAction(playerIndex);
+    return `${p.name} podnosi zamożność ${provinceId}: ${before}→${c.provinces[provinceId].wealth}. (koszt ${actual}, złoto=${p.gold})`;
   }
 }
 
@@ -678,17 +742,42 @@ export class ConsoleGame {
     rs.extra_honor_vs_tatars = false; rs.recruit_cost_override = null; rs.zamoznosc_cost_override = null; rs.fairs_plus_one_income = false;
     rs.artillery_defense_active = false; rs.artillery_defense_used = Array(this.ctx.settings.players.length).fill(false);
     rs.sejm_tiebreak_wlkp = false; rs.wlkp_influence_cost_override = null; rs.wlkp_estate_cost_override = null; rs.last_law = null; rs.last_law_choice = null;
-
+    this.ctx.turn = null;
     this.auction.resetForRound();
     this.round = new RoundEngine(this.ctx);
   }
 
   finishPhaseAndAdvance() {
-    // This method is a no-op placeholder to mirror the Python step() loop.
-    // In this programmatic API, YOU (the consumer) call specific API methods per phase
-    // and then advance the round manually once done.
-    return this.round.nextPhase();
+    // zapamiętaj poprzednią fazę
+    const prev = this.round.currentPhaseId();
+    // przejdź do kolejnej
+    const next = this.round.nextPhase();
+
+    // NEW: gdy wchodzimy w "actions" – zainicjalizuj kolejkę 2× po 1 akcji
+    if (next === "actions") this._initActionsTurn();
+
+    // NEW: gdy wychodzimy z "actions" – wyczyść wskaźniki tury
+    if (prev === "actions" && next !== "actions") this.ctx.turn = null;
+
+    return this.currentPhaseId?.() ?? next;
   }
+
+  // NEW: inicjalizacja tury akcji – kolejność od marszałka, każdy ma wykonać 2 akcje
+  _initActionsTurn() {
+    const pcount = this.ctx.settings.players.length;
+    const start = this.ctx.round_status.marshal_index;
+
+    const order = Array.from({ length: pcount }, (_, k) => (start + k) % pcount);
+    this.ctx.turn = {
+      phase: "actions",
+      order,
+      idx: 0,            // wskaźnik w 'order'
+      pass: 1,           // aktualna kolejka (1 albo 2)
+      counts: Array(pcount).fill(0), // wykonane akcje per gracz
+      done: false,
+    };
+  }
+
 
   // Mark round finished and move to the next one or to GAME_OVER.
   endRoundOrGame() {
@@ -708,20 +797,34 @@ export class ConsoleGame {
   computeScores() { return computeFinalScores(this.ctx); }
 
   // ------------ Introspection helpers ------------
-  getPublicState() { return deepClone({
-    state: this.state,
-    settings: {
-      players: this.ctx.settings.players.map((p) => ({ name: p.name, score: p.score, gold: p.gold, honor: p.honor, majority: p.majority, last_bid: p.last_bid })),
+  getPublicState() { 
+    const activeIdx =
+      (this.round?.currentPhaseId() === "actions" && this.ctx.turn && !this.ctx.turn.done)
+        ? this.ctx.turn.order[this.ctx.turn.idx]
+        : null;
+
+    return deepClone({
+      state: this.state,
+      settings: {
+        players: this.ctx.settings.players.map((p) => ({
+          name: p.name, score: p.score, gold: p.gold, honor: p.honor, majority: p.majority, last_bid: p.last_bid
+        })),
       max_rounds: this.ctx.settings.max_rounds,
-    },
-    round_status: deepClone(this.ctx.round_status),
-    provinces: deepClone(this.ctx.provinces),
-    raid_tracks: { N: this.ctx.raid_tracks.N.value, S: this.ctx.raid_tracks.S.value, E: this.ctx.raid_tracks.E.value },
-    troops: deepClone(this.ctx.troops.per_province),
-    nobles: deepClone(this.ctx.nobles.per_province),
-    current_phase: this.round?.currentPhaseId() ?? null,
-    marshal: this.ctx.settings.players[this.ctx.round_status.marshal_index]?.name ?? null,
-  }); }
+      },
+      round_status: deepClone(this.ctx.round_status),
+      provinces: deepClone(this.ctx.provinces),
+      raid_tracks: { N: this.ctx.raid_tracks.N.value, S: this.ctx.raid_tracks.S.value, E: this.ctx.raid_tracks.E.value },
+      troops: deepClone(this.ctx.troops.per_province),
+      nobles: deepClone(this.ctx.nobles.per_province),
+      current_phase: this.round?.currentPhaseId() ?? null,
+      marshal: this.ctx.settings.players[this.ctx.round_status.marshal_index]?.name ?? null,
+
+      // NEW:
+      active_player_index: activeIdx,
+      active_player: activeIdx != null ? this.ctx.settings.players[activeIdx].name : null,
+      actions_turn: this.ctx.turn ? deepClone(this.ctx.turn) : null,
+    });
+  }
 }
 
 export default ConsoleGame;
