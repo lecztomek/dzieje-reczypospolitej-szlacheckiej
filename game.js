@@ -911,8 +911,8 @@ export class ConsoleGame {
       marshal: this.ctx.settings.players[this.ctx.round_status.marshal_index]?.name ?? null,
 
       // NEW:
-      active_player_index: activeIdx,
-      active_player: activeIdx != null ? this.ctx.settings.players[activeIdx].name : null,
+      active_player_index: activeActionIdx,
+      active_player: activeActionIdx != null ? this.ctx.settings.players[activeActionIdx].name : null,
       actions_turn: this.ctx.turn ? deepClone(this.ctx.turn) : null,
 
       active_attacker_index: activeAttackIdx,
