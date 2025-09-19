@@ -443,6 +443,14 @@ function syncUIFromGame(){
   updateRoundUI();
   updatePlayersUIFromState(s);
 
+  if (s.marshal){
+    const ui = PLAYERS.find(x => x.name === s.marshal);
+    if (ui) setMarshal(ui.color);
+    else clearMarshal();
+  } else {
+    clearMarshal();
+  }
+
   // PROWINCJE: zamożność + fort + posiadłości
   for (const [_, prov] of Object.entries(s.provinces)){
     const key = norm(prov.id.toLowerCase());
