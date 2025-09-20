@@ -270,5 +270,8 @@ svg{width:100%;height:auto;display:block;filter:drop-shadow(0 16px 24px rgba(0,0
   .console .hint{display:none}
 }
 
+.sidebar .section:has(.marshal-row){
+  display: none !important;
+}
 footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);font-size:.9rem}
 
