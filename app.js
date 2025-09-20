@@ -911,6 +911,18 @@ function execCommand(raw){
     return;
   }
 
+  if (cmd === 'gpass'){
+    if (curPlayerIdx < 0) return err('Brak aktywnego gracza.');
+    try {
+      const msg = game.attacks.passTurn(curPlayerIdx);
+      ok(String(msg || 'PASS.'));
+      syncUIFromGame();
+    } catch (ex) {
+      err('PASS nieudany: ' + ex.message);
+    }
+    return;
+  }
+
   // gduel <prowincja> <graczA> <graczB> <rzutyA...> | <rzutyB...>
   // gduelauto <prowincja> <graczA> <graczB>
   if (cmd === 'gduel' || cmd === 'gbattle' || cmd === 'gduelauto') {
@@ -1010,6 +1022,7 @@ function showHelp(){
   print('• gact administracja | wplyw <prow> | posiadlosc <prow> | rekrutacja <prow> | marsz <z> <do> | zamoznosc <prow>');
   print('• greinf <N S E> — rzuty wzmocnień wrogów (1–6)');
   print('• gattack <wróg> <z_prowincji> <r1> [r2]… — atak na tor wroga');
+  print('• gpass — w fazie najazdów oddaj turę (PASS)');
   print('• gdevast <N S E> — rzuty spustoszeń (1–6)');
   print('• gstate — wypisz stan silnika do konsoli');
   print('• clear — wyczyść rysunki • reset — pełny reset UI');
