@@ -65,6 +65,9 @@ const playersBody = document.getElementById('playersBody');
 const turnSwatch = document.getElementById('turnSwatch');
 const turnNameEl = document.getElementById('turnName');
 
+if (marshalBox) marshalBox.style.display = 'none';
+if (marshalResetBtn) marshalResetBtn.style.display = 'none';
+
 let curPlayerIdx = -1; // -1 = brak aktywnego gracza
 
 const history = [];
@@ -461,9 +464,12 @@ function buildNoblesTable(){
     noblesBody.appendChild(tr);
   });
 }
-function setMarshal(color){ marshalBox.style.background = color; marshalBox.style.borderColor = color; return true; }
-function clearMarshal(){ marshalBox.style.background = 'none'; marshalBox.style.borderColor = '#475569'; }
-marshalResetBtn?.addEventListener('click', () => { clearMarshal(); ok('Wyczyszczono kolor Marszałka.'); });
+//function setMarshal(color){ marshalBox.style.background = color; marshalBox.style.borderColor = color; return true; }
+//function clearMarshal(){ marshalBox.style.background = 'none'; marshalBox.style.borderColor = '#475569'; }
+function setMarshal(/* color */){ return true; }
+function clearMarshal(){ /* intentionally empty */ }
+
+//marshalResetBtn?.addEventListener('click', () => { clearMarshal(); ok('Wyczyszczono kolor Marszałka.'); });
 function getNobleSlot(regionKey, slot){ return document.querySelector(`.noble-slot[data-region="${regionKey}"][data-slot="${slot}"]`); }
 function setNoble(regionKey, slot, color, value){
   const el = getNobleSlot(regionKey, slot); if(!el) return false;
