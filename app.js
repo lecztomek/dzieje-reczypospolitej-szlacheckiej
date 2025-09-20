@@ -1,4 +1,4 @@
-u// ===================== PODPIĘCIE SILNIKA (game.js) =====================
+// ===================== PODPIĘCIE SILNIKA (game.js) =====================
 import { ConsoleGame, ProvinceID, RaidTrackID } from './game.js';
 
 // instancja gry + ułatwienia globalne (DevTools)
