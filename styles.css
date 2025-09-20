@@ -178,7 +178,7 @@ svg{
 .nobles-table th,.nobles-table td{padding:6px 6px;vertical-align:middle}
 .nobles-table thead th{color:#9ca3af;font-size:.9rem;font-weight:700;text-align:center}
 .nobles-table tbody th{font-weight:700;color:#e2e8f0;text-align:left;white-space:nowrap}
-.noble-slot{width:34px;height:34px;border-radius:999px;border:2px solid #475569;background:none;display:grid;place-items:center;font-weight:800;font-size:.95rem;line-height:1;color:#e5e7eb;user-select:none}
+.noble-slot{width:30px;height:30px;border-radius:999px;border:2px solid #475569;background:none;display:grid;place-items:center;font-weight:800;font-size:.95rem;line-height:1;color:#e5e7eb;user-select:none}
 .noble-slot[data-empty="1"]{opacity:.65}
 
 .map-card{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
