@@ -1,4 +1,4 @@
-// ===================== PODPIĘCIE SILNIKA (game.js) =====================
+u// ===================== PODPIĘCIE SILNIKA (game.js) =====================
 import { ConsoleGame, ProvinceID, RaidTrackID } from './game.js';
 
 // instancja gry + ułatwienia globalne (DevTools)
@@ -313,7 +313,7 @@ function renderPhaseActions() {
 const _origUpdatePhaseUI = updatePhaseUI;
 updatePhaseUI = function(){
   _origUpdatePhaseUI.call(this);
-  renderPhaseActions();
+  buildPhaseActionsSmart(game.getPublicState?.() || {}); // ← smart zamiast statycznego
 };
 
 function updatePhaseUI(){
@@ -1321,6 +1321,6 @@ createArmySlots();
 createEnemyTracks();
 buildNoblesTable();
 buildPhaseBar();
-renderPhaseActions();
+buildPhaseActionsSmart(game.getPublicState?.() || {}); // ← smart start
 updateTurnUI();
 ok('Witaj! Dodaj graczy komendą „gracz <imię> <kolor>”, potem „gstart”. „pomoc” pokaże listę komend.');
