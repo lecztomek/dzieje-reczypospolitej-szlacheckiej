@@ -641,6 +641,235 @@ const ENEMY_MAP = { szwecja: RaidTrackID.N, moskwa: RaidTrackID.E, tatarzy: Raid
 function toProvEnum(anyName){ const r = getRegionByName(anyName); if (!r) return null; return PROV_MAP[r.key] || null; }
 function toEnemyEnum(name){ const k = norm(name); return ENEMY_MAP[k] || null; }
 
+// ===================== Inteligentny panel akcji (UI) =====================
+function buildPhaseActionsSmart(s){
+  if (!phaseActionsEl) return;
+  const phase = s?.current_phase || game.round?.currentPhaseId?.() || null;
+
+  // helpers
+  const run = (cmd) => pushToConsole(cmd, true);
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k,v] of Object.entries(attrs)){
+      if (k === 'class') n.className = v;
+      else if (k === 'style' && v && typeof v === 'object') Object.assign(n.style, v);
+      else if (k in n) n[k] = v;
+      else n.setAttribute(k, v);
+    }
+    kids.flat().forEach(c => n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+    return n;
+  };
+  const chip = (label, onClick, title='') => {
+    const b = el('button', { type:'button', class:'phase-action', title: title || label }, label);
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  const section = (title, desc) => {
+    const box = el('div', { class:'section' });
+    if (title) box.appendChild(el('div', { class:'section-title', style:{fontWeight:'800',color:'#cbd5e1',margin:'0 0 6px'} }, title));
+    if (desc)  box.appendChild(el('div', { class:'section-desc',  style:{color:'#94a3b8',margin:'0 0 10px'} }, desc));
+    return box;
+  };
+  const activeColor = () => (curPlayerIdx >= 0 && PLAYERS[curPlayerIdx]?.color) ? PLAYERS[curPlayerIdx].color : '#eab308';
+  const provKeys = ['prusy','wielkopolska','malopolska','litwa','ukraina'];
+  const provSelect = (id, ph='— prowincja —') => {
+    const sel = el('select', { id, class:'phase-action', style:{padding:'8px 10px'} },
+      el('option', { value:'' }, ph),
+      ...provKeys.map(k => el('option', { value:k }, k))
+    );
+    return sel;
+  };
+
+  // reset
+  phaseActionsEl.innerHTML = '';
+
+  // ====== SETUP (gdy brak rundy / graczy) ======
+  const noGameYet = !s?.current_phase && (s?.settings?.players?.length ?? 0) === 0;
+  if (noGameYet){
+    const box = section('Start', 'Dodaj graczy i uruchom partię z wybraną liczbą rund.');
+    box.append(
+      chip('gracz Tomek (czerwony)', ()=>run('gracz Tomek red')),
+      chip('gracz Magda (żółty)',   ()=>run('gracz Magda yellow')),
+      chip('gracz Mariola (niebieski)', ()=>run('gracz Mariola blue')),
+      el('div', {style:{height:'8px'}}),
+      chip('Start 5 rund',  ()=>run('gstart 5 6')),
+      chip('Start 10 rund', ()=>run('gstart 10 6')),
+    );
+    phaseActionsEl.appendChild(box);
+    tintByActive();
+    return;
+  }
+
+  // ====== WYDARZENIA ======
+  if (phase === 'events'){
+    const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
+    const rollBtn = chip('Losuj wydarzenie 1–25', () => {
+      const n = 1 + Math.floor(Math.random()*25);
+      ok(`(UI) wylosowano wydarzenie #${n}`);
+      run(`gevent ${n}`);
+      run('gnext');
+    });
+    box.append(rollBtn);
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
+
+  // ====== DOCHÓD ======
+  if (phase === 'income'){
+    const box = section('Dochód', 'Zbierz dochód wszystkich graczy i przejdź do Sejmu.');
+    box.append(chip('Pobierz dochód (gincome)', ()=>{ run('gincome'); run('gnext'); }));
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
+
+  // ====== SEJM – rozdzielony na: AUKCJA -> USTAWA ======
+  if (phase === 'auction' || phase === 'sejm'){
+    const canceled = !!s.round_status?.sejm_canceled;
+
+    // AUKCJA (pokazuj dopóki nikt nie ma majority i sejm nie zerwany)
+    const someMajority = (s.settings?.players || []).some(p => p.majority);
+    if (phase === 'auction' || (!someMajority && !canceled)){
+      const boxA = section('Sejm – Aukcja', 'Aukcja marszałkowska: przypisz oferty graczom, a następnie rozstrzygnij.');
+      const quicks = [0,1,2,3,4,5,6,8,10];
+      (s.settings?.players || []).forEach(p => {
+        const row = el('div', { style:{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',margin:'6px 0'} });
+        row.append(el('span', { style:{ minWidth:'84px', fontWeight:'800' } }, p.name));
+        quicks.forEach(q => row.append(chip(String(q), ()=>run(`gbid ${p.name} ${q}`), `gbid ${p.name} ${q}`)));
+        const inp = el('input', { type:'number', min:'0', step:'1', placeholder:'kwota', style:{ width:'90px', padding:'8px 10px', background:'#0f172a', border:'1px solid #334155', color:'#e2e8f0', borderRadius:'10px' } });
+        const btn = chip('Ustaw', ()=>{ const v = parseInt(inp.value,10); if (Number.isFinite(v)&&v>=0) run(`gbid ${p.name} ${v}`); });
+        row.append(inp, btn);
+        boxA.append(row);
+      });
+      boxA.append(chip('Rozstrzygnij aukcję (gauction)', ()=>run('gauction')));
+      if (phase === 'auction') phaseActionsEl.appendChild(boxA);
+      else phaseActionsEl.appendChild(boxA); // w "sejm" też pokaż, jeśli brak majority
+    }
+
+    // USTAWA
+    if (!canceled){
+      const boxB = section('Sejm – Ustawa', 'Wybierz ustawę (1–6). Silnik wypisze warianty A/B w logu; następnie zatwierdź wariant.');
+      const laws = el('div', {style:{display:'flex',flexWrap:'wrap',gap:'8px'}});
+      for (let n=1;n<=6;n++) laws.append(chip(`Ustawa ${n}`, ()=>run(`glaw ${n}`)));
+      const bWrap = el('div', {style:{display:'flex',gap:'8px',marginTop:'8px'}});
+      // warianty A/B (bez payloadów – silnik przyjmie puste, albo B z torem niżej)
+      bWrap.append(chip('Wariant A (gchoice A)', ()=>run('gchoice A')));
+      // Dla wariantów wymagających toru (3B/4B/6B) daj szybki wybór toru:
+      const tor = el('select', { class:'phase-action', style:{padding:'8px 10px'} },
+        el('option',{value:''},'— tor (N/E/S) —'),
+        el('option',{value:'N'},'Szwecja (N)'),
+        el('option',{value:'E'},'Moskwa (E)'),
+        el('option',{value:'S'},'Tatarzy (S)'),
+      );
+      const bBtn = chip('Wariant B (gchoice B)', ()=>{
+        // uwaga: konsolowa komenda nie przyjmuje payloadu – wybór toru służy tylko informacyjnie do logu
+        const v = tor.value; if (!v) ok('Wariant B → (wybór toru w UI; silnik bez payloadu).');
+        run('gchoice B');
+      });
+      bWrap.append(tor, bBtn);
+      const nextBtn = chip('Zakończ Sejm (gnext)', ()=>run('gnext'));
+
+      boxB.append(laws, bWrap, el('div',{style:{height:'8px'}}), nextBtn);
+      phaseActionsEl.appendChild(boxB);
+    } else {
+      const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
+      info.append(chip('Dalej (gnext)', ()=>run('gnext')));
+      phaseActionsEl.appendChild(info);
+    }
+    tintByActive(); return;
+  }
+
+  // ====== AKCJE ======
+  if (phase === 'actions'){
+    const box = section('Akcje', 'Akcje graczy w tej rundzie. Wybierz typ akcji i – jeśli trzeba – wskaż prowincję.');
+    // Administracja
+    const admin = section('Administracja', 'Jednorazowy bonus administracyjny (wg zasad).');
+    admin.append(chip('Administracja', ()=>run('gact administracja')));
+    // Jedna prowincja
+    const single = section('Akcje jednoprowincjowe', 'Wybierz jedną prowincję i zastosuj akcję.');
+    const sel1 = provSelect('act-one');
+    const act1 = (cmd) => ()=>{ const v = sel1.value; if(!v) return err('Wskaż prowincję.'); run(`gact ${cmd} ${v}`); };
+    single.append(sel1,
+      chip('Wpływ (+1 szlachcic)', act1('wplyw'), 'gact wplyw <prow>'),
+      chip('Posiadłość (BOX)',     act1('posiadlosc'), 'gact posiadlosc <prow>'),
+      chip('Rekrutacja (+1 armia)',act1('rekrutacja'), 'gact rekrutacja <prow>'),
+      chip('Zamożność (+1, max 3)',act1('zamoznosc'),  'gact zamoznosc <prow>')
+    );
+    // Marsz
+    const march = section('Marsz', 'Przemarsz wojsk – wskaż prowincję źródłową i docelową.');
+    const selFrom = provSelect('act-from','— z —');
+    const selTo   = provSelect('act-to','— do —');
+    march.append(selFrom, selTo, chip('Marsz', ()=>{
+      const a = selFrom.value, b = selTo.value;
+      if(!a || !b) return err('Użycie: gact marsz <z> <do>.');
+      run(`gact marsz ${a} ${b}`);
+    }, 'gact marsz <z> <do>'));
+    // Dalej
+    const next = section('Zakończenie', 'Gdy wszyscy zakończą swoje ruchy, przejdź do kolejnej fazy.');
+    next.append(chip('Zakończ Akcje (gnext)', ()=>run('gnext')));
+
+    phaseActionsEl.append(box, admin, single, march, next);
+    tintByActive(); return;
+  }
+
+  // ====== STARCIA ======
+  if (phase === 'battles'){
+    const box = section('Starcia', 'Rozstrzygaj potyczki między graczami (komendy w konsoli). Kiedy gotowe — zakończ fazę.');
+    box.append(chip('Zakończ Starcia (gnext)', ()=>run('gnext')));
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
+
+  // ====== WZMACNIANIE ======
+  if (phase === 'reinforcements'){
+    const box = section('Wzmacnianie', 'Wylosuj N, S, E (1–6) i zastosuj wzmocnienia na torach wrogów.');
+    box.append(chip('Wylosuj i zastosuj (greinf N S E)', ()=>{
+      const r = ()=> 1 + Math.floor(Math.random()*6);
+      const N=r(), S=r(), E=r();
+      ok(`(UI) wzmocnienia: N=${N}, S=${S}, E=${E}`);
+      run(`greinf ${N} ${S} ${E}`);
+      run('gnext');
+    }));
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
+
+  // ====== NAJAZDY ======
+  if (phase === 'attacks'){
+    const box = section('Najazdy', 'Gracze atakują tory wrogów z konsoli (`gattack <wróg> <prowincja> <rzuty...>`). Kiedy koniec — przejdź dalej.');
+    box.append(chip('Zakończ Najazdy (gnext)', ()=>run('gnext')));
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
+
+  // ====== SPUSTOSZENIA ======
+  if (phase === 'devastation'){
+    const box = section('Spustoszenia', 'Wylosuj N, S, E (1–6) i zastosuj spustoszenia, potem przejdź do następnej rundy.');
+    box.append(chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
+      const r = ()=> 1 + Math.floor(Math.random()*6);
+      const N=r(), S=r(), E=r();
+      ok(`(UI) spustoszenia: N=${N}, S=${S}, E=${E}`);
+      run(`gdevast ${N} ${S} ${E}`);
+      run('gnext');
+    }));
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
+
+  // fallback
+  const fb = section('Faza', `Bieżąca faza: ${String(phase || '—')}`);
+  phaseActionsEl.appendChild(fb);
+
+  // === podświetlenie przycisków kolorem aktywnego gracza
+  function tintByActive(){
+    const col = activeColor();
+    phaseActionsEl.querySelectorAll('button.phase-action').forEach(b=>{
+      b.style.borderColor = col;
+      b.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,.15)';
+    });
+  }
+}
+
+
 // ===================== SYNC UI ⇄ SILNIK =====================
 function syncUIFromGame(){
   const s = game.getPublicState?.(); if (!s) return;
@@ -651,6 +880,7 @@ function syncUIFromGame(){
   updatePlayersUIFromState(s);
   applyCurrentTurnFromState(s);
   applyPhaseFromEngineState(s);
+  buildPhaseActionsSmart(game.getPublicState());
 
   const midx = s.round_status?.marshal_index ?? -1;
   if (midx >= 0 && s.settings?.players?.[midx]) {
