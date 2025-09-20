@@ -730,16 +730,16 @@ function buildPhaseActionsSmart(s){
     const someMajority = (s.settings?.players || []).some(p => p.majority);
     if (phase === 'auction' || (!someMajority && !canceled)){
       const boxA = section('Sejm – Aukcja', 'Aukcja marszałkowska: przypisz oferty graczom, a następnie rozstrzygnij.');
-      const quicks = [0,1,2,3,4,5,6,8,10];
+      const quicks = [0,1,2,3];
       (s.settings?.players || []).forEach(p => {
         const row = el('div', { style:{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',margin:'6px 0'} });
         row.append(el('span', { style:{ minWidth:'84px', fontWeight:'800' } }, p.name));
-        quicks.forEach(q => row.append(chip(String(q), ()=>run(`gbid ${p.name} ${q}`), `gbid ${p.name} ${q}`)));
-        const inp = el('input', { type:'number', min:'0', step:'1', placeholder:'kwota', style:{ width:'90px', padding:'8px 10px', background:'#0f172a', border:'1px solid #334155', color:'#e2e8f0', borderRadius:'10px' } });
-        const btn = chip('Ustaw', ()=>{ const v = parseInt(inp.value,10); if (Number.isFinite(v)&&v>=0) run(`gbid ${p.name} ${v}`); });
-        row.append(inp, btn);
+        quicks.forEach(q => row.append(
+          chip(String(q), ()=>run(`gbid ${p.name} ${q}`), `gbid ${p.name} ${q}`)
+        ));
         boxA.append(row);
       });
+
       boxA.append(chip('Rozstrzygnij aukcję (gauction)', ()=>run('gauction')));
       if (phase === 'auction') phaseActionsEl.appendChild(boxA);
       else phaseActionsEl.appendChild(boxA); // w "sejm" też pokaż, jeśli brak majority
