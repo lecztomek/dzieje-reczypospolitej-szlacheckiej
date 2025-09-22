@@ -612,9 +612,10 @@ function buildPhaseActionsSmart(s){
   if (noGameYet){
     const box = section('Start', 'Dodaj graczy i uruchom partię z wybraną liczbą rund.');
     box.append(
-      chip('gracz Tomek (czerwony)', ()=>run('gracz Tomek red')),
-      chip('gracz Magda (żółty)',   ()=>run('gracz Magda yellow')),
-      chip('gracz Mariola (niebieski)', ()=>run('gracz Mariola blue')),
+      chip('gracz Potoccy (czerwony)', ()=>run('gracz Potoccy red')),
+      chip('gracz Sapiehowie (żółty)',   ()=>run('gracz Sapiehowie yellow')),
+      chip('gracz Radziwiłłowie (niebieski)', ()=>run('gracz Radziwiłłowie blue')),
+      chip('gracz Leszczyńscy (fioletowy)', ()=>run('gracz Leszczyńscy purple')),
       el('div', {style:{height:'8px'}}),
       chip('Start 5 rund',  ()=>run('gstart 5 6')),
       chip('Start 10 rund', ()=>run('gstart 10 6')),
