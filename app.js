@@ -8,7 +8,261 @@ window.ProvinceID = ProvinceID;
 window.RaidTrackID = RaidTrackID;
 
 
-const DEFAULT_POPUP_IMG = '/images/e-default.png';
+const EVENT_DEFAULT_POPUP_IMG = './images/e-default.png';
+const INCOME_POPUP_IMG = './images/income.png';
+const DEVASTATION_POPUP_IMG = './images/devast.png';
+const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
+
+// ==== Sejm: stan + opisy ustaw ====
+let _sejmLawRound = -1;                // runda, w której wylosowaliśmy ustawę
+let _sejmLaw = null;                   // { id, name }
+let _sejmAuctionWinner = null;         // nazwa zwycięzcy aukcji (po rozstrzygnięciu)
+
+const LAW_POOL = [
+  { id: 1, name: 'Podatek' },
+  { id: 2, name: 'Podatek' },
+  { id: 3, name: 'Pospolite ruszenie' },
+  { id: 4, name: 'Pospolite ruszenie' },
+  { id: 5, name: 'Fortyfikacje' },
+  { id: 6, name: 'Pokój' },
+];
+
+// Opisy i przyciski dla wariantów (zgodnie z silnikiem)
+const LAW_VARIANTS = {
+  1: { // Podatek (k6=1)
+    title: 'Podatek',
+    buttons: [
+      { label: 'Podatek — wariant A (+2 zł dla każdego)', choice: 'A' },
+      { label: 'Podatek — wariant B (+1 zł dla wszystkich, +3 zł dla zwycięzcy)', choice: 'B' },
+    ],
+    describe: [
+      'A: każdy gracz otrzymuje +2 zł.',
+      'B: każdy +1 zł, a zwycięzca aukcji dodatkowo +3 zł (łącznie +4).',
+    ],
+  },
+  2: { // Podatek (k6=2)
+    title: 'Podatek',
+    buttons: [
+      { label: 'Podatek — wariant A (+2 zł dla każdego)', choice: 'A' },
+      { label: 'Podatek — wariant B (+1 zł dla wszystkich, +3 zł dla zwycięzcy)', choice: 'B' },
+    ],
+    describe: [
+      'A: każdy gracz otrzymuje +2 zł.',
+      'B: każdy +1 zł, a zwycięzca aukcji dodatkowo +3 zł (łącznie +4).',
+    ],
+  },
+  3: { // Pospolite ruszenie (k6=3)
+    title: 'Pospolite ruszenie',
+    buttons: [
+      // Uwaga: A w silniku wymaga później przekazania "picks" (gracz+prowincja kontrolowana)
+      { label: 'Pospolite ruszenie — wariant A (+1 jednostka w kontrolowanej prowincji)', choice: 'A' },
+      // B wymaga wskazania toru (track: 'N' | 'E' | 'S')
+      { label: 'Pospolite ruszenie — wariant B (Szwecja −2)', choice: 'B', track: 'N' },
+      { label: 'Pospolite ruszenie — wariant B (Moskwa −2)',  choice: 'B', track: 'E' },
+      { label: 'Pospolite ruszenie — wariant B (Tatarzy −2)', choice: 'B', track: 'S' },
+    ],
+    describe: [
+      'A: każdy może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (wymaga wskazania „picks”).',
+      'B: wybierz jeden tor (N/E/S), ten tor −2.',
+    ],
+  },
+  4: { // Pospolite ruszenie (k6=4)
+    title: 'Pospolite ruszenie',
+    buttons: [
+      { label: 'Pospolite ruszenie — wariant A (+1 jednostka w kontrolowanej prowincji)', choice: 'A' },
+      { label: 'Pospolite ruszenie — wariant B (Szwecja −2)', choice: 'B', track: 'N' },
+      { label: 'Pospolite ruszenie — wariant B (Moskwa −2)',  choice: 'B', track: 'E' },
+      { label: 'Pospolite ruszenie — wariant B (Tatarzy −2)', choice: 'B', track: 'S' },
+    ],
+    describe: [
+      'A: każdy może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (wymaga wskazania „picks”).',
+      'B: wybierz jeden tor (N/E/S), ten tor −2.',
+    ],
+  },
+  5: { // Fortyfikacje (k6=5) — tylko A
+    title: 'Fortyfikacje',
+    buttons: [
+      // A w silniku wymaga „picks” (gracz + kontrolowana prowincja bez fortu)
+      { label: 'Fortyfikacje — wariant A (połóż fort w kontrolowanej prowincji)', choice: 'A' },
+    ],
+    describe: [
+      'A: połóż fort w kontrolowanej przez siebie prowincji bez fortu (wymaga wskazania „picks”).',
+    ],
+  },
+  6: { // Pokój (k6=6)
+    title: 'Pokój',
+    buttons: [
+      { label: 'Pokój — wariant A (wszyscy sąsiedzi: tory −1)', choice: 'A' },
+      { label: 'Pokój — wariant B (Szwecja: tor −2)', choice: 'B', track: 'N' },
+      { label: 'Pokój — wariant B (Moskwa: tor −2)',  choice: 'B', track: 'E' },
+      { label: 'Pokój — wariant B (Tatarzy: tor −2)', choice: 'B', track: 'S' },
+    ],
+    describe: [
+      'A: wszystkie trzy tory (N, E, S) −1.',
+      'B: jeden wybrany tor (N/E/S) −2.',
+    ],
+  },
+};
+
+
+function ensureSejmLawForRound(state, { forcePopup = false } = {}){
+  const s = state || game.getPublicState?.();
+  if (!s) return;
+
+  const currentRound = s.round_status?.current_round ?? roundCur;
+  const curPhase = s.current_phase || game.round?.currentPhaseId?.();
+
+  // jeśli już mamy wylosowaną na tę rundę
+  if (_sejmLawRound === currentRound && _sejmLaw) {
+    if (forcePopup) {
+      popupFromEngine(`Sejm — wylosowano ustawę: ${_sejmLaw.name}`, [
+        `Wybrano ustawę: ${_sejmLaw.name}.`,
+        'Teraz licytacja marszałkowska (aukcja).'
+      ], { buttonText: 'Dalej (Aukcja)' });
+    }
+    return;
+  }
+
+  // losowanie nowej (UI)
+  const pick = LAW_POOL[Math.floor(Math.random() * LAW_POOL.length)];
+  _sejmLawRound = currentRound;
+  _sejmLaw = pick;
+  _sejmAuctionWinner = null;
+
+  // USTAWY w silniku NIE ustawiamy w fazie auction (brak większości!)
+  if (curPhase === 'sejm') {
+    const lines = game.sejm.setLaw(pick.id) || [];
+    logEngine(lines);
+  }
+
+// popup informacyjny (UI) – tylko na żądanie
+if (forcePopup) {
+  popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, [
+    `Wybrano ustawę: ${pick.name}.`,
+    'Teraz licytacja marszałkowska (aukcja).'
+  ], { buttonText: 'Dalej (Aukcja)' });
+}
+
+}
+
+function buildAutoPicksPospoliteA(state){
+  // zbierz kandydatów: po 1 listę kontrolowanych prowincji (bez znaczenia, czy jest fort)
+  const perPlayer = new Map(); // pidx -> [provinceId,...]
+  const players = state.settings?.players || [];
+
+  for (const [pid, prov] of Object.entries(state.provinces)){
+    const ctrlIdx = controllerIndexFromState(state, pid);
+    if (ctrlIdx == null) continue;
+    if (!perPlayer.has(ctrlIdx)) perPlayer.set(ctrlIdx, []);
+    perPlayer.get(ctrlIdx).push(prov.id);
+  }
+
+  // wylosuj po 1 prowincji na gracza
+  const picks = [];
+  for (const [pidx, arr] of perPlayer.entries()){
+    if (!arr.length) continue;
+    const k = Math.floor(Math.random() * arr.length);
+    picks.push({ playerIndex: pidx, provinceId: arr[k] });
+  }
+  return picks;
+}
+
+
+function buildAutoPicksFortA(state){
+  // zbuduj listę kandydatów per gracz: prowincje kontrolowane i bez fortu
+  const perPlayer = new Map(); // pidx -> [provinceId,...]
+  const players = state.settings?.players || [];
+
+  for (const [pid, prov] of Object.entries(state.provinces)){
+    if (prov.has_fort) continue;
+    const ctrlIdx = controllerIndexFromState(state, pid);
+    if (ctrlIdx == null) continue;
+    if (!perPlayer.has(ctrlIdx)) perPlayer.set(ctrlIdx, []);
+    perPlayer.get(ctrlIdx).push(prov.id);
+  }
+
+  // wylosuj po 1 prowincji dla każdego gracza, który ma kandydatów
+  const picks = [];
+  for (const [pidx, arr] of perPlayer.entries()){
+    if (!arr.length) continue;
+    const k = Math.floor(Math.random() * arr.length);
+    picks.push({ playerIndex: pidx, provinceId: arr[k] });
+  }
+  return picks;
+}
+
+// === Render „opisowych” przycisków wariantów (Z NAPRAWIONYM wywołaniem silnika) ===
+function renderLawChoiceUI(container, lawId, winnerName){
+  const spec = LAW_VARIANTS[lawId];
+  if (!spec) return;
+
+  const info = document.createElement('div');
+  info.style.color = '#94a3b8';
+  info.style.margin = '6px 0 10px';
+  info.textContent = `Zwycięzca aukcji: ${winnerName || '—'}. Ustawa: ${spec.title} — wybierz wariant.`;
+  container.appendChild(info);
+
+  if (Array.isArray(spec.describe) && spec.describe.length){
+    const desc = document.createElement('ul');
+    desc.style.margin = '0 0 8px';
+    desc.style.paddingLeft = '18px';
+    spec.describe.forEach(d => {
+      const li = document.createElement('li');
+      li.style.color = '#9ca3af';
+      li.textContent = d;
+      desc.appendChild(li);
+    });
+    container.appendChild(desc);
+  }
+
+  // mapka skrótu toru -> RaidTrackID
+  const TRACK_MAP = { N: RaidTrackID.N, E: RaidTrackID.E, S: RaidTrackID.S };
+
+  spec.buttons.forEach(b => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'phase-action';
+    btn.textContent = b.label;
+
+    btn.addEventListener('click', () => {
+      // przygotuj ewentualny 'extra'
+      let extra = undefined;
+      if (b.choice === 'B' && b.track){              // B z torem (3/4/6)
+        extra = { track: TRACK_MAP[b.track] };
+      } else if (b.choice === 'A'){
+        const s = game.getPublicState?.() || {};
+        if (lawId === 3 || lawId === 4){            // Pospolite ruszenie A
+          extra = buildAutoPicksPospoliteA(s);
+          if (!extra.length) ok('(UI) Nikt jednoznacznie nie kontroluje prowincji — brak przyrostów.');
+        } else if (lawId === 5){                    // Fortyfikacje A
+          extra = buildAutoPicksFortA(s);
+          if (!extra.length) ok('(UI) Brak kontrolowanych prowincji bez fortu — nic do położenia.');
+        }
+        // dla 1/2 i 6 A — extra niepotrzebne
+      }
+
+      ok(`Sejm: wybór wariantu ${b.choice}${b.track ? ` (tor ${b.track})` : ''}.`);
+      let lines;
+      try {
+        lines = game.sejm.chooseVariant(b.choice, extra);
+      } catch (e) {
+        err('Błąd przy wyborze wariantu: ' + e.message);
+        return;
+      }
+
+      popupFromEngine('Sejm — wybrano wariant', lines, {
+        buttonText: 'Dalej (Akcje)',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();    // przejście z „sejm” -> „actions”
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
+    });
+
+    container.appendChild(btn);
+  });
+}
 
 // ===================== Dane i narzędzia =====================
 const REGIONS = {
@@ -184,9 +438,17 @@ const popupCloseBtn = document.querySelector('.popup-close');
 
 let _popupOnClose = null;
 
-function openPopup({ title = '', text = '', imageUrl = '', onClose = null } = {}){
+function openPopup({
+  title = '',
+  text = '',
+  imageUrl = '',
+  buttonText = 'Zamknij',
+  onAction = null,            // ← callback wywoływany po kliknięciu przycisku
+  onClose = null,
+  hideImage = false
+} = {}){
   popupTitleEl.textContent = title || '';
-  // `text` może być stringiem lub tablicą linii z silnika
+
   const t = Array.isArray(text) ? text.filter(Boolean).join('\n') : (text || '');
   popupTextEl.textContent = t || '(brak danych)';
 
@@ -197,12 +459,29 @@ function openPopup({ title = '', text = '', imageUrl = '', onClose = null } = {}
     popupImgEl.removeAttribute('src');
     popupImgEl.hidden = true;
   }
+
+  // tekst przycisku i akcja
+  popupOkBtn.textContent = buttonText || 'OK';
+  popupOkBtn.onclick = async () => {
+    try {
+      if (typeof onAction === 'function') {
+        const res = await onAction();
+        // Jeżeli callback zwróci dokładnie false — NIE zamykaj (np. chcesz coś jeszcze dokończyć)
+        if (res === false) return;
+      }
+    } catch (e) {
+      console.error('Popup onAction error:', e);
+      // mimo błędu — zamkniemy, chyba że chcesz inaczej: wtedy w onAction zwróć false
+    }
+    closePopup();
+  };
+
   _popupOnClose = typeof onClose === 'function' ? onClose : null;
 
   popupEl.hidden = false;
-  // focus dla dostępności
   popupOkBtn.focus();
 }
+
 
 function closePopup(){
   popupEl.hidden = true;
@@ -210,7 +489,6 @@ function closePopup(){
   _popupOnClose = null;
 }
 // zamykanie: przycisk, X, klik w tło, Esc
-popupOkBtn?.addEventListener('click', closePopup);
 popupCloseBtn?.addEventListener('click', closePopup);
 popupEl?.addEventListener('click', (e)=>{ if (e.target === popupEl) closePopup(); });
 document.addEventListener('keydown', (e)=>{ if (!popupEl.hidden && e.key === 'Escape') closePopup(); });
@@ -673,113 +951,155 @@ function buildPhaseActionsSmart(s){
     tintByActive();
     return;
   }
-
-if (phase === 'events'){
-  const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
-
-  const rollBtn = chip('Losuj wydarzenie 1–25', () => {
-    const n = 1 + Math.floor(Math.random()*25);
-    ok(`(UI) wylosowano wydarzenie #${n}`);
-    // wywołaj silnik bezpośrednio, by mieć wynik:
-    const lines = game.events.apply(n);
-    logEngine(lines);               // wciąż logujemy do konsoli UI
-    syncUIFromGame();               // odśwież stan na mapie/panelach
-
-    // pokaż popup – tekst u góry, obrazek dodasz później (imageUrl opcjonalny)
-    popupFromEngine(`Wydarzenie #${n}`, lines, { imageUrl: DEFAULT_POPUP_IMG});
-  });
-
-  // opcjonalny przycisk „Dalej”, bez popupu
-  const nextBtn = chip('Dalej (gnext)', () => { 
-    const nxt = game.finishPhaseAndAdvance();
-    ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-    syncUIFromGame();
-  });
-
-  box.append(rollBtn, nextBtn);
-  phaseActionsEl.appendChild(box);
-  tintByActive(); return;
-}
-
-  if (phase === 'income'){
-    const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Tekst z silnika pokażę w popupie.');
   
-    const btnIncome = chip('Pobierz dochód', () => {
-      const lines = game.income.collect();  // tekst: „kto ile dostał”
-      ok('Zebrano dochód.');
+  if (phase === 'events'){
+    const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
+  
+    const rollBtn = chip('Losuj wydarzenie 1–25', () => {
+      const n = 1 + Math.floor(Math.random() * 25);
+      ok(`(UI) wylosowano wydarzenie #${n}`);
+  
+      // wywołanie silnika, żeby mieć tekst
+      const lines = game.events.apply(n);
       logEngine(lines);
       syncUIFromGame();
   
-      // popup z wynikiem; obrazek później -> ustawisz imageUrl
-      popupFromEngine('Dochód – podsumowanie', lines /*, { imageUrl: '...' }*/);
+      popupFromEngine(`Wydarzenie #${n}`, lines, {
+        imageUrl: EVENT_DEFAULT_POPUP_IMG,
+        buttonText: 'Dalej',
+        onAction: () => { const nxt = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`); syncUIFromGame(); }
+      });
     });
   
-    const btnNext = chip('Dalej (Sejm)', () => {
-      const nxt = game.finishPhaseAndAdvance();
-      ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-      syncUIFromGame();
-    });
-  
-    box.append(btnIncome, btnNext);
+    box.append(rollBtn);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
 
-  // ====== SEJM – rozdzielony na: AUKCJA -> USTAWA ======
-  if (phase === 'auction' || phase === 'sejm'){
-    const canceled = !!s.round_status?.sejm_canceled;
 
-    // AUKCJA (pokazuj dopóki nikt nie ma majority i sejm nie zerwany)
-    const someMajority = (s.settings?.players || []).some(p => p.majority);
-    if (phase === 'auction' || (!someMajority && !canceled)){
-      const boxA = section('Sejm – Aukcja', 'Aukcja marszałkowska: przypisz oferty graczom, a następnie rozstrzygnij.');
-      const quicks = [0,1,2,3];
-      (s.settings?.players || []).forEach(p => {
-        const row = el('div', { style:{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',margin:'6px 0'} });
-        row.append(el('span', { style:{ minWidth:'84px', fontWeight:'800' } }, p.name));
-        quicks.forEach(q => row.append(
-          chip(String(q), ()=>run(`gbid ${p.name} ${q}`), `gbid ${p.name} ${q}`)
-        ));
-        boxA.append(row);
+  if (phase === 'income'){
+    const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Podsumowanie pojawi się w popupie.');
+  
+    const btnIncome = chip('Pobierz dochód', () => {
+      const lines = game.income.collect();
+      ok('Zebrano dochód.');
+      logEngine(lines);
+      syncUIFromGame();
+    
+      popupFromEngine('Dochód – podsumowanie', lines, {
+        imageUrl: INCOME_POPUP_IMG,
+        buttonText: 'Dalej (Sejm)',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance(); // -> auction
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+          // UWAGA: nic tu nie otwieramy – tylko przejście fazy + sync
+        },
+        onClose: () => {
+          // Teraz, gdy poprzedni popup już się zamknął,
+          // bezpiecznie otwieramy popup z ustawą
+          ensureSejmLawForRound(game.getPublicState(), { forcePopup: true });
+          buildPhaseActionsSmart(game.getPublicState());
+        }
       });
-
-      boxA.append(chip('Rozstrzygnij aukcję (gauction)', ()=>run('gauction')));
-      if (phase === 'auction') phaseActionsEl.appendChild(boxA);
-      else phaseActionsEl.appendChild(boxA); // w "sejm" też pokaż, jeśli brak majority
-    }
-
-    // USTAWA
-    if (!canceled){
-      const boxB = section('Sejm – Ustawa', 'Wybierz ustawę (1–6). Silnik wypisze warianty A/B w logu; następnie zatwierdź wariant.');
-      const laws = el('div', {style:{display:'flex',flexWrap:'wrap',gap:'8px'}});
-      for (let n=1;n<=6;n++) laws.append(chip(`Ustawa ${n}`, ()=>run(`glaw ${n}`)));
-      const bWrap = el('div', {style:{display:'flex',gap:'8px',marginTop:'8px'}});
-      // warianty A/B (bez payloadów – silnik przyjmie puste, albo B z torem niżej)
-      bWrap.append(chip('Wariant A (gchoice A)', ()=>run('gchoice A')));
-      // Dla wariantów wymagających toru (3B/4B/6B) daj szybki wybór toru:
-      const tor = el('select', { class:'phase-action', style:{padding:'8px 10px'} },
-        el('option',{value:''},'— tor (N/E/S) —'),
-        el('option',{value:'N'},'Szwecja (N)'),
-        el('option',{value:'E'},'Moskwa (E)'),
-        el('option',{value:'S'},'Tatarzy (S)'),
-      );
-      const bBtn = chip('Wariant B (gchoice B)', ()=>{
-        // uwaga: konsolowa komenda nie przyjmuje payloadu – wybór toru służy tylko informacyjnie do logu
-        const v = tor.value; if (!v) ok('Wariant B → (wybór toru w UI; silnik bez payloadu).');
-        run('gchoice B');
-      });
-      bWrap.append(tor, bBtn);
-      const nextBtn = chip('Zakończ Sejm (gnext)', ()=>run('gnext'));
-
-      boxB.append(laws, bWrap, el('div',{style:{height:'8px'}}), nextBtn);
-      phaseActionsEl.appendChild(boxB);
-    } else {
-      const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
-      info.append(chip('Dalej (gnext)', ()=>run('gnext')));
-      phaseActionsEl.appendChild(info);
-    }
+    });
+  
+    box.append(btnIncome);
+    phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
+
+// ====== SEJM (losowanie ustawy -> aukcja -> wybór wariantu) ======
+if (phase === 'auction' || phase === 'sejm'){
+  const canceled = !!s.round_status?.sejm_canceled;
+
+  if (canceled){
+    const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
+    phaseActionsEl.appendChild(info);
+    tintByActive(); return;
+  }
+
+  // Upewnij się, że ustawa na tę rundę jest ustawiona (i jeśli trzeba — pokaż popup)
+  ensureSejmLawForRound(s);
+
+  // Czy ktoś ma majority (po rozstrzygnięciu aukcji)?
+  const someMajority = (s.settings?.players || []).some(p => p.majority);
+
+  // AUKCJA — dopóki nie ma majority
+  if (!someMajority){
+    const boxA = section('Sejm — Aukcja', `Licytacja marszałkowska dla ustawy: ${_sejmLaw?.name || '—'}.`);
+    const quicks = [0,1,2,3];
+    (s.settings?.players || []).forEach(p => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.gap = '6px';
+      row.style.alignItems = 'center';
+      row.style.flexWrap = 'wrap';
+      row.style.margin = '6px 0';
+
+      const tag = document.createElement('span');
+      tag.style.minWidth = '84px';
+      tag.style.fontWeight = '800';
+      tag.textContent = p.name;
+      row.appendChild(tag);
+
+      quicks.forEach(q => {
+        row.appendChild(chip(String(q), () => run(`gbid ${p.name} ${q}`), `gbid ${p.name} ${q}`));
+      });
+      boxA.append(row);
+    });
+
+    // Rozstrzygnięcie aukcji -> popup z wynikiem, potem UI przełącza się na wybór wariantu
+    boxA.append(chip('Rozstrzygnij aukcję', () => {
+      const linesAuction = game.auction.resolve();
+      logEngine(linesAuction);
+      syncUIFromGame();
+      
+      const after = game.getPublicState?.();
+      const winner = after?.settings?.players?.find(p => p.majority)?.name || '—';
+      _sejmAuctionWinner = winner;
+      
+      // Dopiero teraz ustawiamy ustawę w silniku (jest większość)
+      let linesLaw = [];
+      if (_sejmLaw?.id) {
+        linesLaw = game.sejm.setLaw(_sejmLaw.id) || [];
+        logEngine(linesLaw);
+      }
+      
+      popupFromEngine('Sejm — wynik aukcji', [
+        `Zwycięzca aukcji: ${winner}.`,
+        ...(Array.isArray(linesAuction) ? linesAuction : [linesAuction]),
+        ...(Array.isArray(linesLaw) ? linesLaw : [linesLaw]),
+        `Ustawa do wyboru: ${_sejmLaw?.name || '—'}.`
+      ], {
+        buttonText: 'Dalej (Wybór wariantu)',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance(); // auction -> sejm
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    
+          // po przejściu fazy odśwież panel (pojawią się przyciski wariantów)
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+        }
+      });
+    }));
+
+    phaseActionsEl.appendChild(boxA);
+    tintByActive(); return;
+  }
+
+  // WYBÓR WARIANTU — opisowe przyciski dla wylosowanej ustawy
+  {
+    const winner = _sejmAuctionWinner
+      || (s.settings?.players?.find(p => p.majority)?.name || '—');
+
+    const boxB = section('Sejm — Wybór wariantu', `Ustawa: ${_sejmLaw?.name || '—'}`);
+    renderLawChoiceUI(boxB, _sejmLaw?.id, winner);
+    phaseActionsEl.appendChild(boxB);
+  }
+
+  tintByActive(); return;
+}
 
   // ====== AKCJE ======
   if (phase === 'actions'){
@@ -825,13 +1145,29 @@ if (phase === 'events'){
   // ====== WZMACNIANIE ======
   if (phase === 'reinforcements'){
     const box = section('Wzmacnianie', 'Wylosuj N, S, E (1–6) i zastosuj wzmocnienia na torach wrogów.');
-    box.append(chip('Wylosuj i zastosuj (greinf N S E)', ()=>{
+    const btn = chip('Wylosuj i zastosuj (greinf N S E)', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
+    
+      const lines = game.reinforce.reinforce({ N, S, E });
       ok(`(UI) wzmocnienia: N=${N}, S=${S}, E=${E}`);
-      run(`greinf ${N} ${S} ${E}`);
-      run('gnext');
-    }));
+      logEngine(lines);
+      syncUIFromGame();
+    
+      popupFromEngine('Wzmacnianie — wyniki', [
+        `Rzuty: N=${N}, S=${S}, E=${E}.`,
+        ...(Array.isArray(lines) ? lines : [lines]),
+      ], {
+        imageUrl: REINFORCEMENTS_POPUP_IMG,
+        buttonText: 'Dalej (Najazdy)',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
+    });
+    box.append(btn);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
@@ -847,13 +1183,29 @@ if (phase === 'events'){
   // ====== SPUSTOSZENIA ======
   if (phase === 'devastation'){
     const box = section('Spustoszenia', 'Wylosuj N, S, E (1–6) i zastosuj spustoszenia, potem przejdź do następnej rundy.');
-    box.append(chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
+    const btnDev = chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
+    
+      const lines = game.devastation.resolve({ N, S, E });
       ok(`(UI) spustoszenia: N=${N}, S=${S}, E=${E}`);
-      run(`gdevast ${N} ${S} ${E}`);
-      run('gnext');
-    }));
+      logEngine(lines);
+      syncUIFromGame();
+    
+      popupFromEngine('Najazdy — spustoszenia', [
+        `Rzuty: N=${N}, S=${S}, E=${E}.`,
+        ...(Array.isArray(lines) ? lines : [lines]),
+      ], {
+        imageUrl: DEVASTATION_POPUP_IMG,
+        buttonText: 'Dalej',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
+    });
+    box.append(btnDev);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
