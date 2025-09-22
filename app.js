@@ -698,13 +698,24 @@ if (phase === 'events'){
   tintByActive(); return;
 }
 
-  // ====== DOCHÓD ======
-  if (phase === 'income'){
-    const box = section('Dochód', 'Zbierz dochód wszystkich graczy i przejdź do Sejmu.');
-    box.append(chip('Pobierz dochód (gincome)', ()=>{ run('gincome'); run('gnext'); }));
-    phaseActionsEl.appendChild(box);
-    tintByActive(); return;
-  }
+if (phase === 'income'){
+  const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Tekst z silnika pokażę w popupie.');
+
+  const btnIncome = chip('Pobierz dochód', () => {
+    const lines = game.income.collect();  // tekst: „kto ile dostał”
+    ok('Zebrano dochód.');
+    logEngine(lines);
+    syncUIFromGame();
+
+    // popup z wynikiem; obrazek później -> ustawisz imageUrl
+    popupFromEngine('Dochód – podsumowanie', lines /*, { imageUrl: '...' }*/);
+  });
+
+  const btnNext = chip('Dalej (Sejm)', () => {
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  });
 
   // ====== SEJM – rozdzielony na: AUKCJA -> USTAWA ======
   if (phase === 'auction' || phase === 'sejm'){
