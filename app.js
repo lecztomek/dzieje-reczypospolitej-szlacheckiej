@@ -891,16 +891,15 @@ function buildPhaseActionsSmart(s){
           const nxt = game.finishPhaseAndAdvance(); // -> auction
           ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
           syncUIFromGame();
-    
-          // natychmiast pokaż popup z ustawą tej rundy
+          // UWAGA: nic tu nie otwieramy – tylko przejście fazy + sync
+        },
+        onClose: () => {
+          // Teraz, gdy poprzedni popup już się zamknął,
+          // bezpiecznie otwieramy popup z ustawą
           ensureSejmLawForRound(game.getPublicState(), { forcePopup: true });
-    
-          // oraz odśwież panel, żeby widzieć przyciski aukcji
           buildPhaseActionsSmart(game.getPublicState());
         }
       });
-    });
-
   
     box.append(btnIncome);
     phaseActionsEl.appendChild(box);
