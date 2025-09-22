@@ -978,21 +978,6 @@ if (phase === 'auction' || phase === 'sejm'){
   tintByActive(); return;
 }
 
-
-  // Krok 3: WYBÓR WARIANTU — opisowe przyciski dla wylosowanej ustawy
-  {
-    const winner = _sejmAuctionWinner
-      || (s.settings?.players?.find(p => p.majority)?.name || '—');
-
-    const boxB = section('Sejm — Wybór wariantu', `Ustawa: ${_sejmLaw?.name || '—'}`);
-    renderLawChoiceUI(boxB, _sejmLaw?.id, winner);
-    phaseActionsEl.appendChild(boxB);
-  }
-
-  tintByActive(); return;
-}
-
-
   // ====== AKCJE ======
   if (phase === 'actions'){
     const box = section('Akcje', 'Akcje graczy w tej rundzie. Wybierz typ akcji i – jeśli trzeba – wskaż prowincję.');
