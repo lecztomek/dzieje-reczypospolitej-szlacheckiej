@@ -73,39 +73,43 @@ const LAW_VARIANTS = {
   },
 };
 
-// ——— helper: upewnij się, że mamy ustawę na bieżącą rundę i opcjonalnie pokaż popup
 function ensureSejmLawForRound(state, { forcePopup = false } = {}){
   const s = state || game.getPublicState?.();
   if (!s) return;
 
   const currentRound = s.round_status?.current_round ?? roundCur;
 
-  // jeśli już wylosowana w tej rundzie
+  // jeśli już mamy ustawę na tę rundę — ewentualnie przypomnij popupem
   if (_sejmLawRound === currentRound && _sejmLaw) {
     if (forcePopup) {
       popupFromEngine(`Sejm — wylosowano ustawę: ${_sejmLaw.name}`, [
-        `Wybrano ustawę: ${_sejmLaw.name}.`
+        `Wybrano ustawę: ${_sejmLaw.name}.`,
+        'Teraz licytacja marszałkowska.'
       ], { buttonText: 'Dalej (Aukcja)' });
     }
     return;
   }
 
-  // losowanie nowej ustawy 1..4 i ustawienie jej w silniku
+  // losowanie nowej ustawy 1..4 (UI)
   const pick = LAW_POOL[Math.floor(Math.random() * LAW_POOL.length)];
   _sejmLawRound = currentRound;
   _sejmLaw = pick;
   _sejmAuctionWinner = null;
 
-  const lines = game.sejm.setLaw(pick.id);
-  logEngine(lines);
+  // UWAGA: teraz NIE wołamy game.sejm.setLaw() jeśli jesteśmy w „auction”
+  const phase = s.current_phase || game.round?.currentPhaseId?.();
+  if (phase === 'sejm') {
+    // jeżeli z jakiegoś powodu trafiliśmy tu już po aukcji, ustaw od razu w silniku
+    const lines = game.sejm.setLaw(pick.id);
+    logEngine(lines);
+  }
 
-  // popup informacyjny
+  // popup informacyjny zawsze
   popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, [
     `Wybrano ustawę: ${pick.name}.`,
-    ...(Array.isArray(lines) ? lines : [lines])
+    'Teraz licytacja marszałkowska.'
   ], { buttonText: 'Dalej (Aukcja)' });
 }
-
 
 // Render „opisowych” przycisków wariantów
 function renderLawChoiceUI(container, lawId, winnerName){
@@ -944,22 +948,32 @@ if (phase === 'auction' || phase === 'sejm'){
 
     // Rozstrzygnięcie aukcji -> popup z wynikiem, potem UI przełącza się na wybór wariantu
     boxA.append(chip('Rozstrzygnij aukcję', () => {
-      const lines = game.auction.resolve();
-      logEngine(lines);
+      const linesAuction = game.auction.resolve();
+      logEngine(linesAuction);
       syncUIFromGame();
-
+    
       const after = game.getPublicState?.();
       const winner = after?.settings?.players?.find(p => p.majority)?.name || '—';
       _sejmAuctionWinner = winner;
-
+    
+      // TERAZ dopiero ustawiamy ustawę w silniku (już jest większość)
+      let linesLaw = [];
+      if (_sejmLaw?.id) {
+        linesLaw = game.sejm.setLaw(_sejmLaw.id) || [];
+        logEngine(linesLaw);
+      }
+    
       popupFromEngine('Sejm — wynik aukcji', [
         `Zwycięzca aukcji: ${winner}.`,
-        ...(Array.isArray(lines) ? lines : [lines])
+        ...(Array.isArray(linesAuction) ? linesAuction : [linesAuction]),
+        ...(Array.isArray(linesLaw) ? linesLaw : [linesLaw]),
+        `Ustawa do głosowania: ${_sejmLaw?.name || '—'}.`
       ], {
         buttonText: 'Dalej (Wybór wariantu)',
         onAction: () => { buildPhaseActionsSmart(game.getPublicState()); }
       });
     }));
+
 
     phaseActionsEl.appendChild(boxA);
     tintByActive(); return;
