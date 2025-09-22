@@ -686,7 +686,7 @@ if (phase === 'events'){
     syncUIFromGame();               // odśwież stan na mapie/panelach
 
     // pokaż popup – tekst u góry, obrazek dodasz później (imageUrl opcjonalny)
-    popupFromEngine(`Wydarzenie #${n}`, lines);
+    popupFromEngine(`Wydarzenie #${n}`, lines, { imageUrl: 'images/e-default.png' });
   });
 
   // opcjonalny przycisk „Dalej”, bez popupu
