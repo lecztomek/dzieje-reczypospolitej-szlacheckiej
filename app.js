@@ -73,6 +73,40 @@ const LAW_VARIANTS = {
   },
 };
 
+// ——— helper: upewnij się, że mamy ustawę na bieżącą rundę i opcjonalnie pokaż popup
+function ensureSejmLawForRound(state, { forcePopup = false } = {}){
+  const s = state || game.getPublicState?.();
+  if (!s) return;
+
+  const currentRound = s.round_status?.current_round ?? roundCur;
+
+  // jeśli już wylosowana w tej rundzie
+  if (_sejmLawRound === currentRound && _sejmLaw) {
+    if (forcePopup) {
+      popupFromEngine(`Sejm — wylosowano ustawę: ${_sejmLaw.name}`, [
+        `Wybrano ustawę: ${_sejmLaw.name}.`
+      ], { buttonText: 'Dalej (Aukcja)' });
+    }
+    return;
+  }
+
+  // losowanie nowej ustawy 1..4 i ustawienie jej w silniku
+  const pick = LAW_POOL[Math.floor(Math.random() * LAW_POOL.length)];
+  _sejmLawRound = currentRound;
+  _sejmLaw = pick;
+  _sejmAuctionWinner = null;
+
+  const lines = game.sejm.setLaw(pick.id);
+  logEngine(lines);
+
+  // popup informacyjny
+  popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, [
+    `Wybrano ustawę: ${pick.name}.`,
+    ...(Array.isArray(lines) ? lines : [lines])
+  ], { buttonText: 'Dalej (Aukcja)' });
+}
+
+
 // Render „opisowych” przycisków wariantów
 function renderLawChoiceUI(container, lawId, winnerName){
   const spec = LAW_VARIANTS[lawId];
@@ -845,44 +879,32 @@ function buildPhaseActionsSmart(s){
       ok('Zebrano dochód.');
       logEngine(lines);
       syncUIFromGame();
-  
+    
       popupFromEngine('Dochód – podsumowanie', lines, {
-        imageUrl: INCOME_POPUP_IMG,
         buttonText: 'Dalej (Sejm)',
-        onAction: () => { const nxt = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`); syncUIFromGame(); }
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance(); // -> auction
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+    
+          // natychmiast pokaż popup z ustawą tej rundy
+          ensureSejmLawForRound(game.getPublicState(), { forcePopup: true });
+    
+          // oraz odśwież panel, żeby widzieć przyciski aukcji
+          buildPhaseActionsSmart(game.getPublicState());
+        }
       });
-      
     });
+
   
     box.append(btnIncome);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
 
-
 // ====== SEJM (losowanie ustawy -> aukcja -> wybór wariantu) ======
 if (phase === 'auction' || phase === 'sejm'){
   const canceled = !!s.round_status?.sejm_canceled;
-  const currentRound = s.round_status?.current_round ?? roundCur;
-
-  // Krok 1: jeżeli w tej rundzie nie wylosowano jeszcze ustawy – losujemy 1..4
-  if (!canceled && _sejmLawRound !== currentRound){
-    const pick = LAW_POOL[Math.floor(Math.random() * LAW_POOL.length)];
-    _sejmLawRound = currentRound;
-    _sejmLaw = pick;            // {id, name}
-    _sejmAuctionWinner = null;
-
-    const lines = game.sejm.setLaw(pick.id);
-    logEngine(lines);
-
-    popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, [
-      `Wybrano ustawę: ${pick.name}.`,
-      ...(Array.isArray(lines) ? lines : [lines])
-    ], {
-      buttonText: 'Dalej (Aukcja)',
-      onAction: () => { /* zostajemy w tej fazie, potem UI pokaże aukcję */ }
-    });
-  }
 
   if (canceled){
     const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
@@ -890,10 +912,13 @@ if (phase === 'auction' || phase === 'sejm'){
     tintByActive(); return;
   }
 
-  // Czy ktoś już ma majority (po rozstrzygnięciu aukcji)?
+  // Upewnij się, że ustawa na tę rundę jest ustawiona (i jeśli trzeba — pokaż popup)
+  ensureSejmLawForRound(s);
+
+  // Czy ktoś ma majority (po rozstrzygnięciu aukcji)?
   const someMajority = (s.settings?.players || []).some(p => p.majority);
 
-  // Krok 2: AUKCJA — dopóki nie ma majority
+  // AUKCJA — dopóki nie ma majority
   if (!someMajority){
     const boxA = section('Sejm — Aukcja', `Licytacja marszałkowska dla ustawy: ${_sejmLaw?.name || '—'}.`);
     const quicks = [0,1,2,3];
@@ -939,6 +964,20 @@ if (phase === 'auction' || phase === 'sejm'){
     phaseActionsEl.appendChild(boxA);
     tintByActive(); return;
   }
+
+  // WYBÓR WARIANTU — opisowe przyciski dla wylosowanej ustawy
+  {
+    const winner = _sejmAuctionWinner
+      || (s.settings?.players?.find(p => p.majority)?.name || '—');
+
+    const boxB = section('Sejm — Wybór wariantu', `Ustawa: ${_sejmLaw?.name || '—'}`);
+    renderLawChoiceUI(boxB, _sejmLaw?.id, winner);
+    phaseActionsEl.appendChild(boxB);
+  }
+
+  tintByActive(); return;
+}
+
 
   // Krok 3: WYBÓR WARIANTU — opisowe przyciski dla wylosowanej ustawy
   {
