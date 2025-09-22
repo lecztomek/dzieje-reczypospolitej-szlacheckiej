@@ -900,6 +900,7 @@ function buildPhaseActionsSmart(s){
           buildPhaseActionsSmart(game.getPublicState());
         }
       });
+    });
   
     box.append(btnIncome);
     phaseActionsEl.appendChild(box);
