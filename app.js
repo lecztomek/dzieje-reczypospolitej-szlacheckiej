@@ -698,24 +698,29 @@ if (phase === 'events'){
   tintByActive(); return;
 }
 
-if (phase === 'income'){
-  const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Tekst z silnika pokażę w popupie.');
-
-  const btnIncome = chip('Pobierz dochód', () => {
-    const lines = game.income.collect();  // tekst: „kto ile dostał”
-    ok('Zebrano dochód.');
-    logEngine(lines);
-    syncUIFromGame();
-
-    // popup z wynikiem; obrazek później -> ustawisz imageUrl
-    popupFromEngine('Dochód – podsumowanie', lines /*, { imageUrl: '...' }*/);
-  });
-
-  const btnNext = chip('Dalej (Sejm)', () => {
-    const nxt = game.finishPhaseAndAdvance();
-    ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-    syncUIFromGame();
-  });
+  if (phase === 'income'){
+    const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Tekst z silnika pokażę w popupie.');
+  
+    const btnIncome = chip('Pobierz dochód', () => {
+      const lines = game.income.collect();  // tekst: „kto ile dostał”
+      ok('Zebrano dochód.');
+      logEngine(lines);
+      syncUIFromGame();
+  
+      // popup z wynikiem; obrazek później -> ustawisz imageUrl
+      popupFromEngine('Dochód – podsumowanie', lines /*, { imageUrl: '...' }*/);
+    });
+  
+    const btnNext = chip('Dalej (Sejm)', () => {
+      const nxt = game.finishPhaseAndAdvance();
+      ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+      syncUIFromGame();
+    });
+  
+    box.append(btnIncome, btnNext);
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
 
   // ====== SEJM – rozdzielony na: AUKCJA -> USTAWA ======
   if (phase === 'auction' || phase === 'sejm'){
