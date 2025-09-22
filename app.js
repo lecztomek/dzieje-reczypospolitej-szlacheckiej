@@ -141,32 +141,48 @@ if (forcePopup) {
 
 }
 
-
-// === POMOCNIKI: auto-picki do wariantu A (3/4 i 5) ===
 function buildAutoPicksPospoliteA(state){
-  // po 1 kontrolowanej prowincji na gracza (jeśli ma jakąkolwiek)
-  const picks = [];
+  // zbierz kandydatów: po 1 listę kontrolowanych prowincji (bez znaczenia, czy jest fort)
+  const perPlayer = new Map(); // pidx -> [provinceId,...]
   const players = state.settings?.players || [];
-  const takenFor = new Set();
+
   for (const [pid, prov] of Object.entries(state.provinces)){
     const ctrlIdx = controllerIndexFromState(state, pid);
-    if (ctrlIdx == null || takenFor.has(ctrlIdx)) continue;
-    picks.push({ playerIndex: ctrlIdx, provinceId: prov.id });
-    takenFor.add(ctrlIdx);
+    if (ctrlIdx == null) continue;
+    if (!perPlayer.has(ctrlIdx)) perPlayer.set(ctrlIdx, []);
+    perPlayer.get(ctrlIdx).push(prov.id);
+  }
+
+  // wylosuj po 1 prowincji na gracza
+  const picks = [];
+  for (const [pidx, arr] of perPlayer.entries()){
+    if (!arr.length) continue;
+    const k = Math.floor(Math.random() * arr.length);
+    picks.push({ playerIndex: pidx, provinceId: arr[k] });
   }
   return picks;
 }
+
+
 function buildAutoPicksFortA(state){
-  // pierwsza kontrolowana prowincja BEZ fortu – po 1 na gracza
-  const picks = [];
+  // zbuduj listę kandydatów per gracz: prowincje kontrolowane i bez fortu
+  const perPlayer = new Map(); // pidx -> [provinceId,...]
   const players = state.settings?.players || [];
-  const takenFor = new Set();
+
   for (const [pid, prov] of Object.entries(state.provinces)){
     if (prov.has_fort) continue;
     const ctrlIdx = controllerIndexFromState(state, pid);
-    if (ctrlIdx == null || takenFor.has(ctrlIdx)) continue;
-    picks.push({ playerIndex: ctrlIdx, provinceId: prov.id });
-    takenFor.add(ctrlIdx);
+    if (ctrlIdx == null) continue;
+    if (!perPlayer.has(ctrlIdx)) perPlayer.set(ctrlIdx, []);
+    perPlayer.get(ctrlIdx).push(prov.id);
+  }
+
+  // wylosuj po 1 prowincji dla każdego gracza, który ma kandydatów
+  const picks = [];
+  for (const [pidx, arr] of perPlayer.entries()){
+    if (!arr.length) continue;
+    const k = Math.floor(Math.random() * arr.length);
+    picks.push({ playerIndex: pidx, provinceId: arr[k] });
   }
   return picks;
 }
