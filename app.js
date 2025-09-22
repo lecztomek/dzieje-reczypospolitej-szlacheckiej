@@ -206,10 +206,12 @@ function openPopup({
     popupImgEl.alt = title ? `Grafika: ${title}` : 'Grafika w popupie';
     let triedFallback = false;
     popupImgEl.onerror = () => {
-      if (!triedFallback && popupImgEl.src !== location.origin + DEFAULT_POPUP_IMG && popupImgEl.src !== DEFAULT_POPUP_IMG) {
+      if (!triedFallback) {
         triedFallback = true;
+        // spróbuj globalnego fallbacku
         popupImgEl.src = DEFAULT_POPUP_IMG;
       } else {
+        // jeśli nawet fallback nie działa — schowaj obrazek
         popupImgEl.hidden = true;
       }
     };
@@ -248,7 +250,6 @@ function closePopup(){
   _popupOnClose = null;
 }
 // zamykanie: przycisk, X, klik w tło, Esc
-popupOkBtn?.addEventListener('click', closePopup);
 popupCloseBtn?.addEventListener('click', closePopup);
 popupEl?.addEventListener('click', (e)=>{ if (e.target === popupEl) closePopup(); });
 document.addEventListener('keydown', (e)=>{ if (!popupEl.hidden && e.key === 'Escape') closePopup(); });
@@ -724,14 +725,10 @@ function buildPhaseActionsSmart(s){
       logEngine(lines);
       syncUIFromGame();
   
-      // „Dalej” w popupie:
       popupFromEngine(`Wydarzenie #${n}`, lines, {
+        imageUrl: EVENT_DEFAULT_POPUP_IMG,
         buttonText: 'Dalej',
-        onAction: () => {
-          const nxt = game.finishPhaseAndAdvance();
-          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-          syncUIFromGame();
-        }
+        onAction: () => { const nxt = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`); syncUIFromGame(); }
       });
     });
   
@@ -751,13 +748,11 @@ function buildPhaseActionsSmart(s){
       syncUIFromGame();
   
       popupFromEngine('Dochód – podsumowanie', lines, {
+        imageUrl: INCOME_POPUP_IMG,
         buttonText: 'Dalej (Sejm)',
-        onAction: () => {
-          const nxt = game.finishPhaseAndAdvance();
-          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-          syncUIFromGame();
-        }
+        onAction: () => { const nxt = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`); syncUIFromGame(); }
       });
+      
     });
   
     box.append(btnIncome);
