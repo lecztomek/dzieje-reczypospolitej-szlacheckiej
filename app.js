@@ -18,9 +18,11 @@ let _sejmAuctionWinner = null;         // nazwa zwycięzcy aukcji (po rozstrzygn
 
 const LAW_POOL = [
   { id: 1, name: 'Podatek' },
-  { id: 2, name: 'Pospolite ruszenie' },
-  { id: 3, name: 'Fortyfikacje' },
-  { id: 4, name: 'Pokój' },
+  { id: 2, name: 'Podatek' },
+  { id: 3, name: 'Pospolite ruszenie' },
+  { id: 4, name: 'Pospolite ruszenie' },
+  { id: 5, name: 'Fortyfikacje' },
+  { id: 6, name: 'Pokój' },
 ];
 
 // Opisy i przyciski dla wariantów (zgodnie z silnikiem)
