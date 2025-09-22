@@ -103,11 +103,14 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
     logEngine(lines);
   }
 
-  // popup informacyjny (UI)
+// popup informacyjny (UI) – tylko na żądanie
+if (forcePopup) {
   popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, [
     `Wybrano ustawę: ${pick.name}.`,
     'Teraz licytacja marszałkowska (aukcja).'
   ], { buttonText: 'Dalej (Aukcja)' });
+}
+
 }
 
 
