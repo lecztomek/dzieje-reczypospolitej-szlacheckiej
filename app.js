@@ -11,6 +11,119 @@ window.RaidTrackID = RaidTrackID;
 const EVENT_DEFAULT_POPUP_IMG = './images/e-default.png';
 const INCOME_POPUP_IMG = './images/income.png';
 
+// ==== Sejm: stan + opisy ustaw ====
+let _sejmLawRound = -1;                // runda, w której wylosowaliśmy ustawę
+let _sejmLaw = null;                   // { id, name }
+let _sejmAuctionWinner = null;         // nazwa zwycięzcy aukcji (po rozstrzygnięciu)
+
+const LAW_POOL = [
+  { id: 1, name: 'Podatek' },
+  { id: 2, name: 'Pospolite ruszenie' },
+  { id: 3, name: 'Fortyfikacje' },
+  { id: 4, name: 'Pokój' },
+];
+
+// Opisy i przyciski dla wariantów (opisowe labelki)
+const LAW_VARIANTS = {
+  1: { // Podatek
+    title: 'Podatek',
+    buttons: [
+      { label: 'Podatek — wariant A', choice: 'A' },
+      { label: 'Podatek — wariant B', choice: 'B' },
+    ],
+    describe: [
+      'A: efekt podatkowy wg zasad (wszyscy).',
+      'B: efekt podatkowy faworyzujący zwycięzcę aukcji (wg zasad).',
+    ],
+  },
+  2: { // Pospolite ruszenie
+    title: 'Pospolite ruszenie',
+    buttons: [
+      { label: 'Pospolite ruszenie — wariant A', choice: 'A' },
+      { label: 'Pospolite ruszenie — wariant B', choice: 'B' },
+    ],
+    describe: [
+      'A: mobilizacja ogólna (wszyscy gracze, wg zasad).',
+      'B: wzmocnienie u zwycięzcy aukcji (wg zasad).',
+    ],
+  },
+  3: { // Fortyfikacje
+    title: 'Fortyfikacje',
+    buttons: [
+      { label: 'Fortyfikacje — wariant A', choice: 'A' },
+      { label: 'Fortyfikacje — wariant B', choice: 'B' },
+    ],
+    describe: [
+      'A: wzmocnienia obronne ogólne (wg zasad).',
+      'B: wzmocnienia obronne selektywne (wg zasad).',
+    ],
+  },
+  4: { // Pokój
+    title: 'Pokój',
+    buttons: [
+      { label: 'Pokój — wszyscy sąsiedzi (tory −1)', choice: 'A' },
+      { label: 'Pokój — Szwecja (tor −2)', choice: 'B', track: 'N' },
+      { label: 'Pokój — Moskwa (tor −2)', choice: 'B', track: 'E' },
+      { label: 'Pokój — Tatarzy (tor −2)', choice: 'B', track: 'S' },
+    ],
+    describe: [
+      'A: wszyscy sąsiedzi: ich tory −1.',
+      'B: jeden sąsiad (Szwecja/Moskwa/Tatarzy): jego tor −2.',
+    ],
+  },
+};
+
+// Render „opisowych” przycisków wariantów
+function renderLawChoiceUI(container, lawId, winnerName){
+  const spec = LAW_VARIANTS[lawId];
+  if (!spec) return;
+
+  const info = document.createElement('div');
+  info.style.color = '#94a3b8';
+  info.style.margin = '6px 0 10px';
+  info.textContent = `Zwycięzca aukcji: ${winnerName || '—'}. Wybierz wariant ustawy: ${spec.title}`;
+  container.appendChild(info);
+
+  // Dodatkowe opisy A/B nad przyciskami
+  if (Array.isArray(spec.describe) && spec.describe.length){
+    const desc = document.createElement('ul');
+    desc.style.margin = '0 0 8px';
+    desc.style.paddingLeft = '18px';
+    spec.describe.forEach(d => {
+      const li = document.createElement('li');
+      li.style.color = '#9ca3af';
+      li.textContent = d;
+      desc.appendChild(li);
+    });
+    container.appendChild(desc);
+  }
+
+  // Przyciski wariantów z opisami
+  spec.buttons.forEach(b => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'phase-action';
+    btn.textContent = b.label;
+    btn.addEventListener('click', () => {
+      const trackInfo = b.track ? ` (tor ${b.track})` : '';
+      ok(`Sejm: wybór wariantu ${b.choice}${trackInfo}.`);
+      const lines = game.sejm.chooseVariant(b.choice); // silnik nie przyjmuje toru – dopiszemy tylko do logu
+      if (b.track) ok(`(UI) Wybrany tor: ${b.track} (informacyjnie dla logu)`);
+
+      popupFromEngine('Sejm — wybrano wariant', lines, {
+        buttonText: 'Dalej (Akcje)',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
+    });
+    container.appendChild(btn);
+  });
+}
+
+
 // ===================== Dane i narzędzia =====================
 const REGIONS = {
   prusy: { key: "prusy", el: null, aliases: ["prusy"] },
@@ -761,61 +874,99 @@ function buildPhaseActionsSmart(s){
   }
 
 
-  // ====== SEJM – rozdzielony na: AUKCJA -> USTAWA ======
-  if (phase === 'auction' || phase === 'sejm'){
-    const canceled = !!s.round_status?.sejm_canceled;
+// ====== SEJM (losowanie ustawy -> aukcja -> wybór wariantu) ======
+if (phase === 'auction' || phase === 'sejm'){
+  const canceled = !!s.round_status?.sejm_canceled;
+  const currentRound = s.round_status?.current_round ?? roundCur;
 
-    // AUKCJA (pokazuj dopóki nikt nie ma majority i sejm nie zerwany)
-    const someMajority = (s.settings?.players || []).some(p => p.majority);
-    if (phase === 'auction' || (!someMajority && !canceled)){
-      const boxA = section('Sejm – Aukcja', 'Aukcja marszałkowska: przypisz oferty graczom, a następnie rozstrzygnij.');
-      const quicks = [0,1,2,3];
-      (s.settings?.players || []).forEach(p => {
-        const row = el('div', { style:{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',margin:'6px 0'} });
-        row.append(el('span', { style:{ minWidth:'84px', fontWeight:'800' } }, p.name));
-        quicks.forEach(q => row.append(
-          chip(String(q), ()=>run(`gbid ${p.name} ${q}`), `gbid ${p.name} ${q}`)
-        ));
-        boxA.append(row);
-      });
+  // Krok 1: jeżeli w tej rundzie nie wylosowano jeszcze ustawy – losujemy 1..4
+  if (!canceled && _sejmLawRound !== currentRound){
+    const pick = LAW_POOL[Math.floor(Math.random() * LAW_POOL.length)];
+    _sejmLawRound = currentRound;
+    _sejmLaw = pick;            // {id, name}
+    _sejmAuctionWinner = null;
 
-      boxA.append(chip('Rozstrzygnij aukcję (gauction)', ()=>run('gauction')));
-      if (phase === 'auction') phaseActionsEl.appendChild(boxA);
-      else phaseActionsEl.appendChild(boxA); // w "sejm" też pokaż, jeśli brak majority
-    }
+    const lines = game.sejm.setLaw(pick.id);
+    logEngine(lines);
 
-    // USTAWA
-    if (!canceled){
-      const boxB = section('Sejm – Ustawa', 'Wybierz ustawę (1–6). Silnik wypisze warianty A/B w logu; następnie zatwierdź wariant.');
-      const laws = el('div', {style:{display:'flex',flexWrap:'wrap',gap:'8px'}});
-      for (let n=1;n<=6;n++) laws.append(chip(`Ustawa ${n}`, ()=>run(`glaw ${n}`)));
-      const bWrap = el('div', {style:{display:'flex',gap:'8px',marginTop:'8px'}});
-      // warianty A/B (bez payloadów – silnik przyjmie puste, albo B z torem niżej)
-      bWrap.append(chip('Wariant A (gchoice A)', ()=>run('gchoice A')));
-      // Dla wariantów wymagających toru (3B/4B/6B) daj szybki wybór toru:
-      const tor = el('select', { class:'phase-action', style:{padding:'8px 10px'} },
-        el('option',{value:''},'— tor (N/E/S) —'),
-        el('option',{value:'N'},'Szwecja (N)'),
-        el('option',{value:'E'},'Moskwa (E)'),
-        el('option',{value:'S'},'Tatarzy (S)'),
-      );
-      const bBtn = chip('Wariant B (gchoice B)', ()=>{
-        // uwaga: konsolowa komenda nie przyjmuje payloadu – wybór toru służy tylko informacyjnie do logu
-        const v = tor.value; if (!v) ok('Wariant B → (wybór toru w UI; silnik bez payloadu).');
-        run('gchoice B');
-      });
-      bWrap.append(tor, bBtn);
-      const nextBtn = chip('Zakończ Sejm (gnext)', ()=>run('gnext'));
+    popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, [
+      `Wybrano ustawę: ${pick.name}.`,
+      ...(Array.isArray(lines) ? lines : [lines])
+    ], {
+      buttonText: 'Dalej (Aukcja)',
+      onAction: () => { /* zostajemy w tej fazie, potem UI pokaże aukcję */ }
+    });
+  }
 
-      boxB.append(laws, bWrap, el('div',{style:{height:'8px'}}), nextBtn);
-      phaseActionsEl.appendChild(boxB);
-    } else {
-      const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
-      info.append(chip('Dalej (gnext)', ()=>run('gnext')));
-      phaseActionsEl.appendChild(info);
-    }
+  if (canceled){
+    const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
+    phaseActionsEl.appendChild(info);
     tintByActive(); return;
   }
+
+  // Czy ktoś już ma majority (po rozstrzygnięciu aukcji)?
+  const someMajority = (s.settings?.players || []).some(p => p.majority);
+
+  // Krok 2: AUKCJA — dopóki nie ma majority
+  if (!someMajority){
+    const boxA = section('Sejm — Aukcja', `Licytacja marszałkowska dla ustawy: ${_sejmLaw?.name || '—'}.`);
+    const quicks = [0,1,2,3];
+    (s.settings?.players || []).forEach(p => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.gap = '6px';
+      row.style.alignItems = 'center';
+      row.style.flexWrap = 'wrap';
+      row.style.margin = '6px 0';
+
+      const tag = document.createElement('span');
+      tag.style.minWidth = '84px';
+      tag.style.fontWeight = '800';
+      tag.textContent = p.name;
+      row.appendChild(tag);
+
+      quicks.forEach(q => {
+        row.appendChild(chip(String(q), () => run(`gbid ${p.name} ${q}`), `gbid ${p.name} ${q}`));
+      });
+      boxA.append(row);
+    });
+
+    // Rozstrzygnięcie aukcji -> popup z wynikiem, potem UI przełącza się na wybór wariantu
+    boxA.append(chip('Rozstrzygnij aukcję', () => {
+      const lines = game.auction.resolve();
+      logEngine(lines);
+      syncUIFromGame();
+
+      const after = game.getPublicState?.();
+      const winner = after?.settings?.players?.find(p => p.majority)?.name || '—';
+      _sejmAuctionWinner = winner;
+
+      popupFromEngine('Sejm — wynik aukcji', [
+        `Zwycięzca aukcji: ${winner}.`,
+        ...(Array.isArray(lines) ? lines : [lines])
+      ], {
+        buttonText: 'Dalej (Wybór wariantu)',
+        onAction: () => { buildPhaseActionsSmart(game.getPublicState()); }
+      });
+    }));
+
+    phaseActionsEl.appendChild(boxA);
+    tintByActive(); return;
+  }
+
+  // Krok 3: WYBÓR WARIANTU — opisowe przyciski dla wylosowanej ustawy
+  {
+    const winner = _sejmAuctionWinner
+      || (s.settings?.players?.find(p => p.majority)?.name || '—');
+
+    const boxB = section('Sejm — Wybór wariantu', `Ustawa: ${_sejmLaw?.name || '—'}`);
+    renderLawChoiceUI(boxB, _sejmLaw?.id, winner);
+    phaseActionsEl.appendChild(boxB);
+  }
+
+  tintByActive(); return;
+}
+
 
   // ====== AKCJE ======
   if (phase === 'actions'){
