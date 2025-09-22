@@ -275,3 +275,42 @@ svg{width:100%;height:auto;display:block;filter:drop-shadow(0 16px 24px rgba(0,0
 }
 footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);font-size:.9rem}
 
+
+/* ===== [DODAJ] Modal (popup) ===== */
+.popup-backdrop{
+  position:fixed; inset:0; display:grid; place-items:center;
+  background:rgba(3, 6, 23, .6); backdrop-filter: blur(6px);
+  z-index: 999; /* nad mapą i panelami */
+}
+.popup{
+  width:min(720px, 92vw);
+  background:#0b1221; border:1px solid #1f2937; border-radius:16px;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);
+  transform:translateY(6px) scale(.98); opacity:0;
+  animation: popup-in .16s ease forwards;
+}
+@keyframes popup-in{
+  to{ transform:translateY(0) scale(1); opacity:1; }
+}
+.popup-content{ padding:18px 18px 16px; }
+.popup-title{
+  margin:0 28px 10px 0; font-size:1.05rem; color:#e2e8f0; letter-spacing:.2px;
+}
+.popup-text{
+  color:#e5e7eb; line-height:1.45; white-space:pre-wrap;
+  background:#0f172a; border:1px solid #1f2937; border-radius:12px; padding:12px;
+  max-height:min(46vh, 520px); overflow:auto;
+}
+.popup-image-wrap{ margin-top:12px; display:grid; place-items:center; }
+.popup-image-wrap img{ max-width:100%; border-radius:12px; border:1px solid #1f2937; }
+.popup-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
+.popup-btn, .popup-close{
+  border:1px solid #334155; background:#0f172a; color:#e2e8f0;
+  padding:8px 12px; border-radius:10px; font-weight:700; cursor:pointer;
+}
+.popup-btn:hover, .popup-close:hover{ background:#111827; border-color:#475569; }
+.popup-close{
+  position:absolute; top:8px; right:8px; width:36px; height:36px; line-height:1; font-size:22px;
+  display:grid; place-items:center; border-radius:12px;
+}
+
