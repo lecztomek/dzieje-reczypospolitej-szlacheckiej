@@ -23,55 +23,83 @@ const LAW_POOL = [
   { id: 4, name: 'Pokój' },
 ];
 
-// Opisy i przyciski dla wariantów (opisowe labelki)
+// Opisy i przyciski dla wariantów (zgodnie z silnikiem)
 const LAW_VARIANTS = {
-  1: { // Podatek
+  1: { // Podatek (k6=1)
     title: 'Podatek',
     buttons: [
-      { label: 'Podatek — wariant A', choice: 'A' },
-      { label: 'Podatek — wariant B', choice: 'B' },
+      { label: 'Podatek — wariant A (+2 zł dla każdego)', choice: 'A' },
+      { label: 'Podatek — wariant B (+1 zł dla wszystkich, +3 zł dla zwycięzcy)', choice: 'B' },
     ],
     describe: [
-      'A: efekt podatkowy wg zasad (wszyscy).',
-      'B: efekt podatkowy faworyzujący zwycięzcę aukcji (wg zasad).',
+      'A: każdy gracz otrzymuje +2 zł.',
+      'B: każdy +1 zł, a zwycięzca aukcji dodatkowo +3 zł (łącznie +4).',
     ],
   },
-  2: { // Pospolite ruszenie
+  2: { // Podatek (k6=2)
+    title: 'Podatek',
+    buttons: [
+      { label: 'Podatek — wariant A (+2 zł dla każdego)', choice: 'A' },
+      { label: 'Podatek — wariant B (+1 zł dla wszystkich, +3 zł dla zwycięzcy)', choice: 'B' },
+    ],
+    describe: [
+      'A: każdy gracz otrzymuje +2 zł.',
+      'B: każdy +1 zł, a zwycięzca aukcji dodatkowo +3 zł (łącznie +4).',
+    ],
+  },
+  3: { // Pospolite ruszenie (k6=3)
     title: 'Pospolite ruszenie',
     buttons: [
-      { label: 'Pospolite ruszenie — wariant A', choice: 'A' },
-      { label: 'Pospolite ruszenie — wariant B', choice: 'B' },
+      // Uwaga: A w silniku wymaga później przekazania "picks" (gracz+prowincja kontrolowana)
+      { label: 'Pospolite ruszenie — wariant A (+1 jednostka w kontrolowanej prowincji)', choice: 'A' },
+      // B wymaga wskazania toru (track: 'N' | 'E' | 'S')
+      { label: 'Pospolite ruszenie — wariant B (Szwecja −2)', choice: 'B', track: 'N' },
+      { label: 'Pospolite ruszenie — wariant B (Moskwa −2)',  choice: 'B', track: 'E' },
+      { label: 'Pospolite ruszenie — wariant B (Tatarzy −2)', choice: 'B', track: 'S' },
     ],
     describe: [
-      'A: mobilizacja ogólna (wszyscy gracze, wg zasad).',
-      'B: wzmocnienie u zwycięzcy aukcji (wg zasad).',
+      'A: każdy może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (wymaga wskazania „picks”).',
+      'B: wybierz jeden tor (N/E/S), ten tor −2.',
     ],
   },
-  3: { // Fortyfikacje
+  4: { // Pospolite ruszenie (k6=4)
+    title: 'Pospolite ruszenie',
+    buttons: [
+      { label: 'Pospolite ruszenie — wariant A (+1 jednostka w kontrolowanej prowincji)', choice: 'A' },
+      { label: 'Pospolite ruszenie — wariant B (Szwecja −2)', choice: 'B', track: 'N' },
+      { label: 'Pospolite ruszenie — wariant B (Moskwa −2)',  choice: 'B', track: 'E' },
+      { label: 'Pospolite ruszenie — wariant B (Tatarzy −2)', choice: 'B', track: 'S' },
+    ],
+    describe: [
+      'A: każdy może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (wymaga wskazania „picks”).',
+      'B: wybierz jeden tor (N/E/S), ten tor −2.',
+    ],
+  },
+  5: { // Fortyfikacje (k6=5) — tylko A
     title: 'Fortyfikacje',
     buttons: [
-      { label: 'Fortyfikacje — wariant A', choice: 'A' },
-      { label: 'Fortyfikacje — wariant B', choice: 'B' },
+      // A w silniku wymaga „picks” (gracz + kontrolowana prowincja bez fortu)
+      { label: 'Fortyfikacje — wariant A (połóż fort w kontrolowanej prowincji)', choice: 'A' },
     ],
     describe: [
-      'A: wzmocnienia obronne ogólne (wg zasad).',
-      'B: wzmocnienia obronne selektywne (wg zasad).',
+      'A: połóż fort w kontrolowanej przez siebie prowincji bez fortu (wymaga wskazania „picks”).',
     ],
   },
-  4: { // Pokój
+  6: { // Pokój (k6=6)
     title: 'Pokój',
     buttons: [
-      { label: 'Pokój — wszyscy sąsiedzi (tory −1)', choice: 'A' },
-      { label: 'Pokój — Szwecja (tor −2)', choice: 'B', track: 'N' },
-      { label: 'Pokój — Moskwa (tor −2)', choice: 'B', track: 'E' },
-      { label: 'Pokój — Tatarzy (tor −2)', choice: 'B', track: 'S' },
+      { label: 'Pokój — wariant A (wszyscy sąsiedzi: tory −1)', choice: 'A' },
+      { label: 'Pokój — wariant B (Szwecja: tor −2)', choice: 'B', track: 'N' },
+      { label: 'Pokój — wariant B (Moskwa: tor −2)',  choice: 'B', track: 'E' },
+      { label: 'Pokój — wariant B (Tatarzy: tor −2)', choice: 'B', track: 'S' },
     ],
     describe: [
-      'A: wszyscy sąsiedzi: ich tory −1.',
-      'B: jeden sąsiad (Szwecja/Moskwa/Tatarzy): jego tor −2.',
+      'A: wszystkie trzy tory (N, E, S) −1.',
+      'B: jeden wybrany tor (N/E/S) −2.',
     ],
   },
 };
+
 
 function ensureSejmLawForRound(state, { forcePopup = false } = {}){
   const s = state || game.getPublicState?.();
