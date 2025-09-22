@@ -312,23 +312,9 @@ function openPopup({
   const t = Array.isArray(text) ? text.filter(Boolean).join('\n') : (text || '');
   popupTextEl.textContent = t || '(brak danych)';
 
-  // obrazek (z Twoim JPG fallbackiem)
-  if (!hideImage) {
-    const wantUrl = imageUrl && String(imageUrl).trim() ? imageUrl : DEFAULT_POPUP_IMG;
+  if (imageUrl){
+    popupImgEl.src = imageUrl;
     popupImgEl.hidden = false;
-    popupImgEl.alt = title ? `Grafika: ${title}` : 'Grafika w popupie';
-    let triedFallback = false;
-    popupImgEl.onerror = () => {
-      if (!triedFallback) {
-        triedFallback = true;
-        // spróbuj globalnego fallbacku
-        popupImgEl.src = DEFAULT_POPUP_IMG;
-      } else {
-        // jeśli nawet fallback nie działa — schowaj obrazek
-        popupImgEl.hidden = true;
-      }
-    };
-    popupImgEl.src = wantUrl;
   } else {
     popupImgEl.removeAttribute('src');
     popupImgEl.hidden = true;
