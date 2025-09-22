@@ -10,6 +10,8 @@ window.RaidTrackID = RaidTrackID;
 
 const EVENT_DEFAULT_POPUP_IMG = './images/e-default.png';
 const INCOME_POPUP_IMG = './images/income.png';
+const DEVASTATION_POPUP_IMG = './images/devast.png';
+const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 
 // ==== Sejm: stan + opisy ustaw ====
 let _sejmLawRound = -1;                // runda, w której wylosowaliśmy ustawę
@@ -1143,13 +1145,29 @@ if (phase === 'auction' || phase === 'sejm'){
   // ====== WZMACNIANIE ======
   if (phase === 'reinforcements'){
     const box = section('Wzmacnianie', 'Wylosuj N, S, E (1–6) i zastosuj wzmocnienia na torach wrogów.');
-    box.append(chip('Wylosuj i zastosuj (greinf N S E)', ()=>{
+    const btn = chip('Wylosuj i zastosuj (greinf N S E)', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
+    
+      const lines = game.reinforce.reinforce({ N, S, E });
       ok(`(UI) wzmocnienia: N=${N}, S=${S}, E=${E}`);
-      run(`greinf ${N} ${S} ${E}`);
-      run('gnext');
-    }));
+      logEngine(lines);
+      syncUIFromGame();
+    
+      popupFromEngine('Wzmacnianie — wyniki', [
+        `Rzuty: N=${N}, S=${S}, E=${E}.`,
+        ...(Array.isArray(lines) ? lines : [lines]),
+      ], {
+        imageUrl: REINFORCEMENTS_POPUP_IMG,
+        buttonText: 'Dalej (Najazdy)',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
+    });
+    box.append(btn);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
@@ -1165,13 +1183,29 @@ if (phase === 'auction' || phase === 'sejm'){
   // ====== SPUSTOSZENIA ======
   if (phase === 'devastation'){
     const box = section('Spustoszenia', 'Wylosuj N, S, E (1–6) i zastosuj spustoszenia, potem przejdź do następnej rundy.');
-    box.append(chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
+    const btnDev = chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
+    
+      const lines = game.devastation.resolve({ N, S, E });
       ok(`(UI) spustoszenia: N=${N}, S=${S}, E=${E}`);
-      run(`gdevast ${N} ${S} ${E}`);
-      run('gnext');
-    }));
+      logEngine(lines);
+      syncUIFromGame();
+    
+      popupFromEngine('Najazdy — spustoszenia', [
+        `Rzuty: N=${N}, S=${S}, E=${E}.`,
+        ...(Array.isArray(lines) ? lines : [lines]),
+      ], {
+        imageUrl: DEVASTATION_POPUP_IMG,
+        buttonText: 'Dalej',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
+    });
+    box.append(btnDev);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
