@@ -172,6 +172,52 @@ function pushToConsole(text, submit = true){
   }
 }
 
+// ===== [DODAJ] Popup (modal) API =====
+const popupEl = document.getElementById('popupBackdrop');
+const popupTitleEl = document.getElementById('popupTitle');
+const popupTextEl = document.getElementById('popupText');
+const popupImgEl = document.getElementById('popupImage');
+const popupOkBtn = document.getElementById('popupOkBtn');
+const popupCloseBtn = document.querySelector('.popup-close');
+
+let _popupOnClose = null;
+
+function openPopup({ title = '', text = '', imageUrl = '', onClose = null } = {}){
+  popupTitleEl.textContent = title || '';
+  // `text` może być stringiem lub tablicą linii z silnika
+  const t = Array.isArray(text) ? text.filter(Boolean).join('\n') : (text || '');
+  popupTextEl.textContent = t || '(brak danych)';
+
+  if (imageUrl){
+    popupImgEl.src = imageUrl;
+    popupImgEl.hidden = false;
+  } else {
+    popupImgEl.removeAttribute('src');
+    popupImgEl.hidden = true;
+  }
+  _popupOnClose = typeof onClose === 'function' ? onClose : null;
+
+  popupEl.hidden = false;
+  // focus dla dostępności
+  popupOkBtn.focus();
+}
+function closePopup(){
+  popupEl.hidden = true;
+  if (_popupOnClose){ try { _popupOnClose(); } catch{} }
+  _popupOnClose = null;
+}
+// zamykanie: przycisk, X, klik w tło, Esc
+popupOkBtn?.addEventListener('click', closePopup);
+popupCloseBtn?.addEventListener('click', closePopup);
+popupEl?.addEventListener('click', (e)=>{ if (e.target === popupEl) closePopup(); });
+document.addEventListener('keydown', (e)=>{ if (!popupEl.hidden && e.key === 'Escape') closePopup(); });
+
+// pomocnicze: pokaż wynik z silnika (string | string[])
+function popupFromEngine(title, engineOut, opts={}){
+  openPopup({ title, text: engineOut, ...opts });
+}
+
+
 // ===================== Utilsy =====================
 const diac = { "ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z" };
 function norm(s){
@@ -625,19 +671,32 @@ function buildPhaseActionsSmart(s){
     return;
   }
 
-  // ====== WYDARZENIA ======
-  if (phase === 'events'){
-    const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
-    const rollBtn = chip('Losuj wydarzenie 1–25', () => {
-      const n = 1 + Math.floor(Math.random()*25);
-      ok(`(UI) wylosowano wydarzenie #${n}`);
-      run(`gevent ${n}`);
-      run('gnext');
-    });
-    box.append(rollBtn);
-    phaseActionsEl.appendChild(box);
-    tintByActive(); return;
-  }
+if (phase === 'events'){
+  const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
+
+  const rollBtn = chip('Losuj wydarzenie 1–25', () => {
+    const n = 1 + Math.floor(Math.random()*25);
+    ok(`(UI) wylosowano wydarzenie #${n}`);
+    // wywołaj silnik bezpośrednio, by mieć wynik:
+    const lines = game.events.apply(n);
+    logEngine(lines);               // wciąż logujemy do konsoli UI
+    syncUIFromGame();               // odśwież stan na mapie/panelach
+
+    // pokaż popup – tekst u góry, obrazek dodasz później (imageUrl opcjonalny)
+    popupFromEngine(`Wydarzenie #${n}`, lines);
+  });
+
+  // opcjonalny przycisk „Dalej”, bez popupu
+  const nextBtn = chip('Dalej (gnext)', () => { 
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  });
+
+  box.append(rollBtn, nextBtn);
+  phaseActionsEl.appendChild(box);
+  tintByActive(); return;
+}
 
   // ====== DOCHÓD ======
   if (phase === 'income'){
