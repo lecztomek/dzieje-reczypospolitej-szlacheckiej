@@ -8,6 +8,8 @@ window.ProvinceID = ProvinceID;
 window.RaidTrackID = RaidTrackID;
 
 
+const DEFAULT_POPUP_IMG = '/images/popup-default.jpg';
+
 // ===================== Dane i narzędzia =====================
 const REGIONS = {
   prusy: { key: "prusy", el: null, aliases: ["prusy"] },
@@ -182,25 +184,40 @@ const popupCloseBtn = document.querySelector('.popup-close');
 
 let _popupOnClose = null;
 
-function openPopup({ title = '', text = '', imageUrl = '', onClose = null } = {}){
+function openPopup({ title = '', text = '', imageUrl = '', onClose = null, hideImage = false } = {}){
   popupTitleEl.textContent = title || '';
-  // `text` może być stringiem lub tablicą linii z silnika
+
   const t = Array.isArray(text) ? text.filter(Boolean).join('\n') : (text || '');
   popupTextEl.textContent = t || '(brak danych)';
 
-  if (imageUrl){
-    popupImgEl.src = imageUrl;
+  if (!hideImage) {
+    const wantUrl = imageUrl && String(imageUrl).trim() ? imageUrl : DEFAULT_POPUP_IMG;
     popupImgEl.hidden = false;
+    popupImgEl.alt = title ? `Grafika: ${title}` : 'Grafika w popupie';
+
+    // ustaw src i jednorazowy fallback do JPG
+    let triedFallback = false;
+    popupImgEl.onerror = () => {
+      if (!triedFallback && popupImgEl.src !== location.origin + DEFAULT_POPUP_IMG && popupImgEl.src !== DEFAULT_POPUP_IMG) {
+        triedFallback = true;
+        popupImgEl.src = DEFAULT_POPUP_IMG;
+      } else {
+        // nie udało się nawet fallback – ukryj obrazek, żeby nie straszyć ikonką
+        popupImgEl.hidden = true;
+      }
+    };
+    popupImgEl.src = wantUrl;
   } else {
     popupImgEl.removeAttribute('src');
     popupImgEl.hidden = true;
   }
+
   _popupOnClose = typeof onClose === 'function' ? onClose : null;
 
   popupEl.hidden = false;
-  // focus dla dostępności
   popupOkBtn.focus();
 }
+
 function closePopup(){
   popupEl.hidden = true;
   if (_popupOnClose){ try { _popupOnClose(); } catch{} }
