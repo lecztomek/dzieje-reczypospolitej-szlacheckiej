@@ -8,7 +8,8 @@ window.ProvinceID = ProvinceID;
 window.RaidTrackID = RaidTrackID;
 
 
-const DEFAULT_POPUP_IMG = '/images/e-default.png';
+const EVENT_DEFAULT_POPUP_IMG = './images/e-default.png';
+const INCOME_POPUP_IMG = './images/income.png';
 
 // ===================== Dane i narzędzia =====================
 const REGIONS = {
@@ -686,7 +687,7 @@ if (phase === 'events'){
     syncUIFromGame();               // odśwież stan na mapie/panelach
 
     // pokaż popup – tekst u góry, obrazek dodasz później (imageUrl opcjonalny)
-    popupFromEngine(`Wydarzenie #${n}`, lines, { imageUrl: DEFAULT_POPUP_IMG});
+    popupFromEngine(`Wydarzenie #${n}`, lines, { imageUrl: EVENT_DEFAULT_POPUP_IMG});
   });
 
   // opcjonalny przycisk „Dalej”, bez popupu
@@ -711,7 +712,7 @@ if (phase === 'events'){
       syncUIFromGame();
   
       // popup z wynikiem; obrazek później -> ustawisz imageUrl
-      popupFromEngine('Dochód – podsumowanie', lines /*, { imageUrl: '...' }*/);
+      popupFromEngine('Dochód – podsumowanie', lines, { imageUrl: INCOME_POPUP_IMG});
     });
   
     const btnNext = chip('Dalej (Sejm)', () => {
