@@ -301,7 +301,7 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   background:#0f172a; border:1px solid #1f2937; border-radius:12px; padding:12px;
   max-height:min(46vh, 520px); overflow:auto;
 }
-.popup-image-wrap{ margin-top:12px; display:grid; place-items:center; }
+.popup-image-wrap{ margin:12px 0 10px; display:grid; place-items:center; }
 .popup-image-wrap img{ max-width:100%; border-radius:12px; border:1px solid #1f2937; }
 .popup-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
 .popup-btn, .popup-close{
