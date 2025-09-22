@@ -294,7 +294,7 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
 }
 .popup-content{ padding:18px 18px 16px; }
 .popup-title{
-  margin:0 28px 10px 0; font-size:1.05rem; color:#e2e8f0; letter-spacing:.2px;
+  margin:0 0 10px 0; font-size:1.05rem; color:#e2e8f0; letter-spacing:.2px;
 }
 .popup-text{
   color:#e5e7eb; line-height:1.45; white-space:pre-wrap;
