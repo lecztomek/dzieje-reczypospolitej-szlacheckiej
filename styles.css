@@ -313,4 +313,6 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   position:absolute; top:8px; right:8px; width:36px; height:36px; line-height:1; font-size:22px;
   display:grid; place-items:center; border-radius:12px;
 }
-
+.popup-backdrop[hidden]{
+  display: none !important;
+}
