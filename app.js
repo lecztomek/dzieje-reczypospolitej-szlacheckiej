@@ -226,6 +226,18 @@ function renderLawChoiceUI(container, lawId, winnerName){
     btn.textContent = b.label;
 
     btn.addEventListener('click', () => {
+      // upewnij się, że jesteśmy w fazie sejm i że ustawa jest ustawiona w silniku
+      const ph = game.round?.currentPhaseId?.();
+      if (ph === 'auction') {
+        game.finishPhaseAndAdvance(); // auction -> sejm
+      }
+      try {
+        game.sejm.setLaw(lawId);
+      } catch (_) {
+        // ignorujemy, jeśli już ustawione
+      }
+
+      
       // przygotuj ewentualny 'extra'
       let extra = undefined;
       if (b.choice === 'B' && b.track){              // B z torem (3/4/6)
@@ -1103,7 +1115,15 @@ if (phase === 'auction' || phase === 'sejm'){
         ...(Array.isArray(lines) ? lines : [lines])
       ], {
         buttonText: 'Dalej (Wybór wariantu)',
-        onAction: () => { buildPhaseActionsSmart(game.getPublicState()); }
+        onAction: () => {
+          // przejście: auction -> sejm
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+        
+          // w tej fazie ustaw ustawę i odśwież panel
+          ensureSejmLawForRound(game.getPublicState());
+          buildPhaseActionsSmart(game.getPublicState());
+        }
       });
     }));
 
