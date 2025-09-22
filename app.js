@@ -1027,8 +1027,8 @@ if (phase === 'auction' || phase === 'sejm'){
       ], {
         buttonText: 'Dalej (Akcje)',
         onAction: () => {
-          const nxt = game.finishPhaseAndAdvance(); // auction/sejm -> actions
-          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          const a = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${a || game.round.currentPhaseId() || 'koniec gry'}`);
+          const b = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${b || game.round.currentPhaseId() || 'koniec gry'}`);
           syncUIFromGame();
         }
       });
@@ -1086,8 +1086,8 @@ if (phase === 'auction' || phase === 'sejm'){
         ], {
           buttonText: 'Dalej (Akcje)',
           onAction: () => {
-            const nxt = game.finishPhaseAndAdvance(); // auction -> actions
-            ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+            const a = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${a || game.round.currentPhaseId() || 'koniec gry'}`);
+            const b = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${b || game.round.currentPhaseId() || 'koniec gry'}`);
             syncUIFromGame();
           }
         });
