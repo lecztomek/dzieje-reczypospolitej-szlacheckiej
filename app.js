@@ -185,25 +185,62 @@ const popupCloseBtn = document.querySelector('.popup-close');
 
 let _popupOnClose = null;
 
-function openPopup({ title = '', text = '', imageUrl = '', onClose = null } = {}){
+function openPopup({
+  title = '',
+  text = '',
+  imageUrl = '',
+  buttonText = 'Zamknij',
+  onAction = null,            // ← callback wywoływany po kliknięciu przycisku
+  onClose = null,
+  hideImage = false
+} = {}){
   popupTitleEl.textContent = title || '';
-  // `text` może być stringiem lub tablicą linii z silnika
+
   const t = Array.isArray(text) ? text.filter(Boolean).join('\n') : (text || '');
   popupTextEl.textContent = t || '(brak danych)';
 
-  if (imageUrl){
-    popupImgEl.src = imageUrl;
+  // obrazek (z Twoim JPG fallbackiem)
+  if (!hideImage) {
+    const wantUrl = imageUrl && String(imageUrl).trim() ? imageUrl : DEFAULT_POPUP_IMG;
     popupImgEl.hidden = false;
+    popupImgEl.alt = title ? `Grafika: ${title}` : 'Grafika w popupie';
+    let triedFallback = false;
+    popupImgEl.onerror = () => {
+      if (!triedFallback && popupImgEl.src !== location.origin + DEFAULT_POPUP_IMG && popupImgEl.src !== DEFAULT_POPUP_IMG) {
+        triedFallback = true;
+        popupImgEl.src = DEFAULT_POPUP_IMG;
+      } else {
+        popupImgEl.hidden = true;
+      }
+    };
+    popupImgEl.src = wantUrl;
   } else {
     popupImgEl.removeAttribute('src');
     popupImgEl.hidden = true;
   }
+
+  // tekst przycisku i akcja
+  popupOkBtn.textContent = buttonText || 'OK';
+  popupOkBtn.onclick = async () => {
+    try {
+      if (typeof onAction === 'function') {
+        const res = await onAction();
+        // Jeżeli callback zwróci dokładnie false — NIE zamykaj (np. chcesz coś jeszcze dokończyć)
+        if (res === false) return;
+      }
+    } catch (e) {
+      console.error('Popup onAction error:', e);
+      // mimo błędu — zamkniemy, chyba że chcesz inaczej: wtedy w onAction zwróć false
+    }
+    closePopup();
+  };
+
   _popupOnClose = typeof onClose === 'function' ? onClose : null;
 
   popupEl.hidden = false;
-  // focus dla dostępności
   popupOkBtn.focus();
 }
+
 
 function closePopup(){
   popupEl.hidden = true;
@@ -674,57 +711,60 @@ function buildPhaseActionsSmart(s){
     tintByActive();
     return;
   }
+  
+  if (phase === 'events'){
+    const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
+  
+    const rollBtn = chip('Losuj wydarzenie 1–25', () => {
+      const n = 1 + Math.floor(Math.random() * 25);
+      ok(`(UI) wylosowano wydarzenie #${n}`);
+  
+      // wywołanie silnika, żeby mieć tekst
+      const lines = game.events.apply(n);
+      logEngine(lines);
+      syncUIFromGame();
+  
+      // „Dalej” w popupie:
+      popupFromEngine(`Wydarzenie #${n}`, lines, {
+        buttonText: 'Dalej',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
+    });
+  
+    box.append(rollBtn);
+    phaseActionsEl.appendChild(box);
+    tintByActive(); return;
+  }
 
-if (phase === 'events'){
-  const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
-
-  const rollBtn = chip('Losuj wydarzenie 1–25', () => {
-    const n = 1 + Math.floor(Math.random()*25);
-    ok(`(UI) wylosowano wydarzenie #${n}`);
-    // wywołaj silnik bezpośrednio, by mieć wynik:
-    const lines = game.events.apply(n);
-    logEngine(lines);               // wciąż logujemy do konsoli UI
-    syncUIFromGame();               // odśwież stan na mapie/panelach
-
-    // pokaż popup – tekst u góry, obrazek dodasz później (imageUrl opcjonalny)
-    popupFromEngine(`Wydarzenie #${n}`, lines, { imageUrl: EVENT_DEFAULT_POPUP_IMG});
-  });
-
-  // opcjonalny przycisk „Dalej”, bez popupu
-  const nextBtn = chip('Dalej (gnext)', () => { 
-    const nxt = game.finishPhaseAndAdvance();
-    ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-    syncUIFromGame();
-  });
-
-  box.append(rollBtn, nextBtn);
-  phaseActionsEl.appendChild(box);
-  tintByActive(); return;
-}
 
   if (phase === 'income'){
-    const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Tekst z silnika pokażę w popupie.');
+    const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Podsumowanie pojawi się w popupie.');
   
     const btnIncome = chip('Pobierz dochód', () => {
-      const lines = game.income.collect();  // tekst: „kto ile dostał”
+      const lines = game.income.collect();
       ok('Zebrano dochód.');
       logEngine(lines);
       syncUIFromGame();
   
-      // popup z wynikiem; obrazek później -> ustawisz imageUrl
-      popupFromEngine('Dochód – podsumowanie', lines, { imageUrl: INCOME_POPUP_IMG});
+      popupFromEngine('Dochód – podsumowanie', lines, {
+        buttonText: 'Dalej (Sejm)',
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
+      });
     });
   
-    const btnNext = chip('Dalej (Sejm)', () => {
-      const nxt = game.finishPhaseAndAdvance();
-      ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-      syncUIFromGame();
-    });
-  
-    box.append(btnIncome, btnNext);
+    box.append(btnIncome);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
+
 
   // ====== SEJM – rozdzielony na: AUKCJA -> USTAWA ======
   if (phase === 'auction' || phase === 'sejm'){
