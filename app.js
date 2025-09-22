@@ -142,7 +142,36 @@ if (forcePopup) {
 }
 
 
-// Render „opisowych” przycisków wariantów
+// === POMOCNIKI: auto-picki do wariantu A (3/4 i 5) ===
+function buildAutoPicksPospoliteA(state){
+  // po 1 kontrolowanej prowincji na gracza (jeśli ma jakąkolwiek)
+  const picks = [];
+  const players = state.settings?.players || [];
+  const takenFor = new Set();
+  for (const [pid, prov] of Object.entries(state.provinces)){
+    const ctrlIdx = controllerIndexFromState(state, pid);
+    if (ctrlIdx == null || takenFor.has(ctrlIdx)) continue;
+    picks.push({ playerIndex: ctrlIdx, provinceId: prov.id });
+    takenFor.add(ctrlIdx);
+  }
+  return picks;
+}
+function buildAutoPicksFortA(state){
+  // pierwsza kontrolowana prowincja BEZ fortu – po 1 na gracza
+  const picks = [];
+  const players = state.settings?.players || [];
+  const takenFor = new Set();
+  for (const [pid, prov] of Object.entries(state.provinces)){
+    if (prov.has_fort) continue;
+    const ctrlIdx = controllerIndexFromState(state, pid);
+    if (ctrlIdx == null || takenFor.has(ctrlIdx)) continue;
+    picks.push({ playerIndex: ctrlIdx, provinceId: prov.id });
+    takenFor.add(ctrlIdx);
+  }
+  return picks;
+}
+
+// === Render „opisowych” przycisków wariantów (Z NAPRAWIONYM wywołaniem silnika) ===
 function renderLawChoiceUI(container, lawId, winnerName){
   const spec = LAW_VARIANTS[lawId];
   if (!spec) return;
@@ -150,10 +179,9 @@ function renderLawChoiceUI(container, lawId, winnerName){
   const info = document.createElement('div');
   info.style.color = '#94a3b8';
   info.style.margin = '6px 0 10px';
-  info.textContent = `Zwycięzca aukcji: ${winnerName || '—'}. Wybierz wariant ustawy: ${spec.title}`;
+  info.textContent = `Zwycięzca aukcji: ${winnerName || '—'}. Ustawa: ${spec.title} — wybierz wariant.`;
   container.appendChild(info);
 
-  // Dodatkowe opisy A/B nad przyciskami
   if (Array.isArray(spec.describe) && spec.describe.length){
     const desc = document.createElement('ul');
     desc.style.margin = '0 0 8px';
@@ -167,31 +195,54 @@ function renderLawChoiceUI(container, lawId, winnerName){
     container.appendChild(desc);
   }
 
-  // Przyciski wariantów z opisami
+  // mapka skrótu toru -> RaidTrackID
+  const TRACK_MAP = { N: RaidTrackID.N, E: RaidTrackID.E, S: RaidTrackID.S };
+
   spec.buttons.forEach(b => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'phase-action';
     btn.textContent = b.label;
+
     btn.addEventListener('click', () => {
-      const trackInfo = b.track ? ` (tor ${b.track})` : '';
-      ok(`Sejm: wybór wariantu ${b.choice}${trackInfo}.`);
-      const lines = game.sejm.chooseVariant(b.choice); // silnik nie przyjmuje toru – dopiszemy tylko do logu
-      if (b.track) ok(`(UI) Wybrany tor: ${b.track} (informacyjnie dla logu)`);
+      // przygotuj ewentualny 'extra'
+      let extra = undefined;
+      if (b.choice === 'B' && b.track){              // B z torem (3/4/6)
+        extra = { track: TRACK_MAP[b.track] };
+      } else if (b.choice === 'A'){
+        const s = game.getPublicState?.() || {};
+        if (lawId === 3 || lawId === 4){            // Pospolite ruszenie A
+          extra = buildAutoPicksPospoliteA(s);
+          if (!extra.length) ok('(UI) Nikt jednoznacznie nie kontroluje prowincji — brak przyrostów.');
+        } else if (lawId === 5){                    // Fortyfikacje A
+          extra = buildAutoPicksFortA(s);
+          if (!extra.length) ok('(UI) Brak kontrolowanych prowincji bez fortu — nic do położenia.');
+        }
+        // dla 1/2 i 6 A — extra niepotrzebne
+      }
+
+      ok(`Sejm: wybór wariantu ${b.choice}${b.track ? ` (tor ${b.track})` : ''}.`);
+      let lines;
+      try {
+        lines = game.sejm.chooseVariant(b.choice, extra);
+      } catch (e) {
+        err('Błąd przy wyborze wariantu: ' + e.message);
+        return;
+      }
 
       popupFromEngine('Sejm — wybrano wariant', lines, {
         buttonText: 'Dalej (Akcje)',
         onAction: () => {
-          const nxt = game.finishPhaseAndAdvance();
+          const nxt = game.finishPhaseAndAdvance();    // przejście z „sejm” -> „actions”
           ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
           syncUIFromGame();
         }
       });
     });
+
     container.appendChild(btn);
   });
 }
-
 
 // ===================== Dane i narzędzia =====================
 const REGIONS = {
@@ -1003,6 +1054,11 @@ if (phase === 'auction' || phase === 'sejm'){
       ], {
         buttonText: 'Dalej (Wybór wariantu)',
         onAction: () => {
+          const nxt = game.finishPhaseAndAdvance(); // auction -> sejm
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    
+          // po przejściu fazy odśwież panel (pojawią się przyciski wariantów)
+          syncUIFromGame();
           buildPhaseActionsSmart(game.getPublicState());
         }
       });
