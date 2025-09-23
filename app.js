@@ -477,6 +477,12 @@ const playersBody = document.getElementById('playersBody');
 const turnSwatch = document.getElementById('turnSwatch');
 const turnNameEl = document.getElementById('turnName');
 
+// === Jedna aktualna faza (badge) w nagłówku ===
+const roundLabelEl = document.getElementById('roundLabel');
+const roundWrap = roundLabelEl?.parentElement; // to jest .round
+let phaseNowEl = null;
+
+
 if (marshalBox) marshalBox.style.display = 'none';
 if (marshalResetBtn) marshalResetBtn.style.display = 'none';
 
@@ -488,6 +494,35 @@ let idCounter = 1;
 
 let roundCur = 1;
 let roundMax = 10;
+
+function ensurePhaseNowEl(){
+  if (phaseNowEl || !roundWrap) return;
+  phaseNowEl = document.createElement('div');
+  phaseNowEl.id = 'phaseNow';
+  phaseNowEl.className = 'phase-now';
+  phaseNowEl.textContent = '—';
+  // wstaw badge PRZED "RUNDA ..."
+  roundWrap.insertBefore(phaseNowEl, roundLabelEl);
+}
+ensurePhaseNowEl();
+
+const PHASE_LABELS = {
+  events: 'Wydarzenia',
+  income: 'Dochód',
+  auction:'Sejm — Aukcja',
+  sejm:   'Sejm',
+  actions:'Akcje',
+  battles:'Starcia',
+  reinforcements:'Wzmacnianie',
+  attacks:'Wyprawy',
+  devastation:'Spustoszenia'
+};
+
+function setPhaseNow(engPhase){
+  ensurePhaseNowEl();
+  const label = PHASE_LABELS[engPhase] || '—';
+  if (phaseNowEl) phaseNowEl.textContent = label;
+}
 
 function updateRoundUI(){
   const curEl = document.getElementById('roundCur');
@@ -1031,9 +1066,10 @@ function applyPhaseFromEngineState(s){
   const idx = ENGINE_TO_UI_PHASE[id];
   if (Number.isInteger(idx) && idx !== phaseCur){
     phaseCur = idx;
-    updatePhaseUI();
   }
+  setPhaseNow(id);       // <<< USTAW TEKST BADGE
 }
+
 
 // ===================== MAPOWANIE enumów silnika =====================
 const PROV_MAP = {
@@ -2024,5 +2060,6 @@ createArmySlots();
 createEnemyTracks();
 buildPhaseBar();
 buildPhaseActionsSmart(game.getPublicState?.() || {}); // ← smart start
+setPhaseNow(game.getPublicState?.()?.current_phase || game.round?.currentPhaseId?.());
 updateTurnUI();
 ok('Witaj! Dodaj graczy komendą „gracz <imię> <kolor>”, potem „gstart”. „pomoc” pokaże listę komend.');
