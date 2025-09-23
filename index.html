@@ -108,22 +108,22 @@
           <div class="coords" id="coords">x: –, y: –</div>
         </div>
       </section>
-
-      <!-- KONSOLA -->
-      <section class="console" aria-label="Konsola poleceń">
-        <div class="bar">
-          <span class="title">Konsola</span>
-          <button id="btnHelp" type="button">Pomoc</button>
-          <button id="btnClearLog" type="button">Wyczyść log</button>
-          <span class="hint">Enter = wykonaj • Strzałki ↑/↓ = historia</span>
-        </div>
-        <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
-        <form id="cmdForm" autocomplete="off">
-          <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "wealth litwa 3", "wealthall 1", "armia litwa 2 #34d399 7", "armset prusy 1 12", "armclr malopolska 3", "armreset ukraina", "pomoc"'>
-          <button type="submit">Wykonaj</button>
-        </form>
-      </section>
     </div>
+
+    <!-- KONSOLA -->
+    <section class="console" aria-label="Konsola poleceń">
+      <div class="bar">
+        <span class="title">Konsola</span>
+        <button id="btnHelp" type="button">Pomoc</button>
+        <button id="btnClearLog" type="button">Wyczyść log</button>
+        <span class="hint">Enter = wykonaj • Strzałki ↑/↓ = historia</span>
+      </div>
+      <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
+      <form id="cmdForm" autocomplete="off">
+        <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "wealth litwa 3", "wealthall 1", "armia litwa 2 #34d399 7", "armset prusy 1 12", "armclr malopolska 3", "armreset ukraina", "pomoc"'>
+        <button type="submit">Wykonaj</button>
+      </form>
+    </section>
   </main>
 
   <!-- [DODAJ] Popup (modal) -->
