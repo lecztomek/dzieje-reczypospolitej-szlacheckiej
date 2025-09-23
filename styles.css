@@ -503,3 +503,10 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   min-width: 160px; text-align:center; box-shadow:var(--shadow);
 }
 
+.phase-now .phase-now-label{
+  opacity:.85;
+  margin-right:6px;
+  letter-spacing:.3px;
+  color:#cbd5e1;
+}
+
