@@ -763,36 +763,60 @@ class DevastationAPI {
   }
 }
 
-// ---------------- Scoring ----------------
 function computeFinalScores(ctx) {
-  const players = ctx.settings.players; const pcount = players.length;
-  players.forEach((p) => p.score = 0);
-  // (1) most estates
-  const estatesTotal = Array(pcount).fill(0);
-  for (const prov of Object.values(ctx.provinces)) for (const owner of prov.estates) if (owner >= 0 && owner < pcount) estatesTotal[owner] += 1;
-  const maxEst = estatesTotal.length ? Math.max(...estatesTotal) : 0;
-  const estateWinners = estatesTotal.map((v, i) => [v, i]).filter(([v]) => v === maxEst && maxEst > 0).map(([, i]) => i);
-  estateWinners.forEach((i) => players[i].score += 1);
+  const players = ctx.settings.players;
+  const pcount = players.length;
+  players.forEach((p) => { p.score = 0; });
 
-  // (2) province influence points (only if single winner)
+  // (1) Najwięcej posiadłości (+1)
+  const estatesTotal = Array(pcount).fill(0);
+  for (const prov of Object.values(ctx.provinces)) {
+    for (const owner of prov.estates) if (owner >= 0 && owner < pcount) estatesTotal[owner] += 1;
+  }
+  const maxEst = estatesTotal.length ? Math.max(...estatesTotal) : 0;
+  const estateWinnersIdx = estatesTotal
+    .map((v, i) => [v, i])
+    .filter(([v]) => v === maxEst && maxEst > 0)
+    .map(([, i]) => i);
+  estateWinnersIdx.forEach((i) => players[i].score += 1);
+
+  // (2) Wpływy w prowincjach (po 1 pkt za jednoznaczną kontrolę)
   const influenceLines = [];
   for (const pid of Object.values(ProvinceID)) {
     const winners = influenceWinnersInProvince(ctx, pid);
-    if (!winners.length) { influenceLines.push(`${pid}: brak wpływu`); continue; }
-    if (winners.length === 1) { const w = winners[0]; players[w].score += 1; influenceLines.push(`${pid}: ${players[w].name}`); }
-    else influenceLines.push(`${pid}: remis – nikt`);
+    if (!winners.length) {
+      influenceLines.push(`${pid}: brak wpływu`);
+    } else if (winners.length === 1) {
+      const w = winners[0];
+      players[w].score += 1;
+      influenceLines.push(`${pid}: ${players[w].name}`);
+    } else {
+      influenceLines.push(`${pid}: remis – nikt`);
+    }
   }
 
-  // (3) honor
+  // (3) Honor = punkty
   players.forEach((p) => p.score += p.honor);
-  // (4) gold → points per 3
+
+  // (4) Złoto → 1 pkt za każde pełne 3 zł
   players.forEach((p) => p.score += Math.floor(p.gold / 3));
+
+  // Tabela i zwycięzcy
+  const standings = players
+    .map((p) => ({ name: p.name, score: p.score }))
+    .sort((a, b) => b.score - a.score);
+
+  const topScore = standings.length ? standings[0].score : 0;
+  const winners = standings.filter(s => s.score === topScore).map(s => s.name);
 
   const lines = [];
   lines.push("[Punktacja końcowa]");
   lines.push("Posiadłości (łącznie): " + players.map((p, i) => `${p.name}=${estatesTotal[i]}`).join(", "));
-  lines.push(estateWinners.length ? ("Najwięcej posiadłości: " + estateWinners.map((i) => players[i].name).join(", ") + " (+1)") : "Najwięcej posiadłości: nikt (brak posiadłości)");
-  lines.push("Wpływy z prowincji:"); influenceLines.forEach((s) => lines.push("  • " + s));
+  lines.push(estateWinnersIdx.length
+    ? ("Najwięcej posiadłości: " + estateWinnersIdx.map((i) => players[i].name).join(", ") + " (+1)")
+    : "Najwięcej posiadłości: nikt (brak posiadłości)");
+  lines.push("Wpływy z prowincji:");
+  influenceLines.forEach((s) => lines.push("  • " + s));
   lines.push("Honor: " + players.map((p) => `${p.name}=+${p.honor}`).join(", "));
   lines.push("Złoto→pkt: " + players.map((p) => `${p.name}=+${Math.floor(p.gold/3)} (z ${p.gold} zł)`).join(", "));
   lines.push("Tabela wyników:");
@@ -801,8 +825,9 @@ function computeFinalScores(ctx) {
     ? `Zwycięzca: ${winners[0]} (${topScore} pkt)`
     : `Zwycięzcy: ${winners.join(", ")} (${topScore} pkt)`);
 
-  return lines.join("\n");
+  return lines; // ← ZWRACAMY TABLICĘ LINII (UI i tak to łyka)
 }
+
 
 // ---------------- Round + Game orchestration (programmatic) ----------------
 class RoundEngine {
