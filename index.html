@@ -26,24 +26,10 @@
             <button id="marshalResetBtn" class="marshal-reset" type="button">Wyczyść</button>
           </div>
         </div>
-
+  
         <div class="section" aria-label="Tabela Graczy">
           <h2 style="font-size:1rem;margin:0 0 10px;color:#cbd5e1">Gracze</h2>
-          <table class="players-table" id="playersTable" aria-describedby="players-desc">
-            <caption id="players-desc" style="clip:rect(0 0 0 0);position:absolute">
-              Tabela graczy z kolorem, liczbą złota, punktami honoru i punktami końcowymi
-            </caption>
-            <thead>
-              <tr>
-                <th style="width:36px" aria-label="Kolor"></th>
-                <th style="text-align:left">Imię</th>
-                <th>Złoto</th>
-                <th>Honor</th>
-                <th>Punkty</th>
-              </tr>
-            </thead>
-            <tbody id="playersBody"></tbody>
-          </table>
+          <div id="playersList" class="players-list" aria-live="polite" aria-label="Lista graczy"></div>
         </div>
 
         <div class="section" aria-label="Lista Szlachciców">
