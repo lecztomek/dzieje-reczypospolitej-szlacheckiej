@@ -393,18 +393,34 @@ class SejmAPI {
     if (!majority) return ["[Sejm] Nikt nie ma większości — ustawa nie wchodzi w życie."];
     const law = rs.last_law; if (!law) return ["[Sejm] Nie wybrano ustawy."];
     const ch = (String(choice || "").toUpperCase() === "B") ? "B" : "A"; rs.last_law_choice = ch;
-
+    
     if (law === 1 || law === 2) {
+      // PODATEK
       log.push("[Sejm] Podatek.");
-      if (ch === 'A') { c.settings.players.forEach((p) => p.gold += 2); log.push("Każdy +2 zł."); }
-      else { c.settings.players.forEach((p) => p.gold += 1); majority.gold += 3; log.push(`${majority.name} łącznie +4 zł, pozostali +1 zł.`); }
+      const players = c.settings.players;
+      const others = players.filter(p => p !== majority);
+    
+      if (ch === 'A') {
+        // A: zwycięzca +2, reszta +1
+        majority.gold += 2;
+        others.forEach(p => p.gold += 1);
+        log.push(`${majority.name} +2 zł; pozostali +1 zł.`);
+      } else {
+        // B: zwycięzca +3, +1 na losowym torze (N/E/S)
+        majority.gold += 3;
+        const ridList = [RaidTrackID.N, RaidTrackID.E, RaidTrackID.S];
+        const rid = ridList[Math.floor(Math.random() * ridList.length)];
+        addRaid(c, rid, +1); // +1 na torze (czyli gorzej dla graczy)
+        log.push(`${majority.name} +3 zł; losowy tor (${rid}) +1.`);
+      }
       return log;
     }
-
+    
     if (law === 3 || law === 4) {
-      log.push("[Sejm] Pospolite ruszenie.");
+      // WOJSKO
+      log.push("[Sejm] Wojsko.");
       if (ch === 'A') {
-        // extra: array of { playerIndex, provinceId }
+        // Pospolite ruszenie (jak poprzednio)
         const picks = Array.isArray(extra) ? extra : [];
         picks.forEach(({ playerIndex, provinceId }) => {
           ensurePerProvinceArrays(c);
@@ -416,34 +432,62 @@ class SejmAPI {
         });
         return log;
       } else {
-        // ch B: need a track id in extra e.g. { track: RaidTrackID.N|E|S }
-        const rid = extra?.track; if (!rid) throw new Error("Missing track for law 3/4 variant B");
-        addRaid(c, rid, -2); log.push(`Tor ${rid} −2.`); return log;
+        // B: Fort w losowej kontrolowanej prowincji zwycięzcy (bez fortu)
+        ensurePerProvinceArrays(c);
+        const candidates = [];
+        for (const pid of Object.values(ProvinceID)) {
+          const winners = influenceWinnersInProvince(c, pid);
+          if (winners.length === 1 && winners[0] === c.settings.players.indexOf(majority) && !c.provinces[pid].has_fort) {
+            candidates.push(pid);
+          }
+        }
+        if (candidates.length === 0) { log.push("Brak kontrolowanych prowincji bez fortu — brak efektu."); return log; }
+        const pid = candidates[Math.floor(Math.random() * candidates.length)];
+        toggleFort(c, pid, true);
+        log.push(`Fort — położono fort w ${pid} (zwycięzca: ${majority.name}).`);
+        return log;
       }
     }
-
+    
     if (law === 5) {
-      log.push("[Sejm] Fortyfikacje: połóż fort w kontrolowanej prowincji.");
-      // extra: array of { playerIndex, provinceId }
-      const picks = Array.isArray(extra) ? extra : [];
-      picks.forEach(({ playerIndex, provinceId }) => {
+      // GOSPODARKA
+      log.push("[Sejm] Gospodarka.");
+      if (ch === 'A') {
+        // Zamożność +1 w losowej prowincji zwycięzcy
         ensurePerProvinceArrays(c);
-        const winners = influenceWinnersInProvince(c, provinceId);
-        if (winners.length === 1 && winners[0] === playerIndex && !c.provinces[provinceId].has_fort) {
-          toggleFort(c, provinceId, true);
-          log.push(`  ${c.settings.players[playerIndex].name}: fort w ${provinceId}`);
+        const owned = [];
+        for (const pid of Object.values(ProvinceID)) {
+          const winners = influenceWinnersInProvince(c, pid);
+          if (winners.length === 1 && winners[0] === c.settings.players.indexOf(majority)) {
+            owned.push(pid);
+          }
         }
-      });
+        if (!owned.length) { log.push("Zwycięzca nie kontroluje żadnej prowincji — brak efektu."); return log; }
+        const pid = owned[Math.floor(Math.random() * owned.length)];
+        const before = c.provinces[pid].wealth;
+        addProvinceWealth(c, pid, +1);
+        log.push(`Zamożność +1 w ${pid}: ${before}→${c.provinces[pid].wealth}.`);
+        return log;
+      } else {
+        // Zamożność +2 w losowej prowincji na mapie (globalnie)
+        const all = Object.values(ProvinceID);
+        const pid = all[Math.floor(Math.random() * all.length)];
+        const before = c.provinces[pid].wealth;
+        addProvinceWealth(c, pid, +2);
+        log.push(`Zamożność +2 w losowej prowincji: ${pid} (${before}→${c.provinces[pid].wealth}).`);
+        return log;
+      }
+
       return log;
     }
-
+    
     if (law === 6) {
+      // POKÓJ — bez zmian
       log.push("[Sejm] Pokój.");
       if (ch === 'A') { addRaid(c, RaidTrackID.N, -1); addRaid(c, RaidTrackID.E, -1); addRaid(c, RaidTrackID.S, -1); log.push("Wszystkie tory −1."); }
       else { const rid = extra?.track; if (!rid) throw new Error("Missing track for law 6B"); addRaid(c, rid, -2); log.push(`Tor ${rid} −2.`); }
       return log;
     }
-    return log;
   }
 }
 
