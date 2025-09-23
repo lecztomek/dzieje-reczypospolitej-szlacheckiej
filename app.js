@@ -1395,25 +1395,6 @@ if (phase === 'auction' || phase === 'sejm'){
 function syncUIFromGame(){
   const s = game.getPublicState?.(); if (!s) return;
 
-  // --- KONIEC GRY: pokaż podsumowanie punktów raz ---
-  try {
-    // StateID jest eksportowane z silnika – mamy je w globalu (importowane z game.js)
-    if (s.state === StateID.GAME_OVER && !_finalPopupShown) {
-      _finalPopupShown = true;
-      // Zbierz raport punktacji z silnika
-      const report = game.computeScores(); // zwraca string z wieloma liniami
-      popupFromEngine('Koniec gry — podsumowanie', report, {
-        imageUrl: FINAL_SUMMARY_POPUP_IMG,
-        buttonText: 'Zamknij',
-        onAction: () => {
-          // nic specjalnego — tylko zamknij okno; UI zostaje w stanie końcowym
-        }
-      });
-    }
-  } catch (e) {
-    console.error('Błąd przy generowaniu podsumowania końcowego:', e);
-  }
-
   // RUNDY
   roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; 
   updateRoundUI();
