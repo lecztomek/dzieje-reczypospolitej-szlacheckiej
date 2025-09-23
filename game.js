@@ -795,6 +795,12 @@ function computeFinalScores(ctx) {
   lines.push("Wpływy z prowincji:"); influenceLines.forEach((s) => lines.push("  • " + s));
   lines.push("Honor: " + players.map((p) => `${p.name}=+${p.honor}`).join(", "));
   lines.push("Złoto→pkt: " + players.map((p) => `${p.name}=+${Math.floor(p.gold/3)} (z ${p.gold} zł)`).join(", "));
+  lines.push("Tabela wyników:");
+  standings.forEach((s, idx) => lines.push(`  ${idx + 1}. ${s.name} — ${s.score} pkt`));
+  lines.push(winners.length === 1
+    ? `Zwycięzca: ${winners[0]} (${topScore} pkt)`
+    : `Zwycięzcy: ${winners.join(", ")} (${topScore} pkt)`);
+
   return lines.join("\n");
 }
 
