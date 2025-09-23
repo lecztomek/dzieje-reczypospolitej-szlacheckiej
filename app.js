@@ -161,14 +161,26 @@ function renderProvincePicker(container, onPick, title='Wybierz prowincję'){
 
   const grid = document.createElement('div');
   grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
-  grid.style.gap = '6px';
+  // auto-fit: dostosowuje liczbę kolumn do szerokości,
+  // minmax 140px zapewnia czytelny przycisk
+  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(140px, 1fr))';
+  grid.style.gap = '8px';
 
   ['prusy','wielkopolska','malopolska','litwa','ukraina'].forEach(k=>{
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'phase-action';
     b.textContent = k;
+
+    // zapewnij wygodny rozmiar i łamanie tekstu
+    b.style.width = '100%';
+    b.style.padding = '10px 12px';
+    b.style.whiteSpace = 'normal';
+    b.style.wordBreak = 'break-word';
+    b.style.lineHeight = '1.2';
+    b.style.minHeight = '40px';
+    b.style.justifySelf = 'stretch';
+
     b.addEventListener('click', ()=> onPick(k));
     grid.appendChild(b);
   });
@@ -177,6 +189,16 @@ function renderProvincePicker(container, onPick, title='Wybierz prowincję'){
   container.appendChild(wrap);
 }
 
+function maybeAutoAdvanceAfterAction(){
+  const s = game.getPublicState?.() || {};
+  const phase = s.current_phase || game.round?.currentPhaseId?.();
+  const hasActive = Number.isInteger(s.active_player_index);
+  if (phase === 'actions' && !hasActive){
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Auto-next z Akcji -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  }
+}
 
 function buildAutoPicksPospoliteA(state){
   // zbierz kandydatów: po 1 listę kontrolowanych prowincji (bez znaczenia, czy jest fort)
@@ -1188,7 +1210,15 @@ if (phase === 'auction' || phase === 'sejm'){
     // 4 przyciski główne
     box.append(
       chip('Administracja', ()=>{ 
-        run('gact administracja'); 
+        if (curPlayerIdx < 0) return err('Ustaw aktywnego gracza: turn <imię|indeks>.');
+      
+        // wywołaj silnik bezpośrednio (szybciej niż przez konsolę)
+        const msg = game.actions.administracja(curPlayerIdx);
+        logEngine(msg);
+        syncUIFromGame();
+      
+        // jeżeli to już była ostatnia akcja ostatniego gracza – przejdź automatycznie dalej
+        setTimeout(maybeAutoAdvanceAfterAction, 0);
       }, 'gact administracja'),
   
       chip('Wpływ', ()=>{ 
@@ -1214,12 +1244,14 @@ if (phase === 'auction' || phase === 'sejm'){
           run(`gact ${_actionWizard.kind} ${prov}`);
           _actionWizard = null;
           buildPhaseActionsSmart(game.getPublicState());
+          setTimeout(maybeAutoAdvanceAfterAction, 0);
         }, 'Wybierz prowincję');
       } else if (_actionWizard.kind === 'marsz'){
         if (_actionWizard.step === 'from'){
           renderProvincePicker(uiArea, (prov)=>{
             _actionWizard = { kind:'marsz', step:'to', from: prov };
             buildPhaseActionsSmart(game.getPublicState());
+            setTimeout(maybeAutoAdvanceAfterAction, 0);
           }, 'Marsz — skąd?');
         } else if (_actionWizard.step === 'to'){
           const from = _actionWizard.from;
@@ -1227,6 +1259,7 @@ if (phase === 'auction' || phase === 'sejm'){
             run(`gact marsz ${from} ${prov}`);
             _actionWizard = null;
             buildPhaseActionsSmart(game.getPublicState());
+            setTimeout(maybeAutoAdvanceAfterAction, 0);
           }, 'Marsz — dokąd?');
         }
       }
