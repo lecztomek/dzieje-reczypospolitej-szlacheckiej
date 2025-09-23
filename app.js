@@ -1,17 +1,18 @@
 // ===================== PODPIĘCIE SILNIKA (game.js) =====================
-import { ConsoleGame, ProvinceID, RaidTrackID } from './game.js';
+import { ConsoleGame, ProvinceID, RaidTrackID, StateID } from './game.js';
 
 // instancja gry + ułatwienia globalne (DevTools)
 export const game = new ConsoleGame();
 window.game = game;
 window.ProvinceID = ProvinceID;
 window.RaidTrackID = RaidTrackID;
-
+window.StateID = StateID;
 
 const EVENT_DEFAULT_POPUP_IMG = './images/e-default.png';
 const INCOME_POPUP_IMG = './images/income.png';
 const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
+const FINAL_SUMMARY_POPUP_IMG = './images/gameover.png';
 
 let _actionWizard = null; 
 
@@ -1383,6 +1384,7 @@ function syncUIFromGame(){
       // Zbierz raport punktacji z silnika
       const report = game.computeScores(); // zwraca string z wieloma liniami
       popupFromEngine('Koniec gry — podsumowanie', report, {
+        imageUrl: FINAL_SUMMARY_POPUP_IMG,
         buttonText: 'Zamknij',
         onAction: () => {
           // nic specjalnego — tylko zamknij okno; UI zostaje w stanie końcowym
