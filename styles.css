@@ -354,3 +354,28 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   border-radius:12px;
   border:1px solid #1f2937;
 }
+
+/* === Szlachcice – tryb ciasny === */
+.nobles-list{ gap:4px; }
+.nobles-list .province-item{
+  padding:4px 8px;
+  border:none;
+  background:transparent;
+  line-height:1.1;
+  gap:6px;
+}
+.nobles-list .province-name{
+  margin-right:6px;
+  font-weight:800;
+}
+.nobles-list .badges{ gap:4px; }
+.noble-badge{
+  padding:2px 6px;
+  font-weight:800;
+  border:1px solid #2a3446;   /* subtelniej, cieńsza ramka */
+  background:#0d1424;
+}
+.noble-badge .dot{
+  width:10px; height:10px;
+  border-width:1.5px;
+}
