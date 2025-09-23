@@ -603,3 +603,48 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
 .player-gold .val{
   font-weight:800;
 }
+
+/* === Gracze – ciasne „chipsy” w jednej linii, bez ramek === */
+.players-list{
+  display:flex;
+  flex-wrap:wrap;   /* zawijaj tylko między chipami */
+  gap:4px;          /* minimalny odstęp między chipami */
+  margin:0; padding:0;
+}
+
+.player-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:0 6px;           /* mały „oddech” wewnątrz */
+  background:transparent;  /* bez tła */
+  border:none;             /* bez obramowań */
+  line-height:1.1;
+  white-space:nowrap;      /* chip nie łamie się w środku */
+  flex:0 0 auto;           /* nie rozciągaj na całą szerokość */
+}
+
+.player-dot{
+  width:10px; height:10px; border-radius:50%;
+  background: currentColor;      /* kropka w kolorze gracza */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+  flex:0 0 auto;
+}
+
+.player-name{
+  font-weight:800;
+  max-width:140px;              /* skracanie bardzo długich nazw */
+  overflow:hidden; text-overflow:ellipsis;
+}
+
+.player-gold{
+  display:inline-flex; align-items:center; gap:4px;
+  font-weight:800;
+}
+
+.player-gold .coin{
+  width:8px; height:8px; border-radius:50%;
+  background:#eab308;           /* „złota” kropka */
+  flex:0 0 auto;
+}
+
