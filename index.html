@@ -36,6 +36,18 @@
           <h2 style="font-size:1rem;margin:0 0 10px;color:#cbd5e1">Szlachcice</h2>
           <div id="noblesList" class="nobles-list" aria-live="polite"></div>
         </div>
+
+        <div class="section" aria-label="Akcje fazy">
+          <h2 style="font-size:1rem;margin:0 0 8px;color:#cbd5e1">Akcje fazy</h2>
+          <div style="color:#94a3b8;font-size:.9rem;margin-bottom:6px">Wybrana prowincja:</div>
+          <div id="pickedRegion" style="font-weight:800;color:#e2e8f0;opacity:.9">–</div>
+        
+          <div style="height:8px"></div>
+        
+          <h3 style="margin:0 0 8px;font-size:1rem;color:#cbd5e1">Przyciski</h3>
+          <div id="phaseActions" role="group" aria-label="Przyciski fazy"></div>
+        </div>
+        
       </aside>
 
       <section class="map-card" aria-describedby="map-desc">
@@ -96,20 +108,6 @@
           <div class="coords" id="coords">x: –, y: –</div>
         </div>
       </section>
-
-      <aside class="rightbar" id="rightBar" aria-label="Szybkie akcje">
-        <div class="head">
-          <h2>Akcje fazy</h2>
-        </div>
-        <div class="section">
-          <div style="color:#94a3b8;font-size:.9rem">Wybrana prowincja:</div>
-          <div id="pickedRegion">–</div>
-        </div>
-        <div class="section">
-          <h3 style="margin:0 0 8px;font-size:1rem;color:#cbd5e1">Przyciski</h3>
-          <div id="phaseActions" role="group" aria-label="Przyciski fazy"></div>
-        </div>
-      </aside>
 
       <!-- KONSOLA -->
       <section class="console" aria-label="Konsola poleceń">
