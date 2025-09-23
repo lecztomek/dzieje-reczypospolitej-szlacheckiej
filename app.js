@@ -1225,7 +1225,12 @@ if (phase === 'auction' || phase === 'sejm'){
         _actionWizard = { kind:'wplyw' };
         buildPhaseActionsSmart(game.getPublicState());
       }, 'gact wplyw <prowincja>'),
-  
+
+      chip('Rekrutacja', ()=>{ 
+        _actionWizard = { kind:'rekrutacja' };
+        buildPhaseActionsSmart(game.getPublicState());
+      }, 'gact rekrutacja <prowincja>'),
+      
       chip('Posiadłość', ()=>{ 
         _actionWizard = { kind:'posiadlosc' };
         buildPhaseActionsSmart(game.getPublicState());
@@ -1239,7 +1244,7 @@ if (phase === 'auction' || phase === 'sejm'){
   
     // Rysuj kreator wg stanu
     if (_actionWizard){
-      if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc'){
+      if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja'){
         renderProvincePicker(uiArea, (prov)=>{
           run(`gact ${_actionWizard.kind} ${prov}`);
           _actionWizard = null;
