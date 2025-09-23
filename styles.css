@@ -22,9 +22,12 @@ h1{font-size:clamp(18px,2.4vw,28px);margin:0;letter-spacing:.3px}
 main{max-width:1400px;margin:18px auto 40px;padding:0 20px;display:block}
 .layout{
   display:grid;
-  grid-template-columns: var(--sidebar-w) var(--rightbar-w) 1fr; /* 320 | 300 | reszta */
   gap:16px;
   align-items:start;
+
+  grid-template-columns:
+    minmax(260px, var(--sidebar-w))
+    minmax(0, 1fr);
 }
 
 .wrap, main{
@@ -41,10 +44,7 @@ main{max-width:1400px;margin:18px auto 40px;padding:0 20px;display:block}
 
 @media (max-width: 980px){
   .layout{ grid-template-columns: 1fr; }
-  .sidebar,
-  .rightbar,
-  .console,
-  .map-card{ grid-column:1; grid-row:auto; }
+  .sidebar, .console, .map-card{ grid-column:1; grid-row:auto; }
 }
 
 /* 4) Mapa wypełnia wysokość okna (pozwala się „rozepchać”) */
@@ -71,10 +71,9 @@ svg{
   height: calc(100vh - 100px); /* było: calc(100vh - 200px); więcej miejsca na dół */
 }
 
-.sidebar{  grid-column:1;        grid-row:1; }
-.rightbar{ grid-column:2;        grid-row:1; }
-.console{  grid-column:1 / span 2; grid-row:2; }  /* konsola pod panelami */
-.map-card{ grid-column:3;        grid-row:1 / span 2; } /* mapa prawa, wysoka */
+.sidebar{  grid-column:1; grid-row:1; }
+.map-card{ grid-column:2; grid-row:1 / span 2; }
+.console{  grid-column:1 / span 2; grid-row:2; }
 
 .round { display:flex; align-items:center; gap:8px; }
 #roundLabel { letter-spacing:.8px; font-weight:800; color:#e2e8f0;}
@@ -709,4 +708,12 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
 /* Bezpieczne czyszczenie starych styli, jeśli gdzieś zostało .player-item */
 .players-list .player-item{ border:none !important; background:transparent !important; padding:0 !important; }
 .players-list .player-item .player-name{ flex:0 0 auto !important; margin:0 !important; }
+
+#phaseActions{display:flex;flex-wrap:wrap;gap:8px}
+#phaseActions button{
+  border:1px solid #334155;background:#0f172a;color:#e2e8f0;
+  padding:8px 10px;border-radius:10px;font-weight:700;cursor:pointer
+}
+#phaseActions button:hover{background:#111827;border-color:#475569}
+#pickedRegion{font-weight:800;color:#e2e8f0;opacity:.9}
 
