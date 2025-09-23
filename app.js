@@ -176,6 +176,65 @@ if (forcePopup) {
 
 }
 
+function computeNoblesPerProvince(state){
+  // Zwraca: { prusy: [{color:"#hex", count: n}, ...], ... } tylko tam, gdzie count>0
+  const out = {};
+  for (const [pid, arr] of Object.entries(state.nobles || {})){
+    const key = provKeyFromId(pid);
+    if (!key) continue;
+    const items = [];
+    arr.forEach((cnt, pidx) => {
+      if ((cnt|0) > 0){
+        items.push({ color: playerColorByIndex(state, pidx), count: cnt|0 });
+      }
+    });
+    if (items.length) out[key] = items.sort((a,b)=> b.count - a.count);
+  }
+  return out;
+}
+
+function renderNoblesList(state){
+  if (!noblesListEl) return;                 // brak listy w DOM → nic nie robimy
+  noblesListEl.innerHTML = '';
+
+  const data = computeNoblesPerProvince(state);
+  const keys = Object.keys(data);
+
+  if (keys.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'Brak szlachciców w prowincjach.';
+    noblesListEl.appendChild(empty);
+    return;
+  }
+
+  keys.forEach(key => {
+    const row = document.createElement('div');
+    row.className = 'province-item';
+
+    const name = document.createElement('div');
+    name.className = 'province-name';
+    name.textContent = PROV_DISPLAY[key] || humanize(key);
+
+    const badges = document.createElement('div');
+    badges.className = 'badges';
+
+    data[key].forEach(({color, count}) => {
+      const badge = document.createElement('span');
+      badge.className = 'noble-badge';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.setProperty('--dot', color);
+      badge.appendChild(dot);
+      badge.appendChild(document.createTextNode(String(count)));
+      badges.appendChild(badge);
+    });
+
+    row.append(name, badges);
+    noblesListEl.appendChild(row);
+  });
+}
+
 function renderProvincePicker(container, onPick, title='Wybierz prowincję'){
   const wrap = document.createElement('div');
   wrap.style.marginTop = '10px';
@@ -410,6 +469,8 @@ const logEl = document.getElementById('log');
 const inputEl = document.getElementById('cmdInput');
 const formEl = document.getElementById('cmdForm');
 const noblesBody = document.getElementById('noblesBody');
+const noblesListEl = document.getElementById('noblesList'); // ← NOWE (lista)
+
 const marshalBox = document.getElementById('marshalBox');
 const marshalResetBtn = document.getElementById('marshalResetBtn');
 const playersBody = document.getElementById('playersBody');
@@ -794,24 +855,21 @@ function controllerIndexFromState(s, provinceIdStr){
 // ===== PANEL: Marszałek + Szlachcice (na potrzeby sync UI) =====
 const NOBLE_SLOTS = 4;
 function humanize(key){ return key.charAt(0).toUpperCase() + key.slice(1); }
-function buildNoblesTable(){
-  const order = ['prusy','wielkopolska','malopolska','litwa','ukraina'];
-  order.forEach(k => {
-    const tr = document.createElement('tr');
-    const th = document.createElement('th'); th.textContent = humanize(k); tr.appendChild(th);
-    for(let i=1;i<=NOBLE_SLOTS;i++){
-      const td = document.createElement('td');
-      const slot = document.createElement('div');
-      slot.className = 'noble-slot';
-      slot.setAttribute('data-region', k);
-      slot.setAttribute('data-slot', i);
-      slot.setAttribute('data-empty', '1');
-      slot.title = `${humanize(k)} – Szlachcic ${i}`;
-      td.appendChild(slot); tr.appendChild(td);
-    }
-    noblesBody.appendChild(tr);
-  });
+
+const PROV_DISPLAY = {
+  prusy: "Prusy",
+  wielkopolska: "Wielkopolska",
+  malopolska: "Małopolska",
+  litwa: "Litwa",
+  ukraina: "Ukraina",
+};
+
+function playerColorByIndex(state, pidx){
+  const name = state?.settings?.players?.[pidx]?.name;
+  const ui = name ? PLAYERS.find(p => p.name === name) : null;
+  return ui?.color || '#eab308';
 }
+
 //function setMarshal(color){ marshalBox.style.background = color; marshalBox.style.borderColor = color; return true; }
 //function clearMarshal(){ marshalBox.style.background = 'none'; marshalBox.style.borderColor = '#475569'; }
 function setMarshal(/* color */){ return true; }
@@ -1567,27 +1625,13 @@ function syncUIFromGame(){
     });
   }
 
-  // SZLACHCICE (top4)
-  for (const [pid, arr] of Object.entries(s.nobles || {})) {
-    const key = provKeyFromId(pid);
-    if (!key) continue;
-    resetNobles(key);
-    const tuples = arr.map((cnt, idx) => ({ cnt, idx }))
-                      .filter(t => t.cnt > 0)
-                      .sort((a,b) => b.cnt - a.cnt)
-                      .slice(0,4);
-    tuples.forEach((t, slot) => {
-      const p = s.settings.players[t.idx];
-      const uiPlayer = PLAYERS.find(x => x.name === p.name);
-      const color = uiPlayer?.color || '#f59e0b';
-      setNoble(key, slot+1, color, t.cnt);
-    });
-  }
+  // SZLACHCICE 
+  renderNoblesList(s);
 
   // WROGOWIE
-setEnemyCount('szwecja', Math.max(0, Math.min(6, s.raid_tracks.N)));
-setEnemyCount('moskwa',  Math.max(0, Math.min(6, s.raid_tracks.E)));
-setEnemyCount('tatarzy', Math.max(0, Math.min(6, s.raid_tracks.S)));
+  setEnemyCount('szwecja', Math.max(0, Math.min(6, s.raid_tracks.N)));
+  setEnemyCount('moskwa',  Math.max(0, Math.min(6, s.raid_tracks.E)));
+  setEnemyCount('tatarzy', Math.max(0, Math.min(6, s.raid_tracks.S)));
 }
 
 // ===================== Parser poleceń =====================
@@ -1978,7 +2022,6 @@ createBoxes();
 updateRoundUI();
 createArmySlots();
 createEnemyTracks();
-buildNoblesTable();
 buildPhaseBar();
 buildPhaseActionsSmart(game.getPublicState?.() || {}); // ← smart start
 updateTurnUI();
