@@ -110,6 +110,7 @@ const LAW_VARIANTS = {
   },
 };
 
+function isGameOverState(s){ return s?.state === StateID.GAME_OVER; }
 
 function ensureSejmLawForRound(state, { forcePopup = false } = {}){
   const s = state || game.getPublicState?.();
@@ -1349,9 +1350,21 @@ if (phase === 'auction' || phase === 'sejm'){
           const nxt = game.finishPhaseAndAdvance();
           ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
           syncUIFromGame();
+        },
+        onClose: () => {
+          // UWAGA: to wykona się dopiero PO zamknięciu poprzedniego popupu,
+          // więc nowy popup nie zostanie "zgaszony".
+          const s = game.getPublicState?.();
+          if (!_finalPopupShown && isGameOverState(s)) {
+            _finalPopupShown = true;
+            const report = game.computeScores();
+            popupFromEngine('Koniec gry — podsumowanie', report, {
+              imageUrl: FINAL_SUMMARY_POPUP_IMG,
+              buttonText: 'Zamknij'
+            });
+          }
         }
       });
-    });
     box.append(btnDev);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
