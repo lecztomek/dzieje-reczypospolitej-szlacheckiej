@@ -635,7 +635,7 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Wzmacnanie', 'Wyprawy','Najazdy'];
+const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Wzmacnanie', 'Wyprawy','Spustoszenia'];
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -1349,94 +1349,97 @@ if (phase === 'auction' || phase === 'sejm'){
     tintByActive(); return;
   }
 
-  // ====== WYPRAWY (phase: attacks) ======
-  if (phase === 'attacks'){
-    const box = section('Wyprawy', 'Wybierz skąd atakujesz (tylko prowincje, gdzie masz jednostki) albo PASS.');
-  
-    // aktywny gracz w tej fazie
-    const pidx = Number.isInteger(s.active_attacker_index) ? s.active_attacker_index : curPlayerIdx;
-    const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
-    box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } },
-      `Aktywny gracz: ${activePlayerName}`
-    ));
-  
-    // prowincje z jednostkami aktywnego gracza
-    const playerProvinces = [];
-    for (const [pid, arr] of Object.entries(s.troops || {})) {
-      const key = provKeyFromId(pid);
-      if (!key) continue;
-      const units = (arr?.[pidx] || 0) | 0;
-      if (units > 0) playerProvinces.push({ key, units });
-    }
-  
-    if (playerProvinces.length === 0){
-      box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } },
-        'Brak jednostek — możesz tylko PASS.'
+    // ====== WYPRAWY (phase: attacks) ======
+    if (phase === 'attacks'){
+      const box = section('Wyprawy', 'Wybierz skąd atakujesz (tylko prowincje, gdzie masz jednostki) albo PASS.');
+    
+      // aktywny gracz w tej fazie
+      const pidx = Number.isInteger(s.active_attacker_index) ? s.active_attacker_index : curPlayerIdx;
+      const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
+      box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } },
+        `Aktywny gracz: ${activePlayerName}`
       ));
-    } else {
-      playerProvinces.forEach(({ key, units }) => {
-        const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
-        row.append(el('span', { style:{ minWidth:'150px', fontWeight:'800' } }, `${key} (jednostek: ${units})`));
-  
-        const targets = ATTACK_TARGETS[key] || [];
-        targets.forEach(enemyKey => {
-          row.append(chip(`atak ${key} → ${enemyKey}`, () => {
-            try {
-              // zawsze 1 kość
-              const roll = roll1d6();
-              const rolls = [roll];
-          
-              ok(`(UI) Wyprawa ${key} → ${enemyKey}, rzut: ${roll}`);
-          
-              const lines = game.attacks.attack({
-                playerIndex: pidx,
-                enemy: toEnemyEnum(enemyKey),
-                from:  toProvEnum(key),
-                rolls,          // pojedynczy rzut
-                dice: 1         // jawnie wymuszamy 1 kość
-              });
-          
-              logEngine(lines);
-              syncUIFromGame();
-          
-              popupFromEngine(`Wyprawa — ${key} → ${enemyKey}`, [
-                `Rzut: ${roll}.`,
-                ...(Array.isArray(lines) ? lines : [lines]),
-              ], {
-                imageUrl: ATTACK_POPUP_IMG,
-                buttonText: 'OK',
-                onClose: () => {
-                  maybeAutoAdvanceAfterAttacks();
-                  buildPhaseActionsSmart(game.getPublicState());
-                }
-              });
-            } catch (e) {
-              err('Błąd ataku: ' + e.message);
-            }
-          }, `gattack ${enemyKey} ${key} <auto 1k6>`));
-  
-        box.append(row);
-      });
-    }
-  
-    // PASS
-    box.append(el('div', { style:{ height:'6px' } }));
-    box.append(chip('PASS', () => {
-      try {
-        const msg = game.attacks.passTurn(pidx);
-        ok(String(msg || 'PASS.'));
-        syncUIFromGame();
-        maybeAutoAdvanceAfterAttacks();
-        buildPhaseActionsSmart(game.getPublicState());
-      } catch (ex) {
-        err('PASS nieudany: ' + ex.message);
+    
+      // prowincje z jednostkami aktywnego gracza
+      const playerProvinces = [];
+      for (const [pid, arr] of Object.entries(s.troops || {})) {
+        const key = provKeyFromId(pid);
+        if (!key) continue;
+        const units = (arr?.[pidx] || 0) | 0;
+        if (units > 0) playerProvinces.push({ key, units });
       }
-    }, 'gpass'));
-  
-    phaseActionsEl.appendChild(box);
-    tintByActive();
-    return;
-  }
+    
+      if (playerProvinces.length === 0){
+        box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } },
+          'Brak jednostek — możesz tylko PASS.'
+        ));
+      } else {
+        playerProvinces.forEach(({ key, units }) => {
+          const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
+          row.append(el('span', { style:{ minWidth:'150px', fontWeight:'800' } }, `${key} (jednostek: ${units})`));
+    
+          const targets = ATTACK_TARGETS[key] || [];
+          targets.forEach(enemyKey => {
+            row.append(chip(`atak ${key} → ${enemyKey}`, () => {
+              try {
+                // zawsze 1 kość
+                const roll = roll1d6();
+                const rolls = [roll];
+    
+                ok(`(UI) Wyprawa ${key} → ${enemyKey}, rzut: ${roll}`);
+    
+                const lines = game.attacks.attack({
+                  playerIndex: pidx,
+                  enemy: toEnemyEnum(enemyKey),
+                  from:  toProvEnum(key),
+                  rolls,      // pojedynczy rzut
+                  dice: 1     // jawnie wymuszamy 1 kość
+                });
+    
+                logEngine(lines);
+                syncUIFromGame();
+    
+                popupFromEngine(`Wyprawa — ${key} → ${enemyKey}`, [
+                  `Rzut: ${roll}.`,
+                  ...(Array.isArray(lines) ? lines : [lines]),
+                ], {
+                  imageUrl: ATTACK_POPUP_IMG,
+                  buttonText: 'OK',
+                  onClose: () => {
+                    maybeAutoAdvanceAfterAttacks();
+                    buildPhaseActionsSmart(game.getPublicState());
+                  }
+                });
+              } catch (e) {
+                err('Błąd ataku: ' + e.message);
+              }
+            }, `gattack ${enemyKey} ${key} <auto 1k6>`));
+          });
+    
+          // ← UWAGA: to musi być PO .forEach(targets)
+          box.append(row);
+        });
+      }
+    
+      // PASS
+      box.append(el('div', { style:{ height:'6px' } }));
+      box.append(chip('PASS', () => {
+        try {
+          const msg = game.attacks.passTurn(pidx);
+          ok(String(msg || 'PASS.'));
+          syncUIFromGame();
+          maybeAutoAdvanceAfterAttacks();
+          buildPhaseActionsSmart(game.getPublicState());
+        } catch (ex) {
+          err('PASS nieudany: ' + ex.message);
+        }
+      }, 'gpass'));
+    
+      phaseActionsEl.appendChild(box);
+      tintByActive();
+      return;
+    }
+
 
   // ====== SPUSTOSZENIA ======
   if (phase === 'devastation'){
