@@ -1241,7 +1241,12 @@ if (phase === 'auction' || phase === 'sejm'){
         _actionWizard = { kind:'posiadlosc' };
         buildPhaseActionsSmart(game.getPublicState());
       }, 'gact posiadlosc <prowincja>'),
-  
+
+      chip('Zamożność', ()=>{ 
+        _actionWizard = { kind:'zamoznosc' };
+        buildPhaseActionsSmart(game.getPublicState());
+      }, 'gact zamoznosc <prowincja>'),
+      
       chip('Marsz', ()=>{ 
         _actionWizard = { kind:'marsz', step:'from' };
         buildPhaseActionsSmart(game.getPublicState());
@@ -1250,7 +1255,7 @@ if (phase === 'auction' || phase === 'sejm'){
   
     // Rysuj kreator wg stanu
     if (_actionWizard){
-      if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja'){
+      if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja' || _actionWizard.kind === 'zamoznosc'){
         renderProvincePicker(uiArea, (prov)=>{
           run(`gact ${_actionWizard.kind} ${prov}`);
           _actionWizard = null;
@@ -1828,7 +1833,7 @@ document.querySelectorAll('.region').forEach(path => {
 path.addEventListener('click', () => {
   // jeśli kreator akcji jest aktywny — traktuj klik jako wybór prowincji
   if (_actionWizard) {
-    if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja') {
+    if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja' || _actionWizard.kind === 'zamoznosc'){
       runCmd(`gact ${_actionWizard.kind} ${key}`);
       _actionWizard = null;
       buildPhaseActionsSmart(game.getPublicState());
