@@ -13,6 +13,8 @@ const INCOME_POPUP_IMG = './images/income.png';
 const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 
+let _actionWizard = null; 
+
 // ==== Sejm: stan + opisy ustaw ====
 let _sejmLawRound = -1;                // runda, w której wylosowaliśmy ustawę
 let _sejmLaw = null;                   // { id, name }
@@ -145,6 +147,36 @@ if (forcePopup) {
 }
 
 }
+
+function renderProvincePicker(container, onPick, title='Wybierz prowincję'){
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = '10px';
+
+  const h = document.createElement('div');
+  h.textContent = title;
+  h.style.color = '#94a3b8';
+  h.style.margin = '0 0 8px';
+  h.style.fontWeight = '700';
+  wrap.appendChild(h);
+
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
+  grid.style.gap = '6px';
+
+  ['prusy','wielkopolska','malopolska','litwa','ukraina'].forEach(k=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'phase-action';
+    b.textContent = k;
+    b.addEventListener('click', ()=> onPick(k));
+    grid.appendChild(b);
+  });
+
+  wrap.appendChild(grid);
+  container.appendChild(wrap);
+}
+
 
 function buildAutoPicksPospoliteA(state){
   // zbierz kandydatów: po 1 listę kontrolowanych prowincji (bez znaczenia, czy jest fort)
@@ -907,6 +939,8 @@ function toEnemyEnum(name){ const k = norm(name); return ENEMY_MAP[k] || null; }
 
 // ===================== Inteligentny panel akcji (UI) =====================
 function buildPhaseActionsSmart(s){
+  if (phase !== 'actions') _actionWizard = null;
+  
   if (!phaseActionsEl) return;
   const phase = s?.current_phase || game.round?.currentPhaseId?.() || null;
 
@@ -1146,35 +1180,62 @@ if (phase === 'auction' || phase === 'sejm'){
 
   // ====== AKCJE ======
   if (phase === 'actions'){
-    const box = section('Akcje', 'Akcje graczy w tej rundzie. Wybierz typ akcji i – jeśli trzeba – wskaż prowincję.');
-    // Administracja
-    const admin = section('Administracja', 'Jednorazowy bonus administracyjny (wg zasad).');
-    admin.append(chip('Administracja', ()=>run('gact administracja')));
-    // Jedna prowincja
-    const single = section('Akcje jednoprowincjowe', 'Wybierz jedną prowincję i zastosuj akcję.');
-    const sel1 = provSelect('act-one');
-    const act1 = (cmd) => ()=>{ const v = sel1.value; if(!v) return err('Wskaż prowincję.'); run(`gact ${cmd} ${v}`); };
-    single.append(sel1,
-      chip('Wpływ (+1 szlachcic)', act1('wplyw'), 'gact wplyw <prow>'),
-      chip('Posiadłość (BOX)',     act1('posiadlosc'), 'gact posiadlosc <prow>'),
-      chip('Rekrutacja (+1 armia)',act1('rekrutacja'), 'gact rekrutacja <prow>'),
-      chip('Zamożność (+1, max 3)',act1('zamoznosc'),  'gact zamoznosc <prow>')
+    const box = section('Akcje', 'Wybierz rodzaj akcji, następnie prowincję (dla marszu: skąd → dokąd).');
+  
+    // obszar dynamiczny kreatora
+    const uiArea = el('div', { id:'actionWizardArea' });
+  
+    // 4 przyciski główne
+    box.append(
+      chip('Administracja', ()=>{ 
+        run('gact administracja'); 
+      }, 'gact administracja'),
+  
+      chip('Wpływ', ()=>{ 
+        _actionWizard = { kind:'wplyw' };
+        buildPhaseActionsSmart(game.getPublicState());
+      }, 'gact wplyw <prowincja>'),
+  
+      chip('Posiadłość', ()=>{ 
+        _actionWizard = { kind:'posiadlosc' };
+        buildPhaseActionsSmart(game.getPublicState());
+      }, 'gact posiadlosc <prowincja>'),
+  
+      chip('Marsz', ()=>{ 
+        _actionWizard = { kind:'marsz', step:'from' };
+        buildPhaseActionsSmart(game.getPublicState());
+      }, 'gact marsz <z> <do>')
     );
-    // Marsz
-    const march = section('Marsz', 'Przemarsz wojsk – wskaż prowincję źródłową i docelową.');
-    const selFrom = provSelect('act-from','— z —');
-    const selTo   = provSelect('act-to','— do —');
-    march.append(selFrom, selTo, chip('Marsz', ()=>{
-      const a = selFrom.value, b = selTo.value;
-      if(!a || !b) return err('Użycie: gact marsz <z> <do>.');
-      run(`gact marsz ${a} ${b}`);
-    }, 'gact marsz <z> <do>'));
-    // Dalej
-    const next = section('Zakończenie', 'Gdy wszyscy zakończą swoje ruchy, przejdź do kolejnej fazy.');
-    next.append(chip('Zakończ Akcje (gnext)', ()=>run('gnext')));
-
-    phaseActionsEl.append(box, admin, single, march, next);
-    tintByActive(); return;
+  
+    // Rysuj kreator wg stanu
+    if (_actionWizard){
+      if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc'){
+        renderProvincePicker(uiArea, (prov)=>{
+          run(`gact ${_actionWizard.kind} ${prov}`);
+          _actionWizard = null;
+          buildPhaseActionsSmart(game.getPublicState());
+        }, 'Wybierz prowincję');
+      } else if (_actionWizard.kind === 'marsz'){
+        if (_actionWizard.step === 'from'){
+          renderProvincePicker(uiArea, (prov)=>{
+            _actionWizard = { kind:'marsz', step:'to', from: prov };
+            buildPhaseActionsSmart(game.getPublicState());
+          }, 'Marsz — skąd?');
+        } else if (_actionWizard.step === 'to'){
+          const from = _actionWizard.from;
+          renderProvincePicker(uiArea, (prov)=>{
+            run(`gact marsz ${from} ${prov}`);
+            _actionWizard = null;
+            buildPhaseActionsSmart(game.getPublicState());
+          }, 'Marsz — dokąd?');
+        }
+      }
+    }
+  
+    box.append(uiArea);
+    phaseActionsEl.appendChild(box);
+    tintByActive(); 
+    return;
   }
 
   // ====== STARCIA ======
