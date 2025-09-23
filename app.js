@@ -28,9 +28,9 @@ let _finalPopupShown = false;
 const LAW_POOL = [
   { id: 1, name: 'Podatek' },
   { id: 2, name: 'Podatek' },
-  { id: 3, name: 'Pospolite ruszenie' },
-  { id: 4, name: 'Pospolite ruszenie' },
-  { id: 5, name: 'Fortyfikacje' },
+  { id: 3, name: 'Wojsko' },       // było: Pospolite ruszenie
+  { id: 4, name: 'Wojsko' },       // było: Pospolite ruszenie
+  { id: 5, name: 'Gospodarka' },   // było: Fortyfikacje
   { id: 6, name: 'Pokój' },
 ];
 
@@ -44,73 +44,68 @@ const ATTACK_TARGETS = {
 
 // Opisy i przyciski dla wariantów (zgodnie z silnikiem)
 const LAW_VARIANTS = {
-  1: { // Podatek (k6=1)
+  1: { // Podatek
     title: 'Podatek',
     buttons: [
-      { label: 'Podatek — wariant A (+2 zł dla każdego)', choice: 'A' },
-      { label: 'Podatek — wariant B (+1 zł dla wszystkich, +3 zł dla zwycięzcy)', choice: 'B' },
+      { label: 'Podatek — wariant A (+2 zł zwycięzca, +1 zł reszta)', choice: 'A' },
+      { label: 'Cło — wariant B (+3 zł zwycięzca, +1 na losowym torze)', choice: 'B' },
     ],
     describe: [
-      'A: każdy gracz otrzymuje +2 zł.',
-      'B: każdy +1 zł, a zwycięzca aukcji dodatkowo +3 zł (łącznie +4).',
+      'A: zwycięzca aukcji +2 zł, pozostali gracze +1 zł.',
+      'B: zwycięzca aukcji +3 zł oraz +1 na losowym torze (N/E/S).',
     ],
   },
-  2: { // Podatek (k6=2)
+  2: { // Podatek
     title: 'Podatek',
     buttons: [
-      { label: 'Podatek — wariant A (+2 zł dla każdego)', choice: 'A' },
-      { label: 'Podatek — wariant B (+1 zł dla wszystkich, +3 zł dla zwycięzcy)', choice: 'B' },
+      { label: 'Podatek — wariant A (+2 zł zwycięzca, +1 zł reszta)', choice: 'A' },
+      { label: 'Cło — wariant B (+3 zł zwycięzca, +1 na losowym torze)', choice: 'B' },
     ],
     describe: [
-      'A: każdy gracz otrzymuje +2 zł.',
-      'B: każdy +1 zł, a zwycięzca aukcji dodatkowo +3 zł (łącznie +4).',
+      'A: zwycięzca aukcji +2 zł, pozostali gracze +1 zł.',
+      'B: zwycięzca aukcji +3 zł oraz +1 na losowym torze (N/E/S).',
     ],
   },
-  3: { // Pospolite ruszenie (k6=3)
-    title: 'Pospolite ruszenie',
-    buttons: [
-      // Uwaga: A w silniku wymaga później przekazania "picks" (gracz+prowincja kontrolowana)
-      { label: 'Pospolite ruszenie — wariant A (+1 jednostka w kontrolowanej prowincji)', choice: 'A' },
-      // B wymaga wskazania toru (track: 'N' | 'E' | 'S')
-      { label: 'Pospolite ruszenie — wariant B (Szwecja −2)', choice: 'B', track: 'N' },
-      { label: 'Pospolite ruszenie — wariant B (Moskwa −2)',  choice: 'B', track: 'E' },
-      { label: 'Pospolite ruszenie — wariant B (Tatarzy −2)', choice: 'B', track: 'S' },
-    ],
-    describe: [
-      'A: każdy może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (wymaga wskazania „picks”).',
-      'B: wybierz jeden tor (N/E/S), ten tor −2.',
-    ],
-  },
-  4: { // Pospolite ruszenie (k6=4)
-    title: 'Pospolite ruszenie',
+  3: { // Wojsko
+    title: 'Wojsko',
     buttons: [
       { label: 'Pospolite ruszenie — wariant A (+1 jednostka w kontrolowanej prowincji)', choice: 'A' },
-      { label: 'Pospolite ruszenie — wariant B (Szwecja −2)', choice: 'B', track: 'N' },
-      { label: 'Pospolite ruszenie — wariant B (Moskwa −2)',  choice: 'B', track: 'E' },
-      { label: 'Pospolite ruszenie — wariant B (Tatarzy −2)', choice: 'B', track: 'S' },
+      { label: 'Fort — wariant B (fort w losowej kontrolowanej prowincji zwycięzcy)', choice: 'B' },
     ],
     describe: [
-      'A: każdy może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (wymaga wskazania „picks”).',
-      'B: wybierz jeden tor (N/E/S), ten tor −2.',
+      'A: każdy gracz może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (automatyczny wybór).',
+      'B: wylosuj jedną z kontrolowanych przez zwycięzcę prowincji bez fortu i postaw tam fort.',
     ],
   },
-  5: { // Fortyfikacje (k6=5) — tylko A
-    title: 'Fortyfikacje',
+  4: { // Wojsko
+    title: 'Wojsko',
     buttons: [
-      // A w silniku wymaga „picks” (gracz + kontrolowana prowincja bez fortu)
-      { label: 'Fortyfikacje — wariant A (połóż fort w kontrolowanej prowincji)', choice: 'A' },
+      { label: 'Pospolite ruszenie — wariant A (+1 jednostka w kontrolowanej prowincji)', choice: 'A' },
+      { label: 'Fort — wariant B (fort w losowej kontrolowanej prowincji zwycięzcy)', choice: 'B' },
     ],
     describe: [
-      'A: połóż fort w kontrolowanej przez siebie prowincji bez fortu (wymaga wskazania „picks”).',
+      'A: każdy gracz może otrzymać +1 jednostkę w prowincji, którą jednoznacznie kontroluje (automatyczny wybór).',
+      'B: wylosuj jedną z kontrolowanych przez zwycięzcę prowincji bez fortu i postaw tam fort.',
     ],
   },
-  6: { // Pokój (k6=6)
+  5: { // Gospodarka
+    title: 'Gospodarka',
+    buttons: [
+      { label: 'Gospodarka — wariant A (Zamożność +1 w losowej prowincji zwycięzcy)', choice: 'A' },
+      { label: 'Gospodarka — wariant B (Zamożność +2 w losowej prowincji na mapie)', choice: 'B' },
+    ],
+    describe: [
+      'A: zwiększ Zamożność o +1 w losowo wybranej prowincji kontrolowanej przez zwycięzcę.',
+      'B: zwiększ Zamożność o +2 w losowo wybranej prowincji na całej mapie (globalnie, nie per gracz).',
+    ],
+  },
+  6: { // Pokój
     title: 'Pokój',
     buttons: [
-      { label: 'Pokój — wariant A (wszyscy sąsiedzi: tory −1)', choice: 'A' },
-      { label: 'Pokój — wariant B (Szwecja: tor −2)', choice: 'B', track: 'N' },
-      { label: 'Pokój — wariant B (Moskwa: tor −2)',  choice: 'B', track: 'E' },
-      { label: 'Pokój — wariant B (Tatarzy: tor −2)', choice: 'B', track: 'S' },
+      { label: 'Pokój — wariant A (wszystkie tory −1)', choice: 'A' },
+      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'N' },
+      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'E' },
+      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'S' },
     ],
     describe: [
       'A: wszystkie trzy tory (N, E, S) −1.',
@@ -118,6 +113,7 @@ const LAW_VARIANTS = {
     ],
   },
 };
+
 
 function randRolls(n){ return Array.from({length: Math.max(1, n|0)}, ()=> 1 + Math.floor(Math.random()*6)); }
 
