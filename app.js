@@ -850,17 +850,6 @@ const PLAYERS = []; // { key, name, color }
 
 function playerKey(name){ return norm(name).replace(/\s+/g,'_'); }
 function findPlayer(name){ const k = playerKey(name); return PLAYERS.find(p => p.key === k) || null; }
-function renderPlayerRow(p){
-  const tr = document.createElement('tr'); tr.id = `player-${p.key}`;
-  const tdColor = document.createElement('td'); const box = document.createElement('div');
-  box.className = 'player-color'; box.style.background = p.color; box.style.borderColor = p.color; tdColor.appendChild(box);
-  const tdName = document.createElement('td'); tdName.className = 'name'; tdName.textContent = p.name;
-  const tdGold  = document.createElement('td'); tdGold.textContent  = '—'; tdGold.setAttribute('data-col','gold');
-  const tdHonor = document.createElement('td'); tdHonor.textContent = '—'; tdHonor.setAttribute('data-col','honor');
-  const tdFinal = document.createElement('td'); tdFinal.textContent = '—'; tdFinal.setAttribute('data-col','final');
-  tr.append(tdColor, tdName, tdGold, tdHonor, tdFinal);
-  playersBody.appendChild(tr);
-}
 
 // ===================== Rysowanie (piny, linie, etykiety) – używane przez UI sync =====================
 function makeId(prefix){ return `${prefix}-${idCounter++}`; }
