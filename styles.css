@@ -648,3 +648,65 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   flex:0 0 auto;
 }
 
+/* === PLAYERS: twarde nadpisania, żeby było ciasno jak u szlachty === */
+
+/* Lista graczy = „chipsy” obok siebie */
+.players-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;           /* mała przerwa tylko między graczami */
+  margin:0; padding:0;
+}
+
+/* Jeden gracz jako chip bez ramek/tła */
+.players-list .player-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;           /* ODSTĘP MIĘDZY KROPKĄ–NAZWĄ–ZŁOTEM */
+  padding:0 4px;
+  border:none;
+  background:transparent;
+  line-height:1.1;
+  white-space:nowrap;
+  flex:0 0 auto;
+}
+
+/* Kropka w kolorze gracza */
+.players-list .player-dot{
+  width:10px; height:10px; border-radius:50%;
+  background: currentColor;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+  flex:0 0 auto;
+}
+
+/* NAJWAŻNIEJSZE: nazwa NIE może się rozpychać */
+.players-list .player-name{
+  font-weight:800;
+  max-width:140px;
+  overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap;
+  flex:0 0 auto !important;   /* zabija wcześniejsze flex:1 1 auto */
+  margin:0 !important;        /* żadnych „dziur” przed złotem */
+}
+
+/* Złoto — mały chip, bez marginesów */
+.players-list .player-gold{
+  display:inline-flex; align-items:center; gap:4px;
+  flex:0 0 auto;
+  margin:0 !important;        /* zero odstępu od nazwy */
+  border:none !important;     /* usuń zbędne obramowania z wcześniejszych reguł */
+  background:transparent !important;
+  padding:0;
+}
+.players-list .player-gold .coin{
+  width:8px; height:8px; border-radius:50%;
+  background:#eab308;
+  display:inline-block;
+  flex:0 0 auto;
+}
+.players-list .player-gold .val{ font-weight:800; }
+
+/* Bezpieczne czyszczenie starych styli, jeśli gdzieś zostało .player-item */
+.players-list .player-item{ border:none !important; background:transparent !important; padding:0 !important; }
+.players-list .player-item .player-name{ flex:0 0 auto !important; margin:0 !important; }
+
