@@ -181,6 +181,36 @@ svg{
 .noble-slot{width:30px;height:30px;border-radius:999px;border:2px solid #475569;background:none;display:grid;place-items:center;font-weight:800;font-size:.95rem;line-height:1;color:#e5e7eb;user-select:none}
 .noble-slot[data-empty="1"]{opacity:.65}
 
+/* === Szlachcice – LISTA zamiast tabeli === */
+.nobles-list{
+  display:flex; flex-direction:column; gap:8px;
+}
+.nobles-list .province-item{
+  display:flex; align-items:center; gap:10px;
+  padding:8px 10px; border:1px solid #1f2937; border-radius:12px;
+  background:#0f172a;
+}
+.nobles-list .province-name{
+  font-weight:800; color:#e2e8f0; margin-right:auto;
+}
+.nobles-list .badges{
+  display:flex; flex-wrap:wrap; gap:6px;
+}
+.noble-badge{
+  display:flex; align-items:center; gap:6px;
+  border:1px solid #334155; background:#0b1221; color:#e5e7eb;
+  padding:4px 8px; border-radius:999px; font-weight:800;
+}
+.noble-badge .dot{
+  width:14px; height:14px; border-radius:50%;
+  border:2px solid #475569; box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+  background: var(--dot, #fff);
+}
+.nobles-list .empty{
+  color:#94a3b8; font-style:italic; padding:4px 2px;
+}
+
+
 .map-card{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
 .map-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #1f2937}
 .map-header h2{margin:0;font-size:1.05rem;color:#cbd5e1}
