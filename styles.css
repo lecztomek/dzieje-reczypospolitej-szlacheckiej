@@ -717,3 +717,57 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
 #phaseActions button:hover{background:#111827;border-color:#475569}
 #pickedRegion{font-weight:800;color:#e2e8f0;opacity:.9}
 
+/* Konsola: pod wszystkim, 1 linijka */
+.console{
+  position: static;              /* na swoim miejscu, nie fixed */
+  background: var(--panel);
+  border: 1px solid #1f2937;
+  box-shadow: var(--shadow);
+  padding: 0;
+  margin-top: 12px;
+}
+
+/* Ukryj pasek tytułu i log - zostaje tylko formularz */
+.console .bar,
+.console .log{
+  display: none !important;
+}
+
+/* Formularz = jedna linia */
+.console form{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+/* Wejście i przycisk: niskie */
+.console input[type="text"]{
+  flex: 1 1 auto;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: .95rem;
+  height: 36px;              /* niski */
+}
+
+.console button{
+  cursor: pointer;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  height: 36px;              /* niski */
+}
+.console button:hover{ background:#111827; border-color:#475569; }
+
+/* Na wąskich ekranach dalej 1 linia */
+@media (max-width: 520px){
+  .console form{ gap:6px; padding:6px 10px; }
+  .console input[type="text"]{ height:34px; font-size:.9rem; }
+  .console button{ height:34px; padding:0 10px; font-size:.9rem; }
+}
