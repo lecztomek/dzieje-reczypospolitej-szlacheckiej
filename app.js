@@ -485,6 +485,8 @@ function createTooltip(){
   return t;
 }
 
+function runCmd(cmd){ pushToConsole(cmd, true); }
+
 function pushToConsole(text, submit = true){
   inputEl.value = text;
   if(submit){
@@ -1787,12 +1789,42 @@ document.getElementById('btnClearLog').addEventListener('click', () => { logEl.i
 // ===================== Start: budowa UI i powitanie =====================
 document.querySelectorAll('.region').forEach(path => {
   const key = path.getAttribute('data-key'); const name = key[0].toUpperCase() + key.slice(1);
-  path.addEventListener('click', () => {
-    document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
-    path.classList.add('selected'); inputEl.value = inputEl.value + key + ' '; inputEl.focus();
-    setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0);
-    const pickedRegionEl = document.getElementById('pickedRegion'); if (pickedRegionEl) pickedRegionEl.textContent = key;
-  });
+path.addEventListener('click', () => {
+  // jeśli kreator akcji jest aktywny — traktuj klik jako wybór prowincji
+  if (_actionWizard) {
+    if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja') {
+      runCmd(`gact ${_actionWizard.kind} ${key}`);
+      _actionWizard = null;
+      buildPhaseActionsSmart(game.getPublicState());
+      setTimeout(maybeAutoAdvanceAfterAction, 0);
+      return;
+    }
+    if (_actionWizard.kind === 'marsz') {
+      if (_actionWizard.step === 'from') {
+        _actionWizard = { kind:'marsz', step:'to', from: key };
+        buildPhaseActionsSmart(game.getPublicState());
+        setTimeout(maybeAutoAdvanceAfterAction, 0);
+        return;
+      }
+      if (_actionWizard.step === 'to') {
+        runCmd(`gact marsz ${_actionWizard.from} ${key}`);
+        _actionWizard = null;
+        buildPhaseActionsSmart(game.getPublicState());
+        setTimeout(maybeAutoAdvanceAfterAction, 0);
+        return;
+      }
+    }
+  }
+
+  // standardowe zachowanie gdy kreator nie działa
+  document.querySelectorAll('.region').forEach(n => n.classList.remove('selected'));
+  path.classList.add('selected');
+  inputEl.value = inputEl.value + key + ' ';
+  inputEl.focus();
+  setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length), 0);
+  const pickedRegionEl = document.getElementById('pickedRegion'); if (pickedRegionEl) pickedRegionEl.textContent = key;
+});
+
   path.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); path.click(); } });
   path.addEventListener('pointerenter', (e) => { tooltip.textContent = name; tooltip.style.left = e.clientX + 'px'; tooltip.style.top = e.clientY + 'px'; tooltip.classList.add('shown'); tooltip.setAttribute('aria-hidden','false'); });
   path.addEventListener('pointermove', (e) => { tooltip.style.left = e.clientX + 'px'; tooltip.style.top = e.clientY + 'px'; });
