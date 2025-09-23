@@ -491,4 +491,15 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   flex:0 0 auto;          /* każda pigułka o stałej szerokości */
 }
 
+/* Schowaj starą listę faz */
+.phasebar{ display:none !important; }
+
+/* Jedna aktualna faza – badge na środku */
+.phase-now{
+  margin: 0 auto;                 /* centrowanie między lewą i prawą stroną */
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:6px 12px; border:1px solid #334155; border-radius:10px;
+  background:#0f172a; color:#e2e8f0; font-weight:800; letter-spacing:.2px;
+  min-width: 160px; text-align:center; box-shadow:var(--shadow);
+}
 
