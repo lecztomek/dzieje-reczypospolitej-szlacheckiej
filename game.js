@@ -843,7 +843,7 @@ function computeFinalScores(ctx) {
   players.forEach((p) => p.score += p.honor);
 
   // (4) Złoto → 1 pkt za każde pełne 3 zł
-  players.forEach((p) => p.score += Math.floor(p.gold / 3));
+  players.forEach((p) => p.score += Math.floor(p.gold / 5));
 
   // Tabela i zwycięzcy
   const standings = players
@@ -862,7 +862,7 @@ function computeFinalScores(ctx) {
   lines.push("Wpływy z prowincji:");
   influenceLines.forEach((s) => lines.push("  • " + s));
   lines.push("Honor: " + players.map((p) => `${p.name}=+${p.honor}`).join(", "));
-  lines.push("Złoto→pkt: " + players.map((p) => `${p.name}=+${Math.floor(p.gold/3)} (z ${p.gold} zł)`).join(", "));
+  lines.push("Złoto→pkt: " + players.map((p) => `${p.name}=+${Math.floor(p.gold/5)} (z ${p.gold} zł)`).join(", "));
   lines.push("Tabela wyników:");
   standings.forEach((s, idx) => lines.push(`  ${idx + 1}. ${s.name} — ${s.score} pkt`));
   lines.push(winners.length === 1
