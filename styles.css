@@ -410,3 +410,39 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   padding:2px 6px;
 }
 
+/* --- Szlachcice: twardo w jednej linii, BEZ przerwy przed pierwszą kropką --- */
+.nobles-list .province-item{
+  display:flex;
+  align-items:center;
+  gap:0;               /* zero przerwy między nazwą a pigułkami */
+  flex-wrap:nowrap;    /* nie zawijaj */
+  white-space:nowrap;  /* nie zawijaj tekstu */
+  overflow:visible;    /* nie obcinaj całego wiersza */
+  min-width:0;         /* <<< klucz: pozwól dzieciom się ścinać w poziomie */
+}
+
+.nobles-list .province-name{
+  margin-right:0;          /* żadnej przerwy przed pigułkami */
+  white-space:nowrap;
+  overflow:hidden;         /* ścinaj tylko nazwę */
+  text-overflow:ellipsis;  /* "Litwa..." gdy braknie miejsca */
+  flex:1 1 auto;
+  min-width:0;             /* <<< klucz: pozwól się ścinać */
+}
+
+.nobles-list .badges{
+  display:inline-flex;
+  flex-wrap:nowrap;   /* pigułki też w jednej linii */
+  gap:4px;            /* przerwy tylko między pigułkami */
+  margin-left:0;      /* zero przerwy między nazwą a pierwszą pigułką */
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+
+.noble-badge{
+  display:inline-flex;
+  flex:0 0 auto;
+  padding:2px 6px;
+}
+
+
