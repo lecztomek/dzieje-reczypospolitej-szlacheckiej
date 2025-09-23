@@ -518,25 +518,52 @@ function renderPlayerChip(p){
   playersListEl.appendChild(row);
 }
 
+// ZAMIANA: rysowanie gracza jako chip (nie <tr>)
+function renderPlayerRow(p){
+  const chip = document.createElement('span');
+  chip.id = `player-${p.key}`;
+  chip.className = 'player-chip';
+
+  const dot = document.createElement('span');
+  dot.className = 'player-dot';
+  dot.style.color = p.color;
+
+  const name = document.createElement('span');
+  name.className = 'player-name';
+  name.textContent = p.name;
+
+  const gold = document.createElement('span');
+  gold.className = 'player-gold';
+  gold.innerHTML = `<span class="coin"></span><span class="val">—</span>`;
+  gold.setAttribute('data-col', 'gold');
+
+  chip.append(dot, name, gold);
+  playersBody.appendChild(chip);
+}
+
+// bez zmian interfejsu:
 function addPlayer(name, color){
   if (!name || !color) return false;
   if (findPlayer(name)) return 'exists';
   const p = { key: playerKey(name), name, color };
   PLAYERS.push(p);
-  renderPlayerChip(p);
+  renderPlayerRow(p);
   return true;
 }
 
+// aktualizacja tylko złota (bo resztę usunęliśmy)
 function updatePlayersUIFromState(s){
   const players = (s.settings?.players || []);
   players.forEach(sp => {
     const ui = PLAYERS.find(p => p.name === sp.name);
     if (!ui) return;
-    const chip = document.getElementById(`pitem-${ui.key}`);
-    const goldVal = chip?.querySelector('.player-gold .val');
-    if (goldVal) goldVal.textContent = String(sp.gold ?? "0");
+    const chip = document.getElementById(`player-${ui.key}`);
+    if (!chip) return;
+    const goldEl = chip.querySelector('[data-col="gold"] .val');
+    if (goldEl) goldEl.textContent = String(sp.gold ?? '0');
   });
 }
+
 
 function ensurePhaseNowEl(){
   if (phaseNowEl || !roundWrap) return;
