@@ -1365,6 +1365,7 @@ if (phase === 'auction' || phase === 'sejm'){
           }
         }
       });
+    }); 
     box.append(btnDev);
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
