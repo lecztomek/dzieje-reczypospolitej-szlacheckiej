@@ -665,29 +665,67 @@ class AttackInvadersAPI {
     }
   }
 
-  attack({ playerIndex, enemy, from, rolls }) {
+  attack({ playerIndex, enemy, from, rolls, dice /* optional: ile kości chcesz rzucić */ }) {
     this.#requireActive(playerIndex);
     const c = this.ctx; ensurePerProvinceArrays(c);
     const pidx = Number(playerIndex) | 0; const pl = c.settings.players[pidx];
-    const allowed = { [RaidTrackID.N]: new Set([ProvinceID.PRUSY, ProvinceID.LITWA]), [RaidTrackID.E]: new Set([ProvinceID.LITWA, ProvinceID.UKRAINA]), [RaidTrackID.S]: new Set([ProvinceID.MALOPOLSKA, ProvinceID.UKRAINA]) };
-    const srcOk = allowed[enemy]?.has(from); if (!srcOk) throw new Error("Z tej prowincji nie można atakować wybranego najeźdźcy.");
+
+    const allowed = {
+      [RaidTrackID.N]: new Set([ProvinceID.PRUSY, ProvinceID.LITWA]),
+      [RaidTrackID.E]: new Set([ProvinceID.LITWA, ProvinceID.UKRAINA]),
+      [RaidTrackID.S]: new Set([ProvinceID.MALOPOLSKA, ProvinceID.UKRAINA]),
+    };
+    const srcOk = allowed[enemy]?.has(from);
+    if (!srcOk) throw new Error("Z tej prowincji nie można atakować wybranego najeźdźcy.");
     if ((c.troops.per_province[from][pidx] | 0) <= 0) throw new Error("Brak jednostek na prowincji źródłowej.");
-    if ( (enemy === RaidTrackID.N ? c.raid_tracks.N.value : enemy === RaidTrackID.S ? c.raid_tracks.S.value : c.raid_tracks.E.value) <= 0 ) throw new Error("Tor już = 0 — brak celu.");
 
-    let rollsCount = c.troops.per_province[from][pidx];
-    if (c.round_status.artillery_defense_active && !c.round_status.artillery_defense_used[pidx]) { rollsCount += 1; c.round_status.artillery_defense_used[pidx] = true; }
-
-    const seq = Array.isArray(rolls) ? rolls.slice(0, rollsCount) : [];
-    const key = enemy === RaidTrackID.N ? 'N' : enemy === RaidTrackID.S ? 'S' : 'E';
+    const key = enemy === RaidTrackID.N ? "N" : enemy === RaidTrackID.S ? "S" : "E";
     const track = c.raid_tracks[key];
+    if (track.value <= 0) throw new Error("Tor już = 0 — brak celu.");
+
+    // jednostki na polu + potencjalna kość z artylerii (zużyjemy tylko gdy faktycznie jej użyjesz)
+    const units = c.troops.per_province[from][pidx] | 0;
+    const hasArtilleryBonus = c.round_status.artillery_defense_active && !c.round_status.artillery_defense_used[pidx];
+    const maxAvailableDice = units + (hasArtilleryBonus ? 1 : 0);
+
+    // ile kości faktycznie używamy w tej akcji
+    const requestedDice = Number(dice) > 0 ? Number(dice) | 0
+                         : (Array.isArray(rolls) ? rolls.length : maxAvailableDice);
+    const usedDice = Math.max(1, Math.min(requestedDice, maxAvailableDice));
+
+    // jeśli podano rzuty, upewnij się że mamy ich tyle, ile chcemy użyć
+    if (Array.isArray(rolls) && rolls.length < usedDice) {
+      throw new Error(`Za mało rzutów: podano ${rolls.length}, wymagane ${usedDice}.`);
+    }
+
+    // oznacz zużycie artylerii TYLKO jeśli naprawdę używamy dodatkowej kości ponad liczbę jednostek
+    if (hasArtilleryBonus && usedDice > units) {
+      c.round_status.artillery_defense_used[pidx] = true;
+    }
+
+    const seq = Array.isArray(rolls) ? rolls.slice(0, usedDice) : [];
     const out = [];
     for (let i = 0; i < seq.length; i++) {
       if (track.value <= 0) { out.push("Tor już 0 — koniec akcji."); break; }
       const r = seq[i] | 0; if (!(r >= 1 && r <= 6)) throw new Error("Rzuty muszą być 1..6");
-      if (r === 1) { c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1); pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1; out.push("1 → porażka, tracisz 1 jednostkę."); }
-      else if (r <= 5) { addRaid(c, enemy, -1); c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1); pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1; out.push("2–5 → sukces: tor -1 i tracisz 1 jednostkę."); }
-      else { addRaid(c, enemy, -1); pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1; out.push("6 → sukces: tor -1 i jednostka pozostaje."); }
+
+      if (r === 1) {
+        c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+        pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+        out.push("1 → porażka, tracisz 1 jednostkę.");
+      } else if (r <= 5) {
+        addRaid(c, enemy, -1);
+        c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+        pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+        out.push("2–5 → sukces: tor -1 i tracisz 1 jednostkę.");
+      } else {
+        addRaid(c, enemy, -1);
+        pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+        out.push("6 → sukces: tor -1 i jednostka pozostaje.");
+      }
     }
+
+    out.push(`Użyte kości: ${usedDice}/${maxAvailableDice} (jednostki=${units}${hasArtilleryBonus ? ", +1 artyleria możliwa" : ""})`);
     out.push(`Po ataku: ${track.id}=${track.value}, ${from}: jednostek=${c.troops.per_province[from][pidx]}`);
 
     this.#advance(true);
