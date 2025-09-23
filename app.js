@@ -938,12 +938,12 @@ function toProvEnum(anyName){ const r = getRegionByName(anyName); if (!r) return
 function toEnemyEnum(name){ const k = norm(name); return ENEMY_MAP[k] || null; }
 
 // ===================== Inteligentny panel akcji (UI) =====================
-function buildPhaseActionsSmart(s){
-  if (phase !== 'actions') _actionWizard = null;
-  
+function buildPhaseActionsSmart(s){  
   if (!phaseActionsEl) return;
   const phase = s?.current_phase || game.round?.currentPhaseId?.() || null;
 
+  if (phase !== 'actions') _actionWizard = null;
+  
   // helpers
   const run = (cmd) => pushToConsole(cmd, true);
   const el = (tag, attrs = {}, ...kids) => {
