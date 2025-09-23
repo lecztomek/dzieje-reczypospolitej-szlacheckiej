@@ -469,7 +469,8 @@ const logEl = document.getElementById('log');
 const inputEl = document.getElementById('cmdInput');
 const formEl = document.getElementById('cmdForm');
 const noblesBody = document.getElementById('noblesBody');
-const noblesListEl = document.getElementById('noblesList'); // ← NOWE (lista)
+const noblesListEl = document.getElementById('noblesList'); 
+const playersListEl = document.getElementById('playersList');
 
 const marshalBox = document.getElementById('marshalBox');
 const marshalResetBtn = document.getElementById('marshalResetBtn');
@@ -494,6 +495,48 @@ let idCounter = 1;
 
 let roundCur = 1;
 let roundMax = 10;
+
+function renderPlayerChip(p){
+  const row = document.createElement('div');
+  row.className = 'player-item';
+  row.id = `pitem-${p.key}`;
+
+  const dot = document.createElement('span');
+  dot.className = 'player-dot';
+  dot.style.background = p.color;
+  dot.style.borderColor = p.color;
+
+  const name = document.createElement('span');
+  name.className = 'player-name';
+  name.textContent = p.name;
+
+  const gold = document.createElement('span');
+  gold.className = 'player-gold';
+  gold.innerHTML = `<span class="coin"></span><strong class="val">0</strong>`;
+
+  row.append(dot, name, gold);
+  playersListEl.appendChild(row);
+}
+
+function addPlayer(name, color){
+  if (!name || !color) return false;
+  if (findPlayer(name)) return 'exists';
+  const p = { key: playerKey(name), name, color };
+  PLAYERS.push(p);
+  renderPlayerChip(p);
+  return true;
+}
+
+function updatePlayersUIFromState(s){
+  const players = (s.settings?.players || []);
+  players.forEach(sp => {
+    const ui = PLAYERS.find(p => p.name === sp.name);
+    if (!ui) return;
+    const chip = document.getElementById(`pitem-${ui.key}`);
+    const goldVal = chip?.querySelector('.player-gold .val');
+    if (goldVal) goldVal.textContent = String(sp.gold ?? "0");
+  });
+}
 
 function ensurePhaseNowEl(){
   if (phaseNowEl || !roundWrap) return;
@@ -542,22 +585,6 @@ function updateRoundUI(){
 
   const maxEl = document.getElementById('roundMax');
   if (maxEl) maxEl.textContent = String(roundMax);
-}
-
-function updatePlayersUIFromState(s){
-  const players = (s.settings?.players || []);
-  players.forEach(sp => {
-    const ui = PLAYERS.find(p => p.name === sp.name);
-    if (!ui) return;
-    const row = document.getElementById(`player-${ui.key}`);
-    if (!row) return;
-    const tdGold  = row.querySelector('[data-col="gold"]');
-    const tdHonor = row.querySelector('[data-col="honor"]');
-    const tdFinal = row.querySelector('[data-col="final"]');
-    if (tdGold)  tdGold.textContent  = String(sp.gold ?? "0");
-    if (tdHonor) tdHonor.textContent = String(sp.honor ?? "0");
-    if (tdFinal) tdFinal.textContent = String(sp.score ?? "0");
-  });
 }
 
 function applyCurrentTurnFromState(s){
@@ -806,12 +833,6 @@ function renderPlayerRow(p){
   const tdFinal = document.createElement('td'); tdFinal.textContent = '—'; tdFinal.setAttribute('data-col','final');
   tr.append(tdColor, tdName, tdGold, tdHonor, tdFinal);
   playersBody.appendChild(tr);
-}
-function addPlayer(name, color){
-  if (!name || !color) return false;
-  if (findPlayer(name)) return 'exists';
-  const p = { key: playerKey(name), name, color };
-  PLAYERS.push(p); renderPlayerRow(p); return true;
 }
 
 // ===================== Rysowanie (piny, linie, etykiety) – używane przez UI sync =====================
