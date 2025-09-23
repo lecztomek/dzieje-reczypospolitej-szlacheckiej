@@ -500,10 +500,28 @@ function ensurePhaseNowEl(){
   phaseNowEl = document.createElement('div');
   phaseNowEl.id = 'phaseNow';
   phaseNowEl.className = 'phase-now';
-  phaseNowEl.textContent = '—';
-  // wstaw badge PRZED "RUNDA ..."
-  roundWrap.insertBefore(phaseNowEl, roundLabelEl);
+
+  // label „FAZA:”
+  const lbl = document.createElement('span');
+  lbl.className = 'phase-now-label';
+  lbl.textContent = 'FAZA:';
+
+  // miejsce na nazwę fazy
+  const txt = document.createElement('span');
+  txt.id = 'phaseNowText';
+  txt.textContent = '—';
+
+  phaseNowEl.append(lbl, txt);
+  roundWrap.insertBefore(phaseNowEl, roundLabelEl); // przed „RUNDA …”
 }
+
+function setPhaseNow(engPhase){
+  ensurePhaseNowEl();
+  const label = PHASE_LABELS[engPhase] || '—';
+  const txt = document.getElementById('phaseNowText');
+  if (txt) txt.textContent = ' ' + label; // spacja po „FAZA:”
+}
+
 ensurePhaseNowEl();
 
 const PHASE_LABELS = {
@@ -517,12 +535,6 @@ const PHASE_LABELS = {
   attacks:'Wyprawy',
   devastation:'Spustoszenia'
 };
-
-function setPhaseNow(engPhase){
-  ensurePhaseNowEl();
-  const label = PHASE_LABELS[engPhase] || '—';
-  if (phaseNowEl) phaseNowEl.textContent = label;
-}
 
 function updateRoundUI(){
   const curEl = document.getElementById('roundCur');
