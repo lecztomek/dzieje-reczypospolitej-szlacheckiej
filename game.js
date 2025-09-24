@@ -83,6 +83,7 @@ class GameContext {
     this.last_output = ""; // optional log aggregator
     this.turn = null;
     this.attackTurn = null; 
+    this.battlesTurn = null; 
     
     this.provinces = {
       [ProvinceID.PRUSY]: new Province(ProvinceID.PRUSY),
@@ -628,6 +629,98 @@ class PlayerBattleAPI {
     troops[i] = Math.max(0, troops[i] - lossI); troops[j] = Math.max(0, troops[j] - lossJ);
     return `${pi.name} zadał ${lossJ} strat; ${pj.name} zadał ${lossI}. Stan: ${pi.name}=${troops[i]}, ${pj.name}=${troops[j]}.`;
   }
+
+  // ====== Tryb turo-wy w fazie "battles" (analogiczny do AttackInvadersAPI) ======
+  #ensurePhase() {
+    if (!this.ctx.battlesTurn) throw new Error("To nie jest faza starć.");
+    if (this.ctx.battlesTurn.done) throw new Error("Faza starć już zakończona.");
+  }
+  #requireActive(playerIndex) {
+    this.#ensurePhase();
+    const t = this.ctx.battlesTurn;
+    const expected = t.order[t.idx];
+    if (playerIndex !== expected) {
+      const want = this.ctx.settings.players[expected]?.name ?? `#${expected}`;
+      const you  = this.ctx.settings.players[playerIndex]?.name ?? `#${playerIndex}`;
+      throw new Error(`Teraz w starciach kolej ${want}. (Akcja ${you} zablokowana.)`);
+    }
+  }
+  #anyEligibleBattlesLeft() {
+    const { troops } = this.ctx;
+    for (const pid of Object.values(ProvinceID)) {
+      const arr = troops.per_province[pid] || [];
+      const present = arr.map((u,i)=>(u|0)>0?i:-1).filter(i=>i>=0);
+      if (new Set(present).size >= 2) return true; // są co najmniej dwie strony
+    }
+    return false;
+  }
+  #advance() {
+    const t = this.ctx.battlesTurn;
+    const n = t.order.length;
+    const allPassed = t.passed.every(Boolean);
+    if (allPassed || !this.#anyEligibleBattlesLeft()) { t.done = true; return; }
+    for (let step = 1; step <= n; step++) {
+      const nextIdx = (t.idx + step) % n;
+      const pidx = t.order[nextIdx];
+      if (!t.passed[pidx]) { t.idx = nextIdx; break; }
+    }
+  }
+  
+  /**
+   * Jedna akcja ataku gracz→gracz.
+   * @param {number} playerIndex - atakujący (indeks gracza)
+   * @param {ProvinceID} provinceId - gdzie toczy się walka
+   * @param {number} targetIndex - broniący (indeks gracza)
+   * @param {number[]} [rolls] - opcjonalnie rzuty; gdy brak, losujemy
+   * @param {number} [dice=1] - ile kości (domyślnie 1; max = twoje jednostki)
+   */
+  attack({ playerIndex, provinceId, targetIndex, rolls, dice }) {
+    this.#requireActive(playerIndex);
+    ensurePerProvinceArrays(this.ctx);
+    const c = this.ctx;
+    const atk = playerIndex|0, def = targetIndex|0;
+    if (atk === def) throw new Error("Nie możesz atakować samego siebie.");
+    const arr = c.troops.per_province[provinceId] || [];
+    if ((arr[atk]|0) <= 0) throw new Error("Brak twoich jednostek w tej prowincji.");
+    if ((arr[def]|0) <= 0) throw new Error("Brak jednostek przeciwnika w tej prowincji.");
+  
+    const units = arr[atk]|0;
+    const usedDice = Math.max(1, Math.min(Number(dice)||1, units)); // bez artylerii
+    const seq = Array.isArray(rolls) && rolls.length
+      ? rolls.slice(0, usedDice)
+      : Array.from({length:usedDice}, ()=>1+Math.floor(Math.random()*6));
+  
+    const out = [];
+    for (const r0 of seq) {
+      if ((arr[atk]|0) <= 0 || (arr[def]|0) <= 0) break;
+      const r = r0|0; if (!(r>=1 && r<=6)) throw new Error("Rzut musi być 1..6.");
+  
+      if (r === 1) {
+        arr[atk] = Math.max(0, arr[atk]-1);
+        out.push("1 → porażka: tracisz 1 jednostkę.");
+      } else if (r <= 5) {
+        arr[def] = Math.max(0, arr[def]-1);
+        arr[atk]  = Math.max(0, arr[atk]-1);
+        out.push("2–5 → wymiana: obrońca −1 i atakujący −1.");
+      } else {
+        arr[def] = Math.max(0, arr[def]-1);
+        out.push("6 → sukces bez strat: obrońca −1, twoje jednostki zostają.");
+      }
+    }
+  
+    out.push(`Po starciu: ${this.ctx.settings.players[atk].name}=${arr[atk]}, ${this.ctx.settings.players[def].name}=${arr[def]} w ${provinceId}.`);
+    this.#advance();
+    return out;
+  }
+  
+  passTurn(playerIndex) {
+    this.#requireActive(playerIndex);
+    const t = this.ctx.battlesTurn;
+    t.passed[playerIndex] = true;
+    this.#advance();
+    return `PASS (starcia) — ${this.ctx.settings.players[playerIndex].name}`;
+  }
+
 }
 
 class EnemyReinforcementAPI {
@@ -949,6 +1042,10 @@ export class ConsoleGame {
     // wejście/wyjście w tryby faz specjalnych dla nowej/aktualnej fazy
     if (next === "actions") this._initActionsTurn();
     if (prev === "actions" && next !== "actions") this.ctx.turn = null;
+
+    if (next === "battles") this._initBattlesTurn();
+    if (prev === "battles" && next !== "battles") this.ctx.battlesTurn = null;
+    
     if (next === "attacks") this._initAttacksTurn();
     if (prev === "attacks" && next !== "attacks") this.ctx.attackTurn = null;
 
@@ -960,6 +1057,18 @@ export class ConsoleGame {
     const start = this.ctx.round_status.marshal_index;
     const order = Array.from({ length: pcount }, (_, k) => (start + k) % pcount);
     this.ctx.attackTurn = {
+      order,
+      idx: 0,
+      passed: Array(pcount).fill(false),
+      done: false,
+    };
+  }
+
+  _initBattlesTurn() {
+    const pcount = this.ctx.settings.players.length;
+    const start = this.ctx.round_status.marshal_index;
+    const order = Array.from({ length: pcount }, (_, k) => (start + k) % pcount);
+    this.ctx.battlesTurn = {
       order,
       idx: 0,
       passed: Array(pcount).fill(false),
@@ -1014,6 +1123,11 @@ export class ConsoleGame {
         ? this.ctx.attackTurn.order[this.ctx.attackTurn.idx]
         : null;
 
+    const activeBattleIdx =
+      (phase === "battles" && this.ctx.battlesTurn && !this.ctx.battlesTurn.done)
+        ? this.ctx.battlesTurn.order[this.ctx.battlesTurn.idx]
+        : null;
+
     return deepClone({
       state: this.state,
       settings: {
@@ -1038,6 +1152,10 @@ export class ConsoleGame {
       active_attacker_index: activeAttackIdx,
       active_attacker: activeAttackIdx != null ? this.ctx.settings.players[activeAttackIdx].name : null,
       attacks_turn: this.ctx.attackTurn ? deepClone(this.ctx.attackTurn) : null,
+
+      active_battler_index: activeBattleIdx,
+      active_battler: activeBattleIdx != null ? this.ctx.settings.players[activeBattleIdx].name : null,
+      battles_turn: this.ctx.battlesTurn ? deepClone(this.ctx.battlesTurn) : null,
       });
   }
 }
