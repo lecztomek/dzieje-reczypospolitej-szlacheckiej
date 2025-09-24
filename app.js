@@ -131,6 +131,17 @@ function maybeAutoAdvanceAfterAttacks(){
   }
 }
 
+function maybeAutoAdvanceAfterBattles(){
+  const s = game.getPublicState?.() || {};
+  const phase = s.current_phase || game.round?.currentPhaseId?.();
+  const hasActive = Number.isInteger(s.active_battler_index);
+  if (phase === 'battles' && !hasActive){
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Auto-next ze Starć -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  }
+}
+
 function attackImageForRoll(roll){
   const r = roll|0;
   if (r <= 2) return ATTACK_IMG_LOW;   // 1–2
@@ -1556,8 +1567,71 @@ if (phase === 'auction' || phase === 'sejm'){
 
   // ====== STARCIA ======
   if (phase === 'battles'){
-    const box = section('Starcia', 'Rozstrzygaj potyczki między graczami (komendy w konsoli). Kiedy gotowe — zakończ fazę.');
-    box.append(chip('Zakończ Starcia (gnext)', ()=>run('gnext')));
+    const box = section('Starcia', 'Wybierz prowincję z przeciwnikiem i zaatakuj (1k6). PASS, jeśli nie atakujesz.');
+  
+    const pidx = Number.isInteger(s.active_battler_index) ? s.active_battler_index : curPlayerIdx;
+    const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
+    box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } }, `Aktywny gracz: ${activePlayerName}`));
+  
+    const rows = [];
+    for (const [pid, arr] of Object.entries(s.troops || {})){
+      const key = provKeyFromId(pid); if (!key) continue;
+      const my = (arr?.[pidx] || 0)|0; if (my<=0) continue;
+      const foes = (arr||[]).map((u,i)=>({u:u|0,i})).filter(t=>t.i!==pidx && t.u>0);
+      if (!foes.length) continue;
+      rows.push({ pid, key, foes });
+    }
+  
+    if (rows.length === 0){
+      box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } }, 'Brak przeciwników przy twoich oddziałach — możesz PASS.'));
+    } else {
+      rows.forEach(({pid,key,foes})=>{
+        const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
+        row.append(el('span', { style:{ minWidth:'180px', fontWeight:'800' } }, `${key}`));
+        foes.forEach(({i:uIdx,u})=>{
+          const foeName = s.settings?.players?.[uIdx]?.name || `#${uIdx}`;
+          row.append(chip(`atak ${key} → ${foeName}`, ()=>{
+            try{
+              const roll = roll1d6();
+              ok(`(UI) Starcie ${key}: ${activePlayerName} vs ${foeName}, rzut: ${roll}`);
+              const lines = game.battles.attack({
+                playerIndex: pidx,
+                provinceId: toProvEnum(key),
+                targetIndex: uIdx,
+                rolls: [roll],
+                dice: 1
+              });
+              logEngine(lines);
+              syncUIFromGame();
+              popupFromEngine(`Starcie — ${key}`, [
+                `Rzut: ${roll}.`,
+                ...(Array.isArray(lines)?lines:[lines]),
+              ], {
+                imageUrl: attackImageForRoll(roll),
+                buttonText: 'OK',
+                onClose: () => {
+                  maybeAutoAdvanceAfterBattles();
+                  buildPhaseActionsSmart(game.getPublicState());
+                }
+              });
+            } catch(e){ err('Błąd starcia: ' + e.message); }
+          }, `gduelauto ${key} ${activePlayerName} ${foeName}`));
+        });
+        box.append(row);
+      });
+    }
+  
+    box.append(el('div', { style:{ height:'6px' } }));
+    box.append(chip('PASS (starcia)', ()=>{
+      try{
+        const msg = game.battles.passTurn(pidx);
+        ok(String(msg || 'PASS.'));
+        syncUIFromGame();
+        maybeAutoAdvanceAfterBattles();
+        buildPhaseActionsSmart(game.getPublicState());
+      }catch(ex){ err('PASS nieudany: ' + ex.message); }
+    }, '—'));
+  
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
@@ -2016,6 +2090,16 @@ function execCommand(raw){
     } catch (ex) {
       err('PASS nieudany: ' + ex.message);
     }
+    return;
+  }
+
+  if (cmd === 'gbpass'){ // battles pass
+    if (curPlayerIdx < 0) return err('Brak aktywnego gracza.');
+    try{
+      const msg = game.battles.passTurn(curPlayerIdx);
+      ok(String(msg || 'PASS (starcia).'));
+      syncUIFromGame();
+    }catch(ex){ err('PASS (starcia) nieudany: ' + ex.message); }
     return;
   }
 
