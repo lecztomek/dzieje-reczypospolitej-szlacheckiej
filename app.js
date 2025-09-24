@@ -136,6 +136,8 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
   const s = state || game.getPublicState?.();
   if (!s) return;
 
+  if (isFirstRound(s)) return;
+
   const currentRound = s.round_status?.current_round ?? roundCur;
   const curPhase = s.current_phase || game.round?.currentPhaseId?.();
 
@@ -184,6 +186,12 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
       buttonText: 'Dalej (Aukcja)'
     });
   }
+}
+
+function isFirstRound(state){
+  const s = state || game.getPublicState?.();
+  const r = s?.round_status?.current_round ?? roundCur;
+  return (r|0) === 1;
 }
 
 function computeNoblesPerProvince(state){
@@ -1302,15 +1310,27 @@ function buildPhaseActionsSmart(s){
         imageUrl: INCOME_POPUP_IMG,
         buttonText: 'Dalej (Sejm)',
         onAction: () => {
-          const nxt = game.finishPhaseAndAdvance(); // -> auction
+          // Zakończ fazę 'income'
+          const nxt = game.finishPhaseAndAdvance(); // zwykle -> 'auction'
           ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+        
+          const s2 = game.getPublicState?.();
+          if (isFirstRound(s2)) {
+            // 1. runda => pomijamy 'auction' i 'sejm'
+            const a = game.finishPhaseAndAdvance(); // auction -> sejm
+            ok(`Silnik: next -> ${a || game.round.currentPhaseId() || 'koniec gry'}`);
+            const b = game.finishPhaseAndAdvance(); // sejm -> actions
+            ok(`Silnik: next -> ${b || game.round.currentPhaseId() || 'koniec gry'}`);
+          }
+        
           syncUIFromGame();
-          // UWAGA: nic tu nie otwieramy – tylko przejście fazy + sync
         },
         onClose: () => {
-          // Teraz, gdy poprzedni popup już się zamknął,
-          // bezpiecznie otwieramy popup z ustawą
-          ensureSejmLawForRound(game.getPublicState(), { forcePopup: true });
+          const st = game.getPublicState?.();
+          if (!isFirstRound(st)) {
+            // tylko od 2. rundy wzwyż
+            ensureSejmLawForRound(st, { forcePopup: true });
+          }
           buildPhaseActionsSmart(game.getPublicState());
         }
       });
