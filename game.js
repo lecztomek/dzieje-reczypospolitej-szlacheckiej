@@ -73,6 +73,7 @@ class RoundStatus {
     this.sejm_tiebreak_wlkp = false;
     this.wlkp_influence_cost_override = null;
     this.wlkp_estate_cost_override = null;
+    this.viritim_influence_cost_override = null;
   }
 }
 
@@ -200,7 +201,10 @@ class EventsAPI {
     const c = this.ctx; const rs = c.round_status; const log = [];
     const ev = {
       1: () => { rs.sejm_canceled = true; log.push("[Wydarzenia] Liberum veto — Sejm zerwany. W tej rundzie pomijacie licytację i ustawę."); },
-      2: () => { log.push("[Wydarzenia] Elekcja viritim — zwycięzca sejmu w tej rundzie ciągnie 2 ustawy i wybiera 1."); },
+      2: () => {
+        rs.viritim_influence_cost_override = 1; // ← ta runda: Wpływ kosztuje 1 zł wszędzie
+        log.push("[Wydarzenia] Elekcja viritim — w tej rundzie akcja Wpływ kosztuje 1 zł.");
+      },
       3: () => { rs.admin_yield = 0; log.push("[Wydarzenia] Skarb pusty — Administracja=0 zł w tej rundzie."); },
       4: () => { rs.admin_yield = 3; log.push("[Wydarzenia] Reformy skarbowe — Administracja=+3 zł w tej rundzie."); },
       5: () => { addRaid(c, RaidTrackID.N, +2); log.push("[Wydarzenia] Potop szwedzki — Szwecja +2."); },
@@ -554,6 +558,7 @@ class ActionAPI {
     this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); const p = c.settings.players[pidx];
     let cost = ActionAPI.COST.wplyw;
+    if (c.round_status.viritim_influence_cost_override != null) cost = c.round_status.viritim_influence_cost_override;
     if (provinceId === ProvinceID.WIELKOPOLSKA && c.round_status.wlkp_influence_cost_override != null) cost = c.round_status.wlkp_influence_cost_override;
     if (provinceId === ProvinceID.LITWA && c.round_status.discount_litwa_wplyw_pos > 0) cost = Math.max(0, cost - c.round_status.discount_litwa_wplyw_pos);
     if (p.gold < cost) throw new Error(`Za mało złota. Koszt=${cost}, masz ${p.gold}.`);
@@ -1013,6 +1018,7 @@ export class ConsoleGame {
     rs.extra_honor_vs_tatars = false; rs.recruit_cost_override = null; rs.zamoznosc_cost_override = null; rs.fairs_plus_one_income = false;
     rs.artillery_defense_active = false; rs.artillery_defense_used = Array(this.ctx.settings.players.length).fill(false);
     rs.sejm_tiebreak_wlkp = false; rs.wlkp_influence_cost_override = null; rs.wlkp_estate_cost_override = null; rs.last_law = null; rs.last_law_choice = null;
+    rs.viritim_influence_cost_override = null;
     this.ctx.turn = null;
     this.auction.resetForRound();
     this.round = new RoundEngine(this.ctx);
