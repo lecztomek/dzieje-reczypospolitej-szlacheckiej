@@ -13,7 +13,10 @@ const INCOME_POPUP_IMG = './images/income.png';
 const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 const FINAL_SUMMARY_POPUP_IMG = './images/gameover.png';
-const ATTACK_POPUP_IMG = './images/attack.png';
+
+const ATTACK_IMG_LOW  = './images/attack_3.png';   // np. słaba szarża
+const ATTACK_IMG_MID  = './images/attack_2.png';   // wyrównane starcie
+const ATTACK_IMG_HIGH = './images/attack_1.png';  // miażdżący atak
 
 let _actionWizard = null; 
 
@@ -126,6 +129,13 @@ function maybeAutoAdvanceAfterAttacks(){
     ok(`Auto-next z Wypraw -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
     syncUIFromGame();
   }
+}
+
+function attackImageForRoll(roll){
+  const r = roll|0;
+  if (r <= 2) return ATTACK_IMG_LOW;   // 1–2
+  if (r <= 4) return ATTACK_IMG_MID;   // 3–4
+  return ATTACK_IMG_HIGH;              // 5–6
 }
 
 function roll1d6(){ return 1 + Math.floor(Math.random()*6); }
@@ -1636,7 +1646,7 @@ if (phase === 'auction' || phase === 'sejm'){
                   `Rzut: ${roll}.`,
                   ...(Array.isArray(lines) ? lines : [lines]),
                 ], {
-                  imageUrl: ATTACK_POPUP_IMG,
+                  imageUrl: attackImageForRoll(roll),
                   buttonText: 'OK',
                   onClose: () => {
                     maybeAutoAdvanceAfterAttacks();
