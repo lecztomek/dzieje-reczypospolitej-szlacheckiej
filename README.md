@@ -1,4 +1,4 @@
-# Rzeczpospolita — gra konsolowo‑mapowa (prototype)
+# Dzieje Rzeczypospolitej szlacheckiej — gra konsolowo‑mapowa (prototype)
 
 Lekka, przeglądarkowa gra turowa osadzona w realiach XVII‑wiecznej Rzeczypospolitej.  
 Sterowanie odbywa się przez prosty UI (mapa SVG, popupy) oraz **konsolę poleceń** wbudowaną w stronę.  
