@@ -144,9 +144,9 @@ function maybeAutoAdvanceAfterBattles(){
 
 function attackImageForRoll(roll){
   const r = roll|0;
-  if (r <= 2) return ATTACK_IMG_LOW;   // 1–2
-  if (r <= 4) return ATTACK_IMG_MID;   // 3–4
-  return ATTACK_IMG_HIGH;              // 5–6
+  if (r <= 1) return ATTACK_IMG_LOW;   // 1
+  if (r <= 5) return ATTACK_IMG_MID;   // 2–5
+  return ATTACK_IMG_HIGH;              // 6
 }
 
 function roll1d6(){ return 1 + Math.floor(Math.random()*6); }
