@@ -139,16 +139,24 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
   const currentRound = s.round_status?.current_round ?? roundCur;
   const curPhase = s.current_phase || game.round?.currentPhaseId?.();
 
-  // jeśli już mamy wylosowaną na tę rundę
   if (_sejmLawRound === currentRound && _sejmLaw) {
     if (forcePopup) {
-      popupFromEngine(`Sejm — wylosowano ustawę: ${_sejmLaw.name}`, [
+      const spec = LAW_VARIANTS[_sejmLaw.id];
+      const lines = [
         `Wybrano ustawę: ${_sejmLaw.name}.`,
-        'Teraz licytacja marszałkowska (aukcja).'
-      ], { buttonText: 'Dalej (Aukcja)' });
+        '',
+        'Warianty do wyboru (po aukcji):',
+        ...(spec?.describe || ['(brak opisu wariantów)']),
+        '',
+        'Za chwilę licytacja marszałkowska (aukcja).'
+      ];
+      popupFromEngine(`Sejm — wylosowano ustawę: ${_sejmLaw.name}`, lines, {
+        buttonText: 'Dalej (Aukcja)'
+      });
     }
     return;
   }
+
 
   // losowanie nowej (UI)
   const pick = LAW_POOL[Math.floor(Math.random() * LAW_POOL.length)];
@@ -162,14 +170,20 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
     logEngine(lines);
   }
 
-// popup informacyjny (UI) – tylko na żądanie
-if (forcePopup) {
-  popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, [
-    `Wybrano ustawę: ${pick.name}.`,
-    'Teraz licytacja marszałkowska (aukcja).'
-  ], { buttonText: 'Dalej (Aukcja)' });
-}
-
+  if (forcePopup) {
+    const spec = LAW_VARIANTS[pick.id];
+    const lines = [
+      `Wybrano ustawę: ${pick.name}.`,
+      '',
+      'Warianty do wyboru (po aukcji):',
+      ...(spec?.describe || ['(brak opisu wariantów)']),
+      '',
+      'Teraz licytacja marszałkowska (aukcja).'
+    ];
+    popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, lines, {
+      buttonText: 'Dalej (Aukcja)'
+    });
+  }
 }
 
 function computeNoblesPerProvince(state){
