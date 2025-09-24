@@ -694,8 +694,10 @@ function applyCurrentTurnFromState(s){
     idx = s.active_player_index;
   } else if (phase === 'attacks' && Number.isInteger(s.active_attacker_index)) {
     idx = s.active_attacker_index;
+  } else if (phase === 'battles' && Number.isInteger(s.active_battler_index)) {
+    idx = s.active_battler_index;          // <<<<< NOWE
   } else {
-    idx = -1; // w innych fazach czyścimy
+    idx = -1;
   }
 
   if (idx !== curPlayerIdx) {
@@ -703,6 +705,7 @@ function applyCurrentTurnFromState(s){
     updateTurnUI();
   }
 }
+
 
 function updateTurnUI(){
   if (PLAYERS.length === 0 || curPlayerIdx < 0 || curPlayerIdx >= PLAYERS.length){
