@@ -812,17 +812,13 @@ function computeFinalScores(ctx) {
   const pcount = players.length;
   players.forEach((p) => { p.score = 0; });
 
-  // (1) Najwięcej posiadłości (+1)
+  // (1) Posiadłości = 1 pkt za każdą posiadłość (bez zwycięzcy większości)
   const estatesTotal = Array(pcount).fill(0);
   for (const prov of Object.values(ctx.provinces)) {
     for (const owner of prov.estates) if (owner >= 0 && owner < pcount) estatesTotal[owner] += 1;
   }
-  const maxEst = estatesTotal.length ? Math.max(...estatesTotal) : 0;
-  const estateWinnersIdx = estatesTotal
-    .map((v, i) => [v, i])
-    .filter(([v]) => v === maxEst && maxEst > 0)
-    .map(([, i]) => i);
-  estateWinnersIdx.forEach((i) => players[i].score += 1);
+  // przyznaj punkty: liczba posiadłości = punkty
+  players.forEach((p, i) => { p.score += estatesTotal[i]; });
 
   // (2) Wpływy w prowincjach (po 1 pkt za jednoznaczną kontrolę)
   const influenceLines = [];
@@ -855,10 +851,7 @@ function computeFinalScores(ctx) {
 
   const lines = [];
   lines.push("[Punktacja końcowa]");
-  lines.push("Posiadłości (łącznie): " + players.map((p, i) => `${p.name}=${estatesTotal[i]}`).join(", "));
-  lines.push(estateWinnersIdx.length
-    ? ("Najwięcej posiadłości: " + estateWinnersIdx.map((i) => players[i].name).join(", ") + " (+1)")
-    : "Najwięcej posiadłości: nikt (brak posiadłości)");
+  lines.push("Posiadłości→pkt: " + players.map((p, i) => `${p.name}=+${estatesTotal[i]}`).join(", "));
   lines.push("Wpływy z prowincji:");
   influenceLines.forEach((s) => lines.push("  • " + s));
   lines.push("Honor: " + players.map((p) => `${p.name}=+${p.honor}`).join(", "));
