@@ -16,19 +16,13 @@ Silnik gry znajduje się w `game.js`, a warstwa UI w skryptach frontendu (np. w 
 - [Konsola poleceń](#konsola-poleceń)
 - [Wydarzenia specjalne](#wydarzenia-specjalne)
 - [Sejm — warianty przed aukcją](#sejm--warianty-przed-aukcją)
-- [Rozwój](#rozwój)
-- [Roadmapa](#roadmapa)
 - [Licencja](#licencja)
 
 ---
 
-## Zrzuty
+## Link
 
-> (Wstaw link do hostingu albo dodaj obrazy do `images/` i zaktualizuj ścieżki poniżej)
-
-- ![Mapa i panel faz](images/screenshot-map.png)
-- ![Popup wydarzenia](images/screenshot-event.png)
-- ![Sejm i aukcja](images/screenshot-sejm.png)
+https://lecztomek.github.io/dzieje-reczypospolitej-szlacheckiej/
 
 ---
 
@@ -73,7 +67,7 @@ Silnik gry znajduje się w `game.js`, a warstwa UI w skryptach frontendu (np. w 
 ├─ index.html            # punkt wejścia aplikacji
 ├─ styles.css            # style (jeśli wydzielone)
 ├─ game.js               # silnik gry (ConsoleGame, enums, logika faz)
-├─ app-ui.js             # warstwa UI (mapa SVG, popupy, panel akcji, konsola)
+├─ app.js             # warstwa UI (mapa SVG, popupy, panel akcji, konsola)
 ├─ images/
 │  ├─ e-default.png      # grafiki popupów (wydarzenia)
 │  ├─ income.png
@@ -83,8 +77,6 @@ Silnik gry znajduje się w `game.js`, a warstwa UI w skryptach frontendu (np. w 
 │  └─ attack.png
 └─ README.md
 ```
-
-Nazwy plików UI mogą u Ciebie wyglądać inaczej — ważne, aby **index.html** ładował `game.js` (silnik) i skrypt UI.
 
 ---
 
@@ -179,47 +171,6 @@ Po ostatniej rundzie wyświetla się **podsumowanie** (popup).
 
 Po wylosowaniu ustawy, **zanim** zacznie się aukcja, popup Sejmu wyświetla krótkie **opisy wariantów A/B** (z `LAW_VARIANTS`).  
 Dzięki temu gracze wiedzą, o co licytują. Wybór wariantu następuje **po** aukcji (gdy jest większość).
-
----
-
-## Rozwój
-
-- UI w czystym JS (DOM API + SVG).  
-- Popupy obsługiwane przez helpery (`openPopup`, `popupFromEngine`).  
-- Synchronizacja mapy i paneli z publicznym stanem silnika: `syncUIFromGame()`.
-
-Jeśli korzystasz z Node, możesz dodać skrypty developerskie:
-
-```json
-{
-  "name": "rzeczpospolita",
-  "private": true,
-  "scripts": {
-    "serve": "http-server -p 5173 -c-1 .",
-    "dev": "http-server -p 5173 -c-1 ."
-  },
-  "devDependencies": {
-    "http-server": "^14.1.1"
-  }
-}
-```
-
-Uruchomienie:
-```bash
-npm i
-npm run dev
-```
-
----
-
-## Roadmapa
-
-- [ ] Balans ekonomii i kosztów akcji
-- [ ] Zapis/odczyt stanu gry (localStorage)
-- [ ] Tryb hotseat z historią tur
-- [ ] Ulepszone tooltipy i dostępność (ARIA)
-- [ ] Testy jednostkowe wybranych modułów silnika
-- [ ] Responsywne UI na mobile/tablet
 
 ---
 
