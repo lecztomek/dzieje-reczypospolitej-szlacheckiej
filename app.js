@@ -492,6 +492,39 @@ let idCounter = 1;
 let roundCur = 1;
 let roundMax = 10;
 
+// Szansa na wystąpienie wydarzenia w danej rundzie (oprócz 1. rundy)
+const SPECIAL_EVENT_CHANCE = 0.45; // dostosuj np. 0.3–0.6
+
+// Harmonogram wydarzeń na całą grę: [0|1, 0|1, ...] długości = liczba rund
+let _eventSchedule = [];
+
+/** Wylosuj rozkład wydarzeń dla całej partii.
+ *  • Nigdy brak wydarzenia w 1. rundzie (index 0 = 0)
+ *  • Każda następna runda: 1 z prawdopodobieństwem SPECIAL_EVENT_CHANCE
+ */
+function buildEventSchedule(totalRounds){
+  const N = Math.max(1, totalRounds|0);
+  _eventSchedule = Array.from({length: N}, (_,i) =>
+    i === 0 ? 0 : (Math.random() < SPECIAL_EVENT_CHANCE ? 1 : 0)
+  );
+  // Dev-log (opcjonalnie, usuń jeśli nie chcesz)
+  //ok(`[Wydarzenia] Rozkład: ${_eventSchedule.join(' ')}`);
+}
+
+/** Zwraca true, jeśli w danej rundzie ma być wydarzenie. */
+function hasEventThisRound(roundNo){
+  const i = (roundNo|0) - 1;
+  return _eventSchedule[i] === 1;
+}
+
+/** Gdyby harmonogram nie istniał / ma złą długość — odbuduj go. */
+function ensureEventSchedule(roundsTotal){
+  if (!Array.isArray(_eventSchedule) || _eventSchedule.length !== (roundsTotal|0)){
+    buildEventSchedule(roundsTotal|0);
+  }
+}
+
+
 function renderPlayerChip(p){
   const row = document.createElement('div');
   row.className = 'player-item';
@@ -1191,13 +1224,37 @@ function buildPhaseActionsSmart(s){
   }
   
   if (phase === 'events'){
-    const box = section('Wydarzenia', 'Rozpatrz wydarzenie tej rundy (los 1–25).');
+    const box = section('Wydarzenia', 'W tej fazie może (ale nie musi) wystąpić wydarzenie specjalne.');
   
-    const rollBtn = chip('Losuj wydarzenie 1–25', () => {
+    const rollBtn = chip('Losuj wydarzenie', () => {
+      const s = game.getPublicState?.() || {};
+      const roundNo  = s.round_status?.current_round ?? roundCur;
+      const roundsTotal = s.round_status?.total_rounds ?? roundMax;
+  
+      // Upewnij się, że harmonogram istnieje i ma dobrą długość
+      ensureEventSchedule(roundsTotal);
+  
+      // 1. runda — nigdy brak wydarzenia specjalnego (czyli flaga=0) – już gwarantowane w buildEventSchedule
+      if (!hasEventThisRound(roundNo)){
+        ok(`(UI) Runda ${roundNo}: brak wydarzenia specjalnego.`);
+        popupFromEngine('Brak wydarzenia', [
+          `W tej rundzie (${roundNo}) nie występuje wydarzenie specjalne.`
+        ], {
+          imageUrl: EVENT_DEFAULT_POPUP_IMG,
+          buttonText: 'Dalej',
+          onAction: () => {
+            const nxt = game.finishPhaseAndAdvance();
+            ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+            syncUIFromGame();
+          }
+        });
+        return; // NIC nie losujemy, NIC nie wywołujemy w silniku
+      }
+  
+      // W tej rundzie wydarzenie JEST — działamy jak dotychczas (los 1–25)
       const n = 1 + Math.floor(Math.random() * 25);
-      ok(`(UI) wylosowano wydarzenie #${n}`);
+      ok(`(UI) Runda ${roundNo}: wylosowano wydarzenie #${n}`);
   
-      // wywołanie silnika, żeby mieć tekst
       const lines = game.events.apply(n);
       logEngine(lines);
       syncUIFromGame();
@@ -1205,7 +1262,11 @@ function buildPhaseActionsSmart(s){
       popupFromEngine(`Wydarzenie #${n}`, lines, {
         imageUrl: EVENT_DEFAULT_POPUP_IMG,
         buttonText: 'Dalej',
-        onAction: () => { const nxt = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`); syncUIFromGame(); }
+        onAction: () => {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+        }
       });
     });
   
@@ -1213,7 +1274,6 @@ function buildPhaseActionsSmart(s){
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
   }
-
 
   if (phase === 'income'){
     const box = section('Dochód', 'Zbierz dochód wszystkich graczy. Podsumowanie pojawi się w popupie.');
@@ -1760,6 +1820,8 @@ function execCommand(raw){
     if (PLAYERS.length === 0) return err('Najpierw dodaj graczy: gracz <imię> <kolor>.');
     const names = PLAYERS.map(p => p.name);
     game.startGame({ players: names, startingGold, maxRounds });
+    
+    buildEventSchedule(maxRounds);
     ok(`Start gry: gracze=${names.join(', ')}, rund=${maxRounds}, złoto start=${startingGold}.`);
     syncUIFromGame(); return;
   }
