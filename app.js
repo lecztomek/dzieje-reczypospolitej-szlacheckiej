@@ -14,9 +14,9 @@ const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 const FINAL_SUMMARY_POPUP_IMG = './images/gameover.png';
 
-const ATTACK_IMG_LOW  = './images/attack-3.png';   // np. słaba szarża
-const ATTACK_IMG_MID  = './images/attack-2.png';   // wyrównane starcie
-const ATTACK_IMG_HIGH = './images/attack-1.png';  // miażdżący atak
+const ATTACK_IMG_LOW  = './images/attack_3.png';   // np. słaba szarża
+const ATTACK_IMG_MID  = './images/attack_2.png';   // wyrównane starcie
+const ATTACK_IMG_HIGH = './images/attack_1.png';  // miażdżący atak
 
 let _actionWizard = null; 
 
