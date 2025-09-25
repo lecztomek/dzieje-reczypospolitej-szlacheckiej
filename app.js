@@ -1173,7 +1173,7 @@ function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
 
   // narysuj kształt
   let shape;
-  const isCav = (kind === UnitKind?.CAV) || (kind === 2);
+  const isCav = Number(kind) === UnitKind.CAV;
   if (isCav) {
     const size = 22;
     const pts = [
@@ -1958,19 +1958,42 @@ function syncUIFromGame(){
     const key = provKeyFromId(pid);
     if (!key) continue;
     resetArmies(key);
-    const tuples = arr.map((units, idx) => ({ units, idx }))
-                      .filter(t => t.units > 0)
-                      .sort((a,b) => b.units - a.units)
-                      .slice(0,4);
+  
+    const tuples = arr
+      .map((units, idx) => ({ units, idx }))
+      .filter(t => t.units > 0)
+      .sort((a,b) => b.units - a.units)
+      .slice(0,4);
+  
+    // normalizacja klucza prowincji do dostępu w troops_kind
+    const pidNum = typeof pid === 'string' ? parseInt(pid, 10) : pid;
+    const pidStr = String(pidNum);
+  
+    // możliwe kształty danych w s.troops_kind
+    const kindsRaw =
+      (s.troops_kind?.[pidNum] ?? s.troops_kind?.[pidStr]) ??
+      (s.troops_kind?.per_province?.[pidNum] ?? s.troops_kind?.per_province?.[pidStr]) ??
+      (s.troops_kind?.by_province?.[pidNum] ?? s.troops_kind?.by_province?.[pidStr]) ??
+      [];
+  
     tuples.forEach((t, slot) => {
       const p = s.settings.players[t.idx];
       const uiPlayer = PLAYERS.find(x => x.name === p.name);
       const color = uiPlayer?.color || '#60a5fa';
-      const kinds = s.troops_kind?.[pid] || s.troops_kind?.per_province?.[pid] || [];
-      const kind  = (Array.isArray(kinds) ? kinds[t.idx] : kinds?.[t.idx]) ?? 0;
-      setArmy(key, slot+1, color, t.units, kind | 0);
+  
+      let kind = 0;
+      if (Array.isArray(kindsRaw)) {
+        kind = Number(kindsRaw[t.idx] ?? 0);
+      } else if (kindsRaw && typeof kindsRaw === 'object') {
+        kind = Number(kindsRaw[t.idx] ?? 0);
+      } else {
+        kind = Number(kindsRaw ?? 0);
+      }
+  
+      setArmy(key, slot + 1, color, t.units, kind);
     });
   }
+
 
   // SZLACHCICE 
   renderNoblesList(s);
