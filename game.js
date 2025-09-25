@@ -597,6 +597,8 @@ class ActionAPI {
     ensurePerProvinceArrays(c);
     const arr = c.troops.per_province[provinceId];
     const kinds = c.troops_kind.per_province[provinceId];
+     if ((arr[pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE;
+   
     const curKind = kinds[pidx] | 0;
 
     // Zakaz mieszania typów: jeśli coś stoi i jest innego typu — blokujemy
@@ -935,11 +937,13 @@ class AttackInvadersAPI {
         // Kawaleria: 1 (porażka -1), 2–4 (sukces, tor-1 i tracisz 1), 5–6 (sukces, tor-1 i NIE tracisz)
         if (r === 1) {
           c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          if ((c.troops.per_province[from][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE; 
           pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
           out.push("1 → porażka kawalerii, tracisz 1 jednostkę.");
         } else if (r <= 4) {
           addRaid(c, enemy, -1);
           c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          if ((c.troops.per_province[from][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE; 
           pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
           out.push("2–4 → sukces kawalerii: tor -1 i tracisz 1 jednostkę.");
         } else {
@@ -951,11 +955,13 @@ class AttackInvadersAPI {
         // Piechota (stare zasady): 1 (porażka -1), 2–5 (sukces, tor-1 i tracisz 1), 6 (sukces bez straty)
         if (r === 1) {
           c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          if ((c.troops.per_province[from][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE; 
           pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
           out.push("1 → porażka, tracisz 1 jednostkę.");
         } else if (r <= 5) {
           addRaid(c, enemy, -1);
           c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          if ((c.troops.per_province[from][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE; 
           pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
           out.push("2–5 → sukces: tor -1 i tracisz 1 jednostkę.");
         } else {
