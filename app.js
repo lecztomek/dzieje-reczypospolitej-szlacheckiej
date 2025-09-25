@@ -156,25 +156,65 @@ function eventImageFor(n){
 
 function randRolls(n){ return Array.from({length: Math.max(1, n|0)}, ()=> 1 + Math.floor(Math.random()*6)); }
 
+function hasAnyPossibleAttack(s){
+  for (const [pid, arr] of Object.entries(s.troops || {})){
+    const key = provKeyFromId(pid);                 // 'prusy' | 'litwa' | ...
+    if (!key) continue;
+    const canBeSource =
+      Array.isArray(ATTACK_TARGETS[key]) && ATTACK_TARGETS[key].length > 0;
+    if (!canBeSource) continue;                      // np. wielkopolska = []
+    for (const u of (arr || [])){
+      if ((u|0) > 0) return true;                    // ktoś ma jednostki w źródłowej prowincji
+    }
+  }
+  return false;
+}
+
+
 function maybeAutoAdvanceAfterAttacks(){
   const s = game.getPublicState?.() || {};
   const phase = s.current_phase || game.round?.currentPhaseId?.();
   const hasActive = Number.isInteger(s.active_attacker_index);
+
   if (phase === 'attacks' && !hasActive){
-    const nxt = game.finishPhaseAndAdvance();
-    ok(`Auto-next z Wypraw -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-    syncUIFromGame();
+    if (!hasAnyPossibleAttack(s)) {
+      const nxt = game.finishPhaseAndAdvance();
+      ok(`Auto-next z Wypraw -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+      syncUIFromGame();
+    } else {
+      ok('Wyprawy: kolej na następnego gracza — pozostajemy w fazie Wypraw.');
+    }
   }
 }
+
+
+function hasAnyContestedProvince(s){
+  for (const arr of Object.values(s.troops || {})){
+    let sides = 0;
+    for (const u of arr) {
+      if ((u|0) > 0) {
+        sides++;
+        if (sides >= 2) return true; // w tej prowincji są co najmniej dwie strony
+      }
+    }
+  }
+  return false; // nigdzie nie ma dwóch stron → brak dalszych starć
+}
+
 
 function maybeAutoAdvanceAfterBattles(){
   const s = game.getPublicState?.() || {};
   const phase = s.current_phase || game.round?.currentPhaseId?.();
   const hasActive = Number.isInteger(s.active_battler_index);
+
   if (phase === 'battles' && !hasActive){
-    const nxt = game.finishPhaseAndAdvance();
-    ok(`Auto-next ze Starć -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-    syncUIFromGame();
+    if (!hasAnyContestedProvince(s)) {
+      const nxt = game.finishPhaseAndAdvance();
+      ok(`Auto-next ze Starć -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+      syncUIFromGame();
+    } else {
+      ok('Starcia: kolej na następnego gracza — pozostajemy w fazie Starć.');
+    }
   }
 }
 
@@ -1730,10 +1770,15 @@ if (phase === 'auction' || phase === 'sejm'){
         const msg = game.battles.passTurn(pidx);
         ok(String(msg || 'PASS.'));
         syncUIFromGame();
-        maybeAutoAdvanceAfterBattles();
+        // najpierw odśwież panel, aby UI „złapało” nowego aktywnego gracza
         buildPhaseActionsSmart(game.getPublicState());
-      }catch(ex){ err('PASS nieudany: ' + ex.message); }
+        // dopiero potem rozważ ewentualne przejście do kolejnej fazy
+        maybeAutoAdvanceAfterBattles();
+      }catch(ex){
+        err('PASS nieudany: ' + ex.message);
+      }
     }, '—'));
+
   
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
@@ -1848,8 +1893,10 @@ if (phase === 'auction' || phase === 'sejm'){
           const msg = game.attacks.passTurn(pidx);
           ok(String(msg || 'PASS.'));
           syncUIFromGame();
-          maybeAutoAdvanceAfterAttacks();
+          // najpierw odśwież panel i aktywnego gracza
           buildPhaseActionsSmart(game.getPublicState());
+          // dopiero potem ewentualny auto-next
+          maybeAutoAdvanceAfterAttacks();
         } catch (ex) {
           err('PASS nieudany: ' + ex.message);
         }
