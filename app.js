@@ -14,6 +14,37 @@ const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 const FINAL_SUMMARY_POPUP_IMG = './images/gameover.png';
 
+const EVENT_IMG_BASE = './images/events';
+
+const EVENT_IMAGES_BY_ID = {
+  1:  'veto',           // Liberum veto
+  2:  'elekcja',        // Elekcja viritim
+  3:  'skarb_pusty',    // Skarb pusty
+  4:  'reformy',        // Reformy skarbowe
+  5:  'sweden_war',     // Potop szwedzki
+  6:  'north_war',      // Wojna północna
+  7:  'cossacs_war',    // Powstanie Chmielnickiego
+  8:  'kozacy',    // Kozacy na służbie (użyjemy tej samej grafiki)
+  9:  'rus_war',      // Wojna z Moskwą (jeśli masz inną – podmień tu)
+  10: 'wieden',         // Bitwa pod Wiedniem
+  11: 'oliwa',          // Pokój w Oliwie
+  12: 'zaciag',         // Zaciąg pospolity
+  13: 'fortyfikacje',   // Fortyfikacja pogranicza
+  14: 'artyleria',      // Artyleria koronna
+  15: 'glod',           // Głód
+  16: 'susza',          // Susza
+  17: 'urodzaj',        // Urodzaj
+  18: 'jarmarki',       // Jarmarki królewskie
+  19: 'bunt_chlopski',  // Bunt chłopski
+  20: 'roszady',        // Magnackie roszady
+  21: 'bunt_poznan',    // Bunt w Poznaniu
+  22: 'sroda',          // Sejmik w Środzie
+  23: 'pozar',          // Pożar w Poznaniu
+  24: 'szlak',          // Szlak Warta–Odra
+  25: 'clo',            // Cła morskie
+};
+
+
 const ATTACK_IMG_LOW  = './images/attack_3.png';   // np. słaba szarża
 const ATTACK_IMG_MID  = './images/attack_2.png';   // wyrównane starcie
 const ATTACK_IMG_HIGH = './images/attack_1.png';  // miażdżący atak
@@ -117,6 +148,10 @@ const LAW_VARIANTS = {
   },
 };
 
+function eventImageFor(n){
+  const key = EVENT_IMAGES_BY_ID[n|0];
+  return key ? `${EVENT_IMG_BASE}/${key}.png` : EVENT_DEFAULT_POPUP_IMG;
+}
 
 function randRolls(n){ return Array.from({length: Math.max(1, n|0)}, ()=> 1 + Math.floor(Math.random()*6)); }
 
@@ -1286,7 +1321,6 @@ function buildPhaseActionsSmart(s){
         popupFromEngine('Brak wydarzenia', [
           `W tej rundzie (${roundNo}) nie występuje wydarzenie specjalne.`
         ], {
-          imageUrl: EVENT_DEFAULT_POPUP_IMG,
           buttonText: 'Dalej',
           onAction: () => {
             const nxt = game.finishPhaseAndAdvance();
@@ -1306,7 +1340,7 @@ function buildPhaseActionsSmart(s){
       syncUIFromGame();
   
       popupFromEngine(`Wydarzenie #${n}`, lines, {
-        imageUrl: EVENT_DEFAULT_POPUP_IMG,
+        imageUrl: eventImageFor(n),  
         buttonText: 'Dalej',
         onAction: () => {
           const nxt = game.finishPhaseAndAdvance();
