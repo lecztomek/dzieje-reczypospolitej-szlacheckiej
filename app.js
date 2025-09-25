@@ -1155,11 +1155,64 @@ function createArmySlots(){
   }
 }
 function getArmySlot(regionKey, slot){ return svg.querySelector(`#army-${regionKey}-${slot}`); }
-function setArmy(regionKey, slot, color, units){
+function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
   const slotG = getArmySlot(regionKey, slot); if(!slotG) return false;
-  const c = slotG.querySelector('circle'); const t = slotG.querySelector('text');
-  c.style.fill = color; c.style.stroke = color; t.textContent = String(parseInt(units,10)); slotG.style.display = ''; return true;
+  slotG.innerHTML = ''; // czyścimy poprzedni kształt
+
+  // współrzędne bazowe (bierzemy ze starego kółka)
+  // Odzyskaj pozycję z definicji slotu:
+  const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  const text   = document.createElementNS('http://www.w3.org/2000/svg','text');
+
+  // Położenie wyliczamy jak wcześniej: w createArmySlots użyliśmy stałych
+  // Tu szybciej: sklonujemy z gotowego wzorca:
+  const template = getArmySlot(regionKey, slot);
+  const tCircle = template.querySelector('circle'); const tText = template.querySelector('text');
+  const cx = parseFloat(tText?.getAttribute('x')) || parseFloat(tCircle?.getAttribute('cx')) || 0;
+  const cy = parseFloat(tText?.getAttribute('y')) || parseFloat(tCircle?.getAttribute('cy')) || 0;
+
+  if (kind === UnitKind.CAV) {
+    // Diament (kwadrat 45°)
+    const size = 22;
+    const pts = [
+      [cx, cy - size],
+      [cx + size, cy],
+      [cx, cy + size],
+      [cx - size, cy]
+    ].map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+
+    const diamond = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    diamond.setAttribute('points', pts);
+    diamond.setAttribute('fill', color);
+    diamond.setAttribute('stroke', color);
+
+    text.setAttribute('x', cx.toFixed(1));
+    text.setAttribute('y', cy.toFixed(1));
+    text.textContent = String(parseInt(units,10));
+
+    slotG.appendChild(diamond);
+    slotG.appendChild(text);
+  } else {
+    // Piechota: koło
+    const r = 18;
+    circle.setAttribute('cx', cx.toFixed(1));
+    circle.setAttribute('cy', cy.toFixed(1));
+    circle.setAttribute('r', r);
+    circle.setAttribute('fill', color);
+    circle.setAttribute('stroke', color);
+
+    text.setAttribute('x', cx.toFixed(1));
+    text.setAttribute('y', cy.toFixed(1));
+    text.textContent = String(parseInt(units,10));
+
+    slotG.appendChild(circle);
+    slotG.appendChild(text);
+  }
+
+  slotG.style.display = '';
+  return true;
 }
+
 function resetArmies(regionKey){
   const slots = svg.querySelectorAll(`#armies-${regionKey} g[data-slot]`); let okAny = false;
   slots.forEach(s => { const idx = +s.getAttribute('data-slot'); okAny = (()=>{
@@ -1547,10 +1600,8 @@ if (phase === 'auction' || phase === 'sejm'){
         buildPhaseActionsSmart(game.getPublicState());
       }, 'gact wplyw <prowincja>'),
 
-      chip('Rekrutacja', ()=>{ 
-        _actionWizard = { kind:'rekrutacja' };
-        buildPhaseActionsSmart(game.getPublicState());
-      }, 'gact rekrutacja <prowincja>'),
+      chip('Rekrutacja piechota', ()=>{ _actionWizard = { kind:'rekrutacja_piechota' }; buildPhaseActionsSmart(game.getPublicState()); }, 'gact rekrutacja_piechota <prowincja>'),
+      chip('Rekrutacja kawaleria', ()=>{ _actionWizard = { kind:'rekrutacja_kawaleria' }; buildPhaseActionsSmart(game.getPublicState()); }, 'gact rekrutacja_kawaleria <prowincja>'),
       
       chip('Posiadłość', ()=>{ 
         _actionWizard = { kind:'posiadlosc' };
@@ -1570,7 +1621,8 @@ if (phase === 'auction' || phase === 'sejm'){
   
     // Rysuj kreator wg stanu
     if (_actionWizard){
-      if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja' || _actionWizard.kind === 'zamoznosc'){
+      const singleProvKinds = new Set(['wplyw','posiadlosc','zamoznosc','rekrutacja_piechota','rekrutacja_kawaleria']);
+      if (singleProvKinds.has(_actionWizard.kind)) {
         renderProvincePicker(uiArea, (prov)=>{
           run(`gact ${_actionWizard.kind} ${prov}`);
           _actionWizard = null;
@@ -1917,7 +1969,9 @@ function syncUIFromGame(){
       const p = s.settings.players[t.idx];
       const uiPlayer = PLAYERS.find(x => x.name === p.name);
       const color = uiPlayer?.color || '#60a5fa';
-      setArmy(key, slot+1, color, t.units);
+      const kinds = s.troops_kind?.[pid] || s.troops_kind?.per_province?.[pid] || [];
+      const kind  = (Array.isArray(kinds) ? kinds[t.idx] : kinds?.[t.idx]) ?? 0;
+      setArmy(key, slot+1, color, t.units, kind | 0);
     });
   }
 
@@ -2065,14 +2119,18 @@ function execCommand(raw){
       return;
     }
   
-    if (['wplyw','wpływ','posiadlosc','posiadłość','rekrutacja','zamoznosc','zamożność'].includes(sub)){
+    if (['wplyw','wpływ','posiadlosc','posiadłość','rekrutacja','rekrutacja_piechota','rekrutacja_kawaleria','zamoznosc','zamożność'].includes(sub)){
       const prov = toProvEnum(tokens[2]); if (!prov) return err('Podaj prowincję.');
       if (sub.startsWith('wpl')){
         const m = game.actions.wplyw(pidx, prov); logEngine(m);
       } else if (sub.startsWith('pos')){
         const m = game.actions.posiadlosc(pidx, prov); logEngine(m);
-      } else if (sub.startsWith('rek')){
-        const m = game.actions.rekrutacja(pidx, prov); logEngine(m);
+      } else if (sub === 'rekrutacja_piechota'){
+        const m = game.actions.rekrutacja_piechota(pidx, prov); logEngine(m);
+      } else if (sub === 'rekrutacja_kawaleria'){
+        const m = game.actions.rekrutacja_kawaleria(pidx, prov); logEngine(m);
+      } else if (sub === 'rekrutacja'){ // (opcjonalny alias do piechoty)
+        const m = game.actions.rekrutacja_piechota(pidx, prov); logEngine(m);
       } else {
         const m = game.actions.zamoznosc(pidx, prov); logEngine(m);
       }
@@ -2274,7 +2332,8 @@ document.querySelectorAll('.region').forEach(path => {
 path.addEventListener('click', () => {
   // jeśli kreator akcji jest aktywny — traktuj klik jako wybór prowincji
   if (_actionWizard) {
-    if (_actionWizard.kind === 'wplyw' || _actionWizard.kind === 'posiadlosc' || _actionWizard.kind === 'rekrutacja' || _actionWizard.kind === 'zamoznosc'){
+    const singleProvKinds = new Set(['wplyw','posiadlosc','zamoznosc','rekrutacja_piechota','rekrutacja_kawaleria']);
+    if (singleProvKinds.has(_actionWizard.kind)) {
       runCmd(`gact ${_actionWizard.kind} ${key}`);
       _actionWizard = null;
       buildPhaseActionsSmart(game.getPublicState());
