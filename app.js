@@ -958,7 +958,7 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Wzmacnanie', 'Wyprawy','Spustoszenia'];
+const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Wzmacnianie', 'Wyprawy','Spustoszenia'];
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -2048,8 +2048,6 @@ if (phase === 'auction' || phase === 'sejm'){
 
 // ===================== SYNC UI ⇄ SILNIK =====================
 function syncUIFromGame(){
-  const s = game.getPublicState?.(); if (!s) return;
-
   const s = game.getPublicState?.(); if (!s) return;
 
   const phaseId = s.current_phase || game.round?.currentPhaseId?.();
