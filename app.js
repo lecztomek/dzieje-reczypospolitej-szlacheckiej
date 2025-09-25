@@ -1160,9 +1160,23 @@ function createArmySlots(){
   }
 }
 
+function isCavalryKind(k){
+  // jeśli enum liczbowy
+  if (typeof UnitKind?.CAV === 'number') return Number(k) === UnitKind.CAV;
+
+  // jeśli enum stringowy
+  if (typeof UnitKind?.CAV === 'string') {
+    const ks = String(k).toUpperCase();
+    return ks === UnitKind.CAV.toUpperCase() || ks === '1'; // gdy silnik daje 1
+  }
+
+  // fallback: akceptuj 1 jako kawalerię
+  return Number(k) === 1 || String(k).toUpperCase() === 'CAV';
+}
+
 function getArmySlot(regionKey, slot){ return svg.querySelector(`#army-${regionKey}-${slot}`); }
 function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
-  console.log('setArmy kind=', kind, 'isCav=', kind === UnitKind.CAV);
+  console.log('setArmy kind=', kind, 'isCav=', isCavalryKind(kind));
 
   const slotG = getArmySlot(regionKey, slot);
   if (!slotG) return false;
@@ -1175,7 +1189,7 @@ function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
 
   // narysuj kształt
   let shape;
-  const isCav = kind === UnitKind.CAV;
+  const isCav = isCavalryKind(kind);
 
   if (isCav) {
     const size = 22;
