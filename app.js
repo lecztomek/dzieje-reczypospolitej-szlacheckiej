@@ -7,6 +7,7 @@ window.game = game;
 window.ProvinceID = ProvinceID;
 window.RaidTrackID = RaidTrackID;
 window.StateID = StateID;
+window.UnitKind = UnitKind;
 
 const EVENT_DEFAULT_POPUP_IMG = './images/e-default.png';
 const INCOME_POPUP_IMG = './images/income.png';
