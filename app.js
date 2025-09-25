@@ -1756,7 +1756,12 @@ if (phase === 'auction' || phase === 'sejm'){
               });
               logEngine(lines);
               syncUIFromGame();
-              _battlesPassCycle.clear();
+               _battlesPassCycle.clear();
+              try {
+                game.battles.passTurn(pidx);   // przekazanie kolejki (nie kończy fazy)
+              } catch (_) {
+                // jeżeli silnik już zamknął fazę — zignoruj
+              }
               
               popupFromEngine(`Starcie — ${key}`, [
                 `Rzut: ${roll}.`,
@@ -1907,6 +1912,11 @@ if (phase === 'auction' || phase === 'sejm'){
                 logEngine(lines);
                 syncUIFromGame();
                 _attacksPassCycle.clear();
+                try {
+                  game.attacks.passTurn(pidx);   // przekazanie kolejki dalej (bez kończenia fazy)
+                } catch (_) {
+                  // jeśli silnik zgłosi, że faza już się zamknęła – po prostu zignoruj
+                }
     
                 popupFromEngine(`Wyprawa — ${key} → ${enemyKey}`, [
                   `Rzut: ${roll}.`,
