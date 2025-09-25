@@ -1173,7 +1173,8 @@ function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
 
   // narysuj kształt
   let shape;
-  const isCav = Number(kind) === UnitKind.CAV;
+  const isCav = kind === UnitKind.CAV;
+
   if (isCav) {
     const size = 22;
     const pts = [
@@ -1982,10 +1983,9 @@ function syncUIFromGame(){
       const color = uiPlayer?.color || '#60a5fa';
   
       // jeśli brak wpisu — przyjmij piechotę
-      const kind = Number(
-        Array.isArray(kindsRow) ? (kindsRow[t.idx] ?? UnitKind.INF)
-                                : UnitKind.INF
-      );
+      const kind = Array.isArray(kindsRow)
+        ? (kindsRow[t.idx] ?? UnitKind.INF)
+        : UnitKind.INF;
   
       setArmy(key, slot + 1, color, t.units, kind);
     });
