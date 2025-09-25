@@ -1162,6 +1162,8 @@ function createArmySlots(){
 
 function getArmySlot(regionKey, slot){ return svg.querySelector(`#army-${regionKey}-${slot}`); }
 function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
+  console.log('setArmy kind=', kind, 'isCav=', kind === UnitKind.CAV);
+
   const slotG = getArmySlot(regionKey, slot);
   if (!slotG) return false;
 
