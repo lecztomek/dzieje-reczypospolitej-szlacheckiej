@@ -676,45 +676,6 @@ class ActionAPI {
 
 class PlayerBattleAPI {
   constructor(ctx) { this.ctx = ctx; }
-  // Resolve a single duel on province `pid` between players i and j given explicit dice arrays.
-  resolveDuel(pid, i, j, rollsI, rollsJ) {
-    ensurePerProvinceArrays(this.ctx);
-    const troops = this.ctx.troops.per_province[pid];
-    const kinds  = this.ctx.troops_kind.per_province[pid];
-    const pi = this.ctx.settings.players[i], pj = this.ctx.settings.players[j];
-  
-    const unitsI = troops[i] | 0; const unitsJ = troops[j] | 0;
-    if (unitsI <= 0 || unitsJ <= 0) return "(Potyczka pominięta — brak jednostek)";
-    if (!Array.isArray(rollsI) || rollsI.length !== unitsI) throw new Error(`rollsI must have length ${unitsI}`);
-    if (!Array.isArray(rollsJ) || rollsJ.length !== unitsJ) throw new Error(`rollsJ must have length ${unitsJ}`);
-  
-    const kindI = kinds[i] | 0; // UnitKind
-    const kindJ = kinds[j] | 0;
-  
-    // Progi trafienia ATAKUJĄCEGO:
-    // INF: 5–6 ; CAV: 4–6
-    const thrI = (kindI === UnitKind.CAV) ? 4 : 5;
-    const thrJ = (kindJ === UnitKind.CAV) ? 4 : 5;
-  
-    const hitsByI = rollsI.reduce((s, r) => s + (((r | 0) >= thrI) ? 1 : 0), 0);
-    const hitsByJ = rollsJ.reduce((s, r) => s + (((r | 0) >= thrJ) ? 1 : 0), 0);
-  
-    const lossJ = Math.min(hitsByI, unitsJ);
-    const lossI = Math.min(hitsByJ, unitsI);
-  
-    troops[i] = Math.max(0, unitsI - lossI);
-    troops[j] = Math.max(0, unitsJ - lossJ);
-  
-    // porządkowanie typów, gdy ktoś wyzerował
-    if ((troops[i] | 0) === 0) kinds[i] = UnitKind.NONE;
-    if ((troops[j] | 0) === 0) kinds[j] = UnitKind.NONE;
-  
-    return `${pi.name} zadał ${lossJ} strat; ${pj.name} zadał ${lossI}. `
-         + `Stan: ${pi.name}=${troops[i]}, ${pj.name}=${troops[j]}.`;
-  }
-
-
-  // ====== Tryb turo-wy w fazie "battles" (analogiczny do AttackInvadersAPI) ======
   #ensurePhase() {
     if (!this.ctx.battlesTurn) throw new Error("To nie jest faza starć.");
     if (this.ctx.battlesTurn.done) throw new Error("Faza starć już zakończona.");
