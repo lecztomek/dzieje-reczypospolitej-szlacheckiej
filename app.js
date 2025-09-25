@@ -1,5 +1,5 @@
 // ===================== PODPIĘCIE SILNIKA (game.js) =====================
-import { ConsoleGame, ProvinceID, RaidTrackID, StateID } from './game.js';
+import { ConsoleGame, ProvinceID, RaidTrackID, StateID, UnitKind  } from './game.js';
 
 // instancja gry + ułatwienia globalne (DevTools)
 export const game = new ConsoleGame();
