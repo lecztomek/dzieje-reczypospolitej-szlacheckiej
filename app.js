@@ -1982,26 +1982,22 @@ function syncUIFromGame(){
       .filter(t => t.units > 0)
       .sort((a,b) => b.units - a.units)
       .slice(0,4);
-  
-    // klucz prowincji może być stringiem — znormalizuj
-    const pidNum = typeof pid === 'string' ? parseInt(pid, 10) : pid;
-    const pidStr = String(pidNum);
-  
-    // JEDYNE źródło: per_province
+    
+    // spróbuj kolejno: nowy kształt, stary kształt, ich wersje ze String()
     const kindsRow =
-      s.troops_kind?.per_province?.[pidNum] ??
-      s.troops_kind?.per_province?.[pidStr] ??
-      []; // oczekujemy tablicy [kindPerPlayer]
+      s.troops_kind?.[key] ??
+      s.troops_kind?.per_province?.[key] ??
+      s.troops_kind?.[String(key)] ??
+      s.troops_kind?.per_province?.[String(key)] ??
+      [];
   
     tuples.forEach((t, slot) => {
       const p = s.settings.players[t.idx];
       const uiPlayer = PLAYERS.find(x => x.name === p.name);
       const color = uiPlayer?.color || '#60a5fa';
   
-      // jeśli brak wpisu — przyjmij piechotę
-      const kind = Array.isArray(kindsRow)
-        ? (kindsRow[t.idx] ?? UnitKind.INF)
-        : UnitKind.INF;
+      // wybierz rodzaj dla danego gracza
+      const kind = Array.isArray(kindsRow) ? (kindsRow[t.idx] ?? UnitKind.INF) : UnitKind.INF;
   
       setArmy(key, slot + 1, color, t.units, kind);
     });
