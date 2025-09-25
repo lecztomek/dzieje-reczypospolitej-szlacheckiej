@@ -1137,42 +1137,42 @@ function createArmySlots(){
     const c = bboxCenter(r.el);
     const firstCx = c.x - ((ARMY_SLOTS - 1) / 2) * ARMY_COL_SPACING;
     const armyCy  = c.y - ARMY_OFFSET_Y;
+
     const group = document.createElementNS('http://www.w3.org/2000/svg','g');
-    group.setAttribute('id', `armies-${r.key}`); group.setAttribute('data-region', r.key);
+    group.setAttribute('id', `armies-${r.key}`);
+    group.setAttribute('data-region', r.key);
+
     for (let i = 1; i <= ARMY_SLOTS; i++) {
       const cx = firstCx + (i - 1) * ARMY_COL_SPACING;
+
       const slotG = document.createElementNS('http://www.w3.org/2000/svg','g');
-      slotG.setAttribute('id', `army-${r.key}-${i}`); slotG.setAttribute('data-slot', i);
+      slotG.setAttribute('id', `army-${r.key}-${i}`);
+      slotG.setAttribute('data-slot', i);
+      slotG.setAttribute('data-cx', cx.toFixed(1));
+      slotG.setAttribute('data-cy', armyCy.toFixed(1));
       slotG.style.display = 'none';
-      const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      circle.setAttribute('cx', cx.toFixed(1)); circle.setAttribute('cy', armyCy.toFixed(1));
-      circle.setAttribute('r', ARMY_R); circle.setAttribute('fill', 'none');
-      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
-      text.setAttribute('x', cx.toFixed(1)); text.setAttribute('y', armyCy.toFixed(1)); text.textContent = '';
-      slotG.appendChild(circle); slotG.appendChild(text); group.appendChild(slotG);
+
+      // (opcjonalnie: zostaw puste, bez circle/text – i tak rysujesz dynamicznie)
+      group.appendChild(slotG);
     }
     armiesLayer.appendChild(group);
   }
 }
+
 function getArmySlot(regionKey, slot){ return svg.querySelector(`#army-${regionKey}-${slot}`); }
 function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
-  const slotG = getArmySlot(regionKey, slot); if(!slotG) return false;
-  slotG.innerHTML = ''; // czyścimy poprzedni kształt
+  const slotG = getArmySlot(regionKey, slot);
+  if (!slotG) return false;
 
-  // współrzędne bazowe (bierzemy ze starego kółka)
-  // Odzyskaj pozycję z definicji slotu:
-  const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
-  const text   = document.createElementNS('http://www.w3.org/2000/svg','text');
+  const cx = parseFloat(slotG.getAttribute('data-cx')) || 0;
+  const cy = parseFloat(slotG.getAttribute('data-cy')) || 0;
 
-  // Położenie wyliczamy jak wcześniej: w createArmySlots użyliśmy stałych
-  // Tu szybciej: sklonujemy z gotowego wzorca:
-  const template = getArmySlot(regionKey, slot);
-  const tCircle = template.querySelector('circle'); const tText = template.querySelector('text');
-  const cx = parseFloat(tText?.getAttribute('x')) || parseFloat(tCircle?.getAttribute('cx')) || 0;
-  const cy = parseFloat(tText?.getAttribute('y')) || parseFloat(tCircle?.getAttribute('cy')) || 0;
+  // wyczyść zawartość po odczycie pozycji
+  slotG.innerHTML = '';
 
+  // narysuj kształt
+  let shape;
   if (kind === UnitKind.CAV) {
-    // Diament (kwadrat 45°)
     const size = 22;
     const pts = [
       [cx, cy - size],
@@ -1180,47 +1180,42 @@ function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
       [cx, cy + size],
       [cx - size, cy]
     ].map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-
-    const diamond = document.createElementNS('http://www.w3.org/2000/svg','polygon');
-    diamond.setAttribute('points', pts);
-    diamond.setAttribute('fill', color);
-    diamond.setAttribute('stroke', color);
-
-    text.setAttribute('x', cx.toFixed(1));
-    text.setAttribute('y', cy.toFixed(1));
-    text.textContent = String(parseInt(units,10));
-
-    slotG.appendChild(diamond);
-    slotG.appendChild(text);
+    shape = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    shape.setAttribute('points', pts);
   } else {
-    // Piechota: koło
-    const r = 18;
-    circle.setAttribute('cx', cx.toFixed(1));
-    circle.setAttribute('cy', cy.toFixed(1));
-    circle.setAttribute('r', r);
-    circle.setAttribute('fill', color);
-    circle.setAttribute('stroke', color);
-
-    text.setAttribute('x', cx.toFixed(1));
-    text.setAttribute('y', cy.toFixed(1));
-    text.textContent = String(parseInt(units,10));
-
-    slotG.appendChild(circle);
-    slotG.appendChild(text);
+    shape = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    shape.setAttribute('cx', cx.toFixed(1));
+    shape.setAttribute('cy', cy.toFixed(1));
+    shape.setAttribute('r', 18);
   }
+  shape.setAttribute('fill', color);
+  shape.setAttribute('stroke', color);
 
+  const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+  text.setAttribute('x', cx.toFixed(1));
+  text.setAttribute('y', cy.toFixed(1));
+  text.setAttribute('text-anchor', 'middle');
+  text.setAttribute('dominant-baseline', 'central');
+  text.textContent = String(parseInt(units,10));
+
+  slotG.appendChild(shape);
+  slotG.appendChild(text);
   slotG.style.display = '';
   return true;
 }
 
+
 function resetArmies(regionKey){
-  const slots = svg.querySelectorAll(`#armies-${regionKey} g[data-slot]`); let okAny = false;
-  slots.forEach(s => { const idx = +s.getAttribute('data-slot'); okAny = (()=>{
-    const c = s.querySelector('circle'); const t = s.querySelector('text');
-    c.style.fill = 'none'; c.style.stroke = 'gray'; t.textContent = ''; s.style.display = 'none'; return true;
-  })() || okAny; });
+  const slots = svg.querySelectorAll(`#armies-${regionKey} g[data-slot]`);
+  let okAny = false;
+  slots.forEach(s => {
+    s.innerHTML = '';
+    s.style.display = 'none';
+    okAny = true;
+  });
   return okAny;
 }
+
 
 // ===================== *** Tory wrogów (X) – sync UI *** =====================
 const ENEMY_COUNT = 6, ENEMY_SPACING = 42, ENEMY_SIZE = 16;
