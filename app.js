@@ -58,6 +58,16 @@ let _sejmLaw = null;                   // { id, name }
 let _sejmAuctionWinner = null;         // nazwa zwycięzcy aukcji (po rozstrzygnięciu)
 let _sejmSkipPopupRound = -1;
 
+let _attacksPassCycle = new Set();   // dla fazy 'attacks'
+let _battlesPassCycle = new Set();   // dla fazy 'battles'
+let _lastPhaseId = null;
+let _lastRoundNo = null;
+
+function resetPassCycles(){
+  _attacksPassCycle.clear();
+  _battlesPassCycle.clear();
+}
+
 let _finalPopupShown = false;
 
 const LAW_POOL = [
@@ -1746,6 +1756,8 @@ if (phase === 'auction' || phase === 'sejm'){
               });
               logEngine(lines);
               syncUIFromGame();
+              _battlesPassCycle.clear();
+              
               popupFromEngine(`Starcie — ${key}`, [
                 `Rzut: ${roll}.`,
                 ...(Array.isArray(lines)?lines:[lines]),
@@ -1767,17 +1779,48 @@ if (phase === 'auction' || phase === 'sejm'){
     box.append(el('div', { style:{ height:'6px' } }));
     box.append(chip('PASS (starcia)', ()=>{
       try{
-        const msg = game.battles.passTurn(pidx);
-        ok(String(msg || 'PASS.'));
+        const st = game.getPublicState?.() || {};
+        if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'battles') {
+          ok('Faza Starć już zakończona — odświeżam UI.');
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+          return;
+        }
+    
+        const freshPidx = Number.isInteger(st.active_battler_index)
+          ? st.active_battler_index
+          : curPlayerIdx;
+    
+        const msg = game.battles.passTurn(freshPidx);
+        ok(String(msg || 'PASS (starcia).'));
+    
+        _battlesPassCycle.add(freshPidx);
+    
         syncUIFromGame();
-        // najpierw odśwież panel, aby UI „złapało” nowego aktywnego gracza
         buildPhaseActionsSmart(game.getPublicState());
-        // dopiero potem rozważ ewentualne przejście do kolejnej fazy
-        maybeAutoAdvanceAfterBattles();
+    
+        if (_battlesPassCycle.size >= 2) {
+          const nxt = game.finishPhaseAndAdvance();
+          ok(`Starcia: dwóch graczy spasowało — next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+          resetPassCycles();
+        } else {
+          ok('Starcia: kolej na następnego gracza (jeszcze nie kończymy fazy).');
+        }
+    
       }catch(ex){
-        err('PASS nieudany: ' + ex.message);
+        if (String(ex?.message || '').includes('Faza starć już zakończona')) {
+          ok('Silnik zamknął fazę Starć — odświeżam UI.');
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+          resetPassCycles();
+          return;
+        }
+        err('PASS (starcia) nieudany: ' + ex.message);
       }
     }, '—'));
+
 
   
     phaseActionsEl.appendChild(box);
@@ -1863,6 +1906,7 @@ if (phase === 'auction' || phase === 'sejm'){
     
                 logEngine(lines);
                 syncUIFromGame();
+                _attacksPassCycle.clear();
     
                 popupFromEngine(`Wyprawa — ${key} → ${enemyKey}`, [
                   `Rzut: ${roll}.`,
@@ -1886,21 +1930,57 @@ if (phase === 'auction' || phase === 'sejm'){
         });
       }
     
-      // PASS
       box.append(el('div', { style:{ height:'6px' } }));
       box.append(chip('PASS', () => {
         try {
-          const msg = game.attacks.passTurn(pidx);
+          const st = game.getPublicState?.() || {};
+          if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'attacks') {
+            ok('Faza Wypraw już się zakończyła — odświeżam UI.');
+            syncUIFromGame();
+            buildPhaseActionsSmart(game.getPublicState());
+            return;
+          }
+      
+          // świeży, aktualny gracz
+          const freshPidx = Number.isInteger(st.active_attacker_index)
+            ? st.active_attacker_index
+            : curPlayerIdx;
+      
+          const msg = game.attacks.passTurn(freshPidx);
           ok(String(msg || 'PASS.'));
+      
+          // zapamiętaj, że ten gracz już spasował w tym cyklu
+          _attacksPassCycle.add(freshPidx);
+      
+          // odśwież UI (może wskoczyć kolejny gracz)
           syncUIFromGame();
-          // najpierw odśwież panel i aktywnego gracza
           buildPhaseActionsSmart(game.getPublicState());
-          // dopiero potem ewentualny auto-next
-          maybeAutoAdvanceAfterAttacks();
+      
+          // sprawdź, czy mamy 2 różnych PASS w bieżącym objeździe
+          if (_attacksPassCycle.size >= 2) {
+            // przejście do następnej fazy/rundy dopiero teraz
+            const nxt = game.finishPhaseAndAdvance();
+            ok(`Wyprawy: dwóch graczy spasowało — next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+            syncUIFromGame();
+            buildPhaseActionsSmart(game.getPublicState());
+            resetPassCycles(); // zamknięty cykl
+          } else {
+            ok('Wyprawy: kolej na następnego gracza (jeszcze nie kończymy fazy).');
+          }
+      
         } catch (ex) {
+          // jeżeli silnik już zamknął fazę — tylko się zsynchronizuj
+          if (String(ex?.message || '').includes('Faza ataków już zakończona')) {
+            ok('Silnik zamknął fazę Wypraw — odświeżam UI.');
+            syncUIFromGame();
+            buildPhaseActionsSmart(game.getPublicState());
+            resetPassCycles();
+            return;
+          }
           err('PASS nieudany: ' + ex.message);
         }
       }, 'gpass'));
+
     
       phaseActionsEl.appendChild(box);
       tintByActive();
@@ -1970,6 +2050,16 @@ if (phase === 'auction' || phase === 'sejm'){
 function syncUIFromGame(){
   const s = game.getPublicState?.(); if (!s) return;
 
+  const s = game.getPublicState?.(); if (!s) return;
+
+  const phaseId = s.current_phase || game.round?.currentPhaseId?.();
+  const roundNo = s.round_status?.current_round;
+  if (phaseId !== _lastPhaseId || roundNo !== _lastRoundNo){
+    resetPassCycles();
+    _lastPhaseId = phaseId;
+    _lastRoundNo = roundNo;
+  }
+  
   // RUNDY
   roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; 
   updateRoundUI();
