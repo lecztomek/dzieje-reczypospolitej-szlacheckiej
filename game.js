@@ -8,6 +8,7 @@
 
 // ---------------- Enums / IDs ----------------
 export const StateID = Object.freeze({ START_MENU: 1, GAMEPLAY: 2, GAME_OVER: 3 });
+export const UnitKind = Object.freeze({ NONE: 0, INF: 1, CAV: 2 });
 
 export const ProvinceID = Object.freeze({
   PRUSY: "Prusy",
@@ -103,6 +104,7 @@ class GameContext {
     // boards as { provinceId: [unitsPerPlayer] }
     this.troops = { per_province: {} };
     this.nobles = { per_province: {} };
+    this.troops_kind = { per_province: {} };
   }
 }
 
@@ -190,8 +192,10 @@ function ensurePerProvinceArrays(ctx) {
   for (const pid of Object.values(ProvinceID)) {
     if (!ctx.troops.per_province[pid]) ctx.troops.per_province[pid] = Array(pcount).fill(0);
     if (!ctx.nobles.per_province[pid]) ctx.nobles.per_province[pid] = Array(pcount).fill(0);
+    if (!ctx.troops_kind.per_province[pid]) ctx.troops_kind.per_province[pid] = Array(pcount).fill(UnitKind.NONE);
   }
 }
+
 
 // ---------------- Phase Logic bundles (API) ----------------
 class EventsAPI {
@@ -497,7 +501,12 @@ class SejmAPI {
 }
 
 class ActionAPI {
-  static COST = { wplyw: 2, posiadlosc: 2, rekrutacja: 2, marsz: 0, zamoznosc: 2, administracja: 0 };
+  static COST = {
+    wplyw: 2, posiadlosc: 2,
+    rekrutacja_inf: 2,     // piechota
+    rekrutacja_cav: 3,     // kawaleria (droższa)
+    marsz: 0, zamoznosc: 2, administracja: 0
+  };
   constructor(ctx) { this.ctx = ctx; }
   #pidx(playerIndex) { if (playerIndex < 0 || playerIndex >= this.ctx.settings.players.length) throw new Error("Bad player"); return playerIndex; }
   #hasNoble(pid, pidx) { ensurePerProvinceArrays(this.ctx); return (this.ctx.nobles.per_province[pid][pidx] || 0) > 0; }
@@ -580,30 +589,76 @@ class ActionAPI {
     return `${p.name} buduje posiadłość w ${provinceId}. (koszt ${cost}, złoto=${p.gold})`;
   }
 
-  rekrutacja(playerIndex, provinceId) {
+ #rekrutuj(playerIndex, provinceId, kind) {
     this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); const p = c.settings.players[pidx];
     if (!this.#hasNoble(provinceId, pidx)) throw new Error("Musisz mieć szlachcica w tej prowincji.");
-    const base = ActionAPI.COST.rekrutacja;
-    const actual = c.round_status.recruit_cost_override != null ? c.round_status.recruit_cost_override : base;
+
+    ensurePerProvinceArrays(c);
+    const arr = c.troops.per_province[provinceId];
+    const kinds = c.troops_kind.per_province[provinceId];
+    const curKind = kinds[pidx] | 0;
+
+    // Zakaz mieszania typów: jeśli coś stoi i jest innego typu — blokujemy
+    if (curKind !== UnitKind.NONE && curKind !== kind) {
+      throw new Error("W tej prowincji masz już inny rodzaj wojsk — nie można mieszać.");
+    }
+
+    // koszt: override 'recruit_cost_override' dotyczy obu typów
+    const base = (kind === UnitKind.CAV) ? ActionAPI.COST.rekrutacja_cav : ActionAPI.COST.rekrutacja_inf;
+    const actual = (c.round_status.recruit_cost_override != null) ? c.round_status.recruit_cost_override : base;
+
     if (p.gold < actual) throw new Error(`Za mało złota. Koszt=${actual}, masz ${p.gold}.`);
-    ensurePerProvinceArrays(c); c.troops.per_province[provinceId][pidx] += 1; p.gold -= actual; 
-    
+
+    arr[pidx] = (arr[pidx] | 0) + 1;
+    kinds[pidx] = kind;
+    p.gold -= actual;
+
     this.#advanceAfterAction(playerIndex);
-    return `${p.name} rekrutuje 1 jednostkę w ${provinceId}. (koszt ${actual}, złoto=${p.gold})`;
+    const kindName = (kind === UnitKind.CAV) ? "kawaleria" : "piechota";
+    return `${p.name} rekrutuje 1 (${kindName}) w ${provinceId}. (koszt ${actual}, złoto=${p.gold})`;
   }
 
+  rekrutacja_piechota(playerIndex, provinceId) {
+    return this.#rekrutuj(playerIndex, provinceId, UnitKind.INF);
+  }
+
+  rekrutacja_kawaleria(playerIndex, provinceId) {
+    return this.#rekrutuj(playerIndex, provinceId, UnitKind.CAV);
+  }
+
+  // MARSZ — bez mieszania: źródło i cel muszą być puste lub tego samego typu dla danego gracza
   marsz(playerIndex, fromPid, toPid, amount = 1) {
     this.#requireActive(playerIndex);
     const c = this.ctx; const pidx = this.#pidx(playerIndex); ensurePerProvinceArrays(c);
     if (!this.#hasNoble(fromPid, pidx) || !this.#hasNoble(toPid, pidx)) throw new Error("Marsz tylko między prowincjami, gdzie masz szlachciców na obu.");
-    const fromArr = c.troops.per_province[fromPid]; const toArr = c.troops.per_province[toPid];
+
+    const fromArr = c.troops.per_province[fromPid];
+    const toArr   = c.troops.per_province[toPid];
+    const fromKinds = c.troops_kind.per_province[fromPid];
+    const toKinds   = c.troops_kind.per_province[toPid];
+
     const amt = Math.max(1, Number(amount) | 0);
     if ((fromArr[pidx] | 0) < amt) throw new Error("Brak jednostek do przesunięcia.");
-    fromArr[pidx] -= amt; toArr[pidx] += amt; 
+
+    const kFrom = fromKinds[pidx] | 0;
+    const kTo   = toKinds[pidx]   | 0;
+
+    if (kFrom === UnitKind.NONE) throw new Error("Brak określonego typu wojsk w polu źródłowym.");
+    if (kTo !== UnitKind.NONE && kTo !== kFrom) throw new Error("Nie można mieszać typów wojsk podczas marszu.");
+
+    fromArr[pidx] -= amt;
+    toArr[pidx]   += amt;
+
+    // jeśli cel był pusty — przejmuje typ
+    if (kTo === UnitKind.NONE) toKinds[pidx] = kFrom;
+    // jeśli źródło opustoszało — czyścimy typ
+    if ((fromArr[pidx] | 0) === 0) fromKinds[pidx] = UnitKind.NONE;
+
     this.#advanceAfterAction(playerIndex);
     return `${c.settings.players[pidx].name} maszeruje ${amt} j.: ${fromPid} -> ${toPid}.`;
   }
+
 
   zamoznosc(playerIndex, provinceId) {
     this.#requireActive(playerIndex);
@@ -623,17 +678,39 @@ class PlayerBattleAPI {
   resolveDuel(pid, i, j, rollsI, rollsJ) {
     ensurePerProvinceArrays(this.ctx);
     const troops = this.ctx.troops.per_province[pid];
-    const pi = this.ctx.settings.players[i]; const pj = this.ctx.settings.players[j];
+    const kinds  = this.ctx.troops_kind.per_province[pid];
+    const pi = this.ctx.settings.players[i], pj = this.ctx.settings.players[j];
+  
     const unitsI = troops[i] | 0; const unitsJ = troops[j] | 0;
     if (unitsI <= 0 || unitsJ <= 0) return "(Potyczka pominięta — brak jednostek)";
     if (!Array.isArray(rollsI) || rollsI.length !== unitsI) throw new Error(`rollsI must have length ${unitsI}`);
     if (!Array.isArray(rollsJ) || rollsJ.length !== unitsJ) throw new Error(`rollsJ must have length ${unitsJ}`);
-    const kills = (arr) => arr.reduce((s, r) => s + (r >= 5 ? 1 : 0), 0);
-    const killsI = kills(rollsI); const killsJ = kills(rollsJ);
-    const lossI = Math.min(killsJ, unitsI); const lossJ = Math.min(killsI, unitsJ);
-    troops[i] = Math.max(0, troops[i] - lossI); troops[j] = Math.max(0, troops[j] - lossJ);
-    return `${pi.name} zadał ${lossJ} strat; ${pj.name} zadał ${lossI}. Stan: ${pi.name}=${troops[i]}, ${pj.name}=${troops[j]}.`;
+  
+    const kindI = kinds[i] | 0; // UnitKind
+    const kindJ = kinds[j] | 0;
+  
+    // Progi trafienia ATAKUJĄCEGO:
+    // INF: 5–6 ; CAV: 4–6
+    const thrI = (kindI === UnitKind.CAV) ? 4 : 5;
+    const thrJ = (kindJ === UnitKind.CAV) ? 4 : 5;
+  
+    const hitsByI = rollsI.reduce((s, r) => s + (((r | 0) >= thrI) ? 1 : 0), 0);
+    const hitsByJ = rollsJ.reduce((s, r) => s + (((r | 0) >= thrJ) ? 1 : 0), 0);
+  
+    const lossJ = Math.min(hitsByI, unitsJ);
+    const lossI = Math.min(hitsByJ, unitsI);
+  
+    troops[i] = Math.max(0, unitsI - lossI);
+    troops[j] = Math.max(0, unitsJ - lossJ);
+  
+    // porządkowanie typów, gdy ktoś wyzerował
+    if ((troops[i] | 0) === 0) kinds[i] = UnitKind.NONE;
+    if ((troops[j] | 0) === 0) kinds[j] = UnitKind.NONE;
+  
+    return `${pi.name} zadał ${lossJ} strat; ${pj.name} zadał ${lossI}. `
+         + `Stan: ${pi.name}=${troops[i]}, ${pj.name}=${troops[j]}.`;
   }
+
 
   // ====== Tryb turo-wy w fazie "battles" (analogiczny do AttackInvadersAPI) ======
   #ensurePhase() {
@@ -847,23 +924,45 @@ class AttackInvadersAPI {
 
     const seq = Array.isArray(rolls) ? rolls.slice(0, usedDice) : [];
     const out = [];
+    const kinds = c.troops_kind.per_province[from];
+    const myKind = kinds[pidx] | 0; // UnitKind
+    
     for (let i = 0; i < seq.length; i++) {
       if (track.value <= 0) { out.push("Tor już 0 — koniec akcji."); break; }
       const r = seq[i] | 0; if (!(r >= 1 && r <= 6)) throw new Error("Rzuty muszą być 1..6");
-
-      if (r === 1) {
-        c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
-        pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
-        out.push("1 → porażka, tracisz 1 jednostkę.");
-      } else if (r <= 5) {
-        addRaid(c, enemy, -1);
-        c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
-        pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
-        out.push("2–5 → sukces: tor -1 i tracisz 1 jednostkę.");
+    
+      if (myKind === UnitKind.CAV) {
+        // Kawaleria: 1 (porażka -1), 2–4 (sukces, tor-1 i tracisz 1), 5–6 (sukces, tor-1 i NIE tracisz)
+        if (r === 1) {
+          c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+          out.push("1 → porażka kawalerii, tracisz 1 jednostkę.");
+        } else if (r <= 4) {
+          addRaid(c, enemy, -1);
+          c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+          out.push("2–4 → sukces kawalerii: tor -1 i tracisz 1 jednostkę.");
+        } else {
+          addRaid(c, enemy, -1);
+          pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+          out.push("5–6 → sukces kawalerii: tor -1 i jednostka pozostaje.");
+        }
       } else {
-        addRaid(c, enemy, -1);
-        pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
-        out.push("6 → sukces: tor -1 i jednostka pozostaje.");
+        // Piechota (stare zasady): 1 (porażka -1), 2–5 (sukces, tor-1 i tracisz 1), 6 (sukces bez straty)
+        if (r === 1) {
+          c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+          out.push("1 → porażka, tracisz 1 jednostkę.");
+        } else if (r <= 5) {
+          addRaid(c, enemy, -1);
+          c.troops.per_province[from][pidx] = Math.max(0, c.troops.per_province[from][pidx] - 1);
+          pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+          out.push("2–5 → sukces: tor -1 i tracisz 1 jednostkę.");
+        } else {
+          addRaid(c, enemy, -1);
+          pl.honor += 1; if (enemy === RaidTrackID.S && c.round_status.extra_honor_vs_tatars) pl.honor += 1;
+          out.push("6 → sukces: tor -1 i jednostka pozostaje.");
+        }
       }
     }
 
