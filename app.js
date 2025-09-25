@@ -1985,11 +1985,9 @@ function syncUIFromGame(){
     
     // spróbuj kolejno: nowy kształt, stary kształt, ich wersje ze String()
     const kindsRow =
-      s.troops_kind?.[key] ??
-      s.troops_kind?.per_province?.[key] ??
-      s.troops_kind?.[String(key)] ??
-      s.troops_kind?.per_province?.[String(key)] ??
-      [];
+       s.troops_kind?.[pid] ??
+       s.troops_kind?.per_province?.[pid] ??
+       [];
   
     tuples.forEach((t, slot) => {
       const p = s.settings.players[t.idx];
