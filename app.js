@@ -1173,7 +1173,8 @@ function setArmy(regionKey, slot, color, units, kind /* UnitKind */){
 
   // narysuj kształt
   let shape;
-  if (kind === UnitKind.CAV) {
+  const isCav = (kind === UnitKind?.CAV) || (kind === 2);
+  if (isCav) {
     const size = 22;
     const pts = [
       [cx, cy - size],
