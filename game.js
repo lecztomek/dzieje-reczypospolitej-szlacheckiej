@@ -1239,6 +1239,7 @@ export class ConsoleGame {
       provinces: deepClone(this.ctx.provinces),
       raid_tracks: { N: this.ctx.raid_tracks.N.value, S: this.ctx.raid_tracks.S.value, E: this.ctx.raid_tracks.E.value },
       troops: deepClone(this.ctx.troops.per_province),
+      troops_kind: deepClone(this.ctx.troops_kind.per_province),
       nobles: deepClone(this.ctx.nobles.per_province),
       current_phase: this.round?.currentPhaseId() ?? null,
       marshal: this.ctx.settings.players[this.ctx.round_status.marshal_index]?.name ?? null,
