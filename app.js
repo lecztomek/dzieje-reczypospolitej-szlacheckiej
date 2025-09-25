@@ -1957,6 +1957,7 @@ function syncUIFromGame(){
   for (const [pid, arr] of Object.entries(s.troops || {})) {
     const key = provKeyFromId(pid);
     if (!key) continue;
+  
     resetArmies(key);
   
     const tuples = arr
@@ -1965,35 +1966,30 @@ function syncUIFromGame(){
       .sort((a,b) => b.units - a.units)
       .slice(0,4);
   
-    // normalizacja klucza prowincji do dostępu w troops_kind
+    // klucz prowincji może być stringiem — znormalizuj
     const pidNum = typeof pid === 'string' ? parseInt(pid, 10) : pid;
     const pidStr = String(pidNum);
   
-    // możliwe kształty danych w s.troops_kind
-    const kindsRaw =
-      (s.troops_kind?.[pidNum] ?? s.troops_kind?.[pidStr]) ??
-      (s.troops_kind?.per_province?.[pidNum] ?? s.troops_kind?.per_province?.[pidStr]) ??
-      (s.troops_kind?.by_province?.[pidNum] ?? s.troops_kind?.by_province?.[pidStr]) ??
-      [];
+    // JEDYNE źródło: per_province
+    const kindsRow =
+      s.troops_kind?.per_province?.[pidNum] ??
+      s.troops_kind?.per_province?.[pidStr] ??
+      []; // oczekujemy tablicy [kindPerPlayer]
   
     tuples.forEach((t, slot) => {
       const p = s.settings.players[t.idx];
       const uiPlayer = PLAYERS.find(x => x.name === p.name);
       const color = uiPlayer?.color || '#60a5fa';
   
-      let kind = 0;
-      if (Array.isArray(kindsRaw)) {
-        kind = Number(kindsRaw[t.idx] ?? 0);
-      } else if (kindsRaw && typeof kindsRaw === 'object') {
-        kind = Number(kindsRaw[t.idx] ?? 0);
-      } else {
-        kind = Number(kindsRaw ?? 0);
-      }
+      // jeśli brak wpisu — przyjmij piechotę
+      const kind = Number(
+        Array.isArray(kindsRow) ? (kindsRow[t.idx] ?? UnitKind.INF)
+                                : UnitKind.INF
+      );
   
       setArmy(key, slot + 1, color, t.units, kind);
     });
   }
-
 
   // SZLACHCICE 
   renderNoblesList(s);
