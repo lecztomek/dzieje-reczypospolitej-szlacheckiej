@@ -712,7 +712,8 @@ class PlayerBattleAPI {
   }
   
   /**
-   * Jedna akcja ataku gracz→gracz.
+   * Jedna akcja ataku gracz→gracz oparta o progi:
+   * CAV trafia na 4–6, INF trafia na 5–6. Brak strat własnych.
    * @param {number} playerIndex - atakujący (indeks gracza)
    * @param {ProvinceID} provinceId - gdzie toczy się walka
    * @param {number} targetIndex - broniący (indeks gracza)
@@ -722,39 +723,65 @@ class PlayerBattleAPI {
   attack({ playerIndex, provinceId, targetIndex, rolls, dice }) {
     this.#requireActive(playerIndex);
     ensurePerProvinceArrays(this.ctx);
-    const c = this.ctx;
-    const atk = playerIndex|0, def = targetIndex|0;
+
+    const c   = this.ctx;
+    const atk = playerIndex | 0;
+    const def = targetIndex  | 0;
     if (atk === def) throw new Error("Nie możesz atakować samego siebie.");
-    const arr = c.troops.per_province[provinceId] || [];
-    if ((arr[atk]|0) <= 0) throw new Error("Brak twoich jednostek w tej prowincji.");
-    if ((arr[def]|0) <= 0) throw new Error("Brak jednostek przeciwnika w tej prowincji.");
-  
-    const units = arr[atk]|0;
-    const usedDice = Math.max(1, Math.min(Number(dice)||1, units)); // bez artylerii
+
+    const unitsAtk = (c.troops.per_province[provinceId]?.[atk] | 0);
+    const unitsDef = (c.troops.per_province[provinceId]?.[def] | 0);
+    if (unitsAtk <= 0) throw new Error("Brak twoich jednostek w tej prowincji.");
+    if (unitsDef <= 0) throw new Error("Brak jednostek przeciwnika w tej prowincji.");
+
+    // próg trafienia wg typu wojsk atakującego
+    const kindAtk = (c.troops_kind.per_province[provinceId]?.[atk] | 0); // UnitKind
+    const thr = (kindAtk === UnitKind.CAV) ? 4 : 5;
+
+    // ile kości faktycznie używamy (bez bonusów; to starcia gracz↔gracz)
+    const requestedDice = (Number(dice) > 0 ? (Number(dice) | 0) : 1);
+    const usedDice = Math.max(1, Math.min(requestedDice, unitsAtk));
+
     const seq = Array.isArray(rolls) && rolls.length
       ? rolls.slice(0, usedDice)
-      : Array.from({length:usedDice}, ()=>1+Math.floor(Math.random()*6));
-  
+      : Array.from({length: usedDice}, () => 1 + Math.floor(Math.random() * 6));
+
     const out = [];
     for (const r0 of seq) {
-      if ((arr[atk]|0) <= 0 || (arr[def]|0) <= 0) break;
-      const r = r0|0; if (!(r>=1 && r<=6)) throw new Error("Rzut musi być 1..6.");
-  
-      if (r === 1) {
-        arr[atk] = Math.max(0, arr[atk]-1);
-        out.push("1 → porażka: tracisz 1 jednostkę.");
-      } else if (r <= 5) {
-        arr[def] = Math.max(0, arr[def]-1);
-        arr[atk]  = Math.max(0, arr[atk]-1);
-        out.push("2–5 → wymiana: obrońca −1 i atakujący −1.");
+      if ((c.troops.per_province[provinceId][atk] | 0) <= 0) break;
+      if ((c.troops.per_province[provinceId][def] | 0) <= 0) break;
+
+      const r = r0 | 0;
+      if (!(r >= 1 && r <= 6)) throw new Error("Rzut musi być 1..6.");
+
+      if (r >= thr) {
+        // trafienie: tylko obrońca traci 1
+        c.troops.per_province[provinceId][def] =
+          Math.max(0, c.troops.per_province[provinceId][def] - 1);
+
+        out.push(
+          (kindAtk === UnitKind.CAV)
+            ? "CAV 4–6 → trafienie: obrońca −1, twoje jednostki bez strat."
+            : "INF 5–6 → trafienie: obrońca −1, twoje jednostki bez strat."
+        );
       } else {
-        arr[def] = Math.max(0, arr[def]-1);
-        out.push("6 → sukces bez strat: obrońca −1, twoje jednostki zostają.");
+        // pudło: nic się nie dzieje
+        out.push(
+          (kindAtk === UnitKind.CAV)
+            ? "CAV 1–3 → pudło: bez efektu."
+            : "INF 1–4 → pudło: bez efektu."
+        );
       }
     }
-  
-    out.push(`Po starciu: ${this.ctx.settings.players[atk].name}=${arr[atk]}, ${this.ctx.settings.players[def].name}=${arr[def]} w ${provinceId}.`);
-    this.#advance();
+
+    const a = c.settings.players[atk].name;
+    const d = c.settings.players[def].name;
+    out.push(
+      `Po starciu: ${a}=${c.troops.per_province[provinceId][atk]}, `
+      + `${d}=${c.troops.per_province[provinceId][def]} w ${provinceId}.`
+    );
+
+    this.#advance(); // utrzymujemy rotację tury w fazie "battles"
     return out;
   }
   
