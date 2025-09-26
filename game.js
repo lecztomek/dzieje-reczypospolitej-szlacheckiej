@@ -713,6 +713,7 @@ class PlayerBattleAPI {
 
   #resetPasses() {
     const t = this.ctx.attackTurn;
+    if (!t) return;  
     t.passed.fill(false);
   }
   
@@ -882,6 +883,7 @@ class AttackInvadersAPI {
 
   #resetPasses() {
     const t = this.ctx.attackTurn;
+    if (!t) return;  
     t.passed.fill(false);
   }
 
