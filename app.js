@@ -978,6 +978,35 @@ function setPhase(n){
   return true;
 }
 
+function applyRankingBarsFromEngine(){
+  let raw;
+  try { raw = game.getScoresRaw?.(); } catch{ raw = null; }
+  if (!raw || !raw.players) return;  // nic nie ruszaj, jeśli silnik nie gotowy
+
+  // Minimalne szerokości tak, by „dążyć do minimalizacji długości”.
+  // 1. miejsce najszersze, kolejne węższe; remis → ta sama szerokość.
+  const step = [0, 64, 46, 36, 28, 24, 20]; // place 1..N
+  const places = raw.places;                // indeks gracza → miejsce
+
+  // kolor z Twojej mapy PLAYERS (UI), fallback do złota
+  (state.settings.players || []).forEach((sp, idx) => {
+    const chip = document.getElementById(`player-${playerKey(sp.name)}`);
+    const bar  = chip?.querySelector('.rankbar');
+    if (!bar) return;
+
+    const ui = PLAYERS.find(p => p.name === sp.name);
+    const color = ui?.color || '#eab308';
+
+    const place = places[idx] || 7;
+    const w = step[place] || 18;
+
+    bar.style.color = color;
+    bar.style.width = `${w}px`;
+    bar.title = `Miejsce: ${place} — ${raw.players[idx].score} pkt`;
+  });
+}
+
+
 // ===== Gracze (UI) =====
 const PLAYERS = []; // { key, name, color }
 
@@ -1998,6 +2027,7 @@ function syncUIFromGame(){
   roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; 
   updateRoundUI();
   updatePlayersUIFromState(s);
+  applyRankingBarsFromEngine();
   applyCurrentTurnFromState(s);
   applyPhaseFromEngineState(s);
   buildPhaseActionsSmart(game.getPublicState());
