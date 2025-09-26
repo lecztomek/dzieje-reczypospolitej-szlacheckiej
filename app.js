@@ -1963,15 +1963,14 @@ if (phase === 'auction' || phase === 'sejm'){
     const btnDev = chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
-    
-      const lines = game.devastation.resolve({ N, S, E });
 
-      const after = game.getPublicState?.() || {};
-      const n = (after.raid_tracks?.N | 0);
-      const s = (after.raid_tracks?.S | 0);
-      const e = (after.raid_tracks?.E | 0);
-      // „spokój na granicy” gdy WSZYSTKIE tory < 3
-      const noDevastation = n < 3 && s < 3 && e < 3;
+      const before = game.getPublicState?.() || {};
+      const bn = (before.raid_tracks?.N | 0);
+      const bs = (before.raid_tracks?.S | 0);
+      const be = (before.raid_tracks?.E | 0);
+      const noDevastation = bn < 3 && bs < 3 && be < 3;
+
+      const lines = game.devastation.resolve({ N, S, E });
       
       ok(`(UI) spustoszenia: N=${N}, S=${S}, E=${E}`);
       logEngine(lines);
