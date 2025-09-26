@@ -699,15 +699,31 @@ class PlayerBattleAPI {
     }
     return false;
   }
-  #advance() {
+  
+  #advance(turnWasAttack) {
     const t = this.ctx.battlesTurn;
+    if (!t) return;
+  
+    // Po realnym ataku zaczynamy nową mini-rundę: zdejmij wszystkie PASS-y
+    if (turnWasAttack) {
+      t.passed = t.passed.map(() => false);
+    }
+  
+    // Koniec fazy tylko gdy w TEJ mini-rundzie wszyscy mają PASS
+    if (t.passed.every(Boolean)) {
+      t.done = true;
+      return;
+    }
+  
+    // Przejdź do następnego gracza, który nie ma PASS
     const n = t.order.length;
-    const allPassed = t.passed.every(Boolean);
-    if (allPassed || !this.#anyEligibleBattlesLeft()) { t.done = true; return; }
     for (let step = 1; step <= n; step++) {
       const nextIdx = (t.idx + step) % n;
       const pidx = t.order[nextIdx];
-      if (!t.passed[pidx]) { t.idx = nextIdx; break; }
+      if (!t.passed[pidx]) {
+        t.idx = nextIdx;
+        break;
+      }
     }
   }
 
@@ -788,7 +804,7 @@ class PlayerBattleAPI {
     );
 
     this.#resetPasses();
-    this.#advance(); // utrzymujemy rotację tury w fazie "battles"
+    this.#advance(true); // utrzymujemy rotację tury w fazie "battles"
     return out;
   }
   
@@ -796,7 +812,7 @@ class PlayerBattleAPI {
     this.#requireActive(playerIndex);
     const t = this.ctx.battlesTurn;
     t.passed[playerIndex] = true;
-    this.#advance();
+    this.#advance(false);
     return `PASS (starcia) — ${this.ctx.settings.players[playerIndex].name}`;
   }
 
