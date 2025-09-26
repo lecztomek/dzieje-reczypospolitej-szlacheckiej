@@ -64,6 +64,8 @@ const ATTACK_IMG_LOW  = './images/attack_3.png';   // np. słaba szarża
 const ATTACK_IMG_MID  = './images/attack_2.png';   // wyrównane starcie
 const ATTACK_IMG_HIGH = './images/attack_1.png';  // miażdżący atak
 
+let _lastPhaseId = null;
+let _lastRoundNo = null;
 let _actionWizard = null; 
 
 // ==== Sejm: stan + opisy ustaw ====
