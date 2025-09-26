@@ -648,7 +648,6 @@ function renderPlayerChip(p){
   playersListEl.appendChild(row);
 }
 
-// ZAMIANA: rysowanie gracza jako chip (nie <tr>)
 function renderPlayerRow(p){
   const chip = document.createElement('span');
   chip.id = `player-${p.key}`;
@@ -662,14 +661,22 @@ function renderPlayerRow(p){
   name.className = 'player-name';
   name.textContent = p.name;
 
+  // <<< NOWE: pasek rankingu, startowo cienki i w kolorze gracza
+  const rank = document.createElement('span');
+  rank.className = 'rankbar';
+  rank.style.color = p.color;
+  rank.style.width = '18px'; // startowa szerokość, potem nadpisze applyRankingBarsFromEngine
+
   const gold = document.createElement('span');
   gold.className = 'player-gold';
   gold.innerHTML = `<span class="coin"></span><span class="val">—</span>`;
   gold.setAttribute('data-col', 'gold');
 
-  chip.append(dot, name, gold);
+  // UWAGA: wpinamy rank między nazwę a złoto
+  chip.append(dot, name, rank, gold);
   playersBody.appendChild(chip);
 }
+
 
 // bez zmian interfejsu:
 function addPlayer(name, color){
