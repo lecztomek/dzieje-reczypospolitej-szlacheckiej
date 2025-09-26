@@ -979,7 +979,6 @@ function setPhase(n){
 }
 
 function applyRankingBarsFromEngine(publicState){
-  // 1) surowe wyniki z silnika
   let raw;
   try { raw = game.getScoresRaw?.(); } catch { raw = null; }
   if (!raw || !raw.players) return;
