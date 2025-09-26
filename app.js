@@ -1387,6 +1387,8 @@ function buildPhaseActionsSmart(s){
       el('div', {style:{height:'8px'}}),
       chip('Start 5 rund',  ()=>run('gstart 5 6')),
       chip('Start 10 rund', ()=>run('gstart 10 6')),
+      chip('Start 10 rund', ()=>run('gstart 15 6')),
+      chip('Start 10 rund', ()=>run('gstart 20 6')),
     );
     phaseActionsEl.appendChild(box);
     tintByActive();
