@@ -170,20 +170,6 @@ function eventImageFor(n){
 
 function randRolls(n){ return Array.from({length: Math.max(1, n|0)}, ()=> 1 + Math.floor(Math.random()*6)); }
 
-function hasAnyPossibleAttack(s){
-  for (const [pid, arr] of Object.entries(s.troops || {})){
-    const key = provKeyFromId(pid);                 // 'prusy' | 'litwa' | ...
-    if (!key) continue;
-    const canBeSource =
-      Array.isArray(ATTACK_TARGETS[key]) && ATTACK_TARGETS[key].length > 0;
-    if (!canBeSource) continue;                      // np. wielkopolska = []
-    for (const u of (arr || [])){
-      if ((u|0) > 0) return true;                    // ktoś ma jednostki w źródłowej prowincji
-    }
-  }
-  return false;
-}
-
 
 function maybeAutoAdvanceAfterBattles(){
   const s = game.getPublicState?.() || {};
@@ -196,20 +182,6 @@ function maybeAutoAdvanceAfterBattles(){
     syncUIFromGame();
   }
 }
-
-function hasAnyContestedProvince(s){
-  for (const arr of Object.values(s.troops || {})){
-    let sides = 0;
-    for (const u of arr) {
-      if ((u|0) > 0) {
-        sides++;
-        if (sides >= 2) return true; // w tej prowincji są co najmniej dwie strony
-      }
-    }
-  }
-  return false; // nigdzie nie ma dwóch stron → brak dalszych starć
-}
-
 
 function maybeAutoAdvanceAfterAttacks(){
   const s = game.getPublicState?.() || {};
@@ -1916,24 +1888,25 @@ if (phase === 'auction' || phase === 'sejm'){
       }
     
       box.append(el('div', { style:{ height:'6px' } }));
-      box.append(chip('PASS (starcia)', ()=> {
+      box.append(chip('PASS (wyprawy)', ()=> {
         try{
           const st = game.getPublicState?.() || {};
-          if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'battles') {
-            ok('Faza Starć już zakończona — odświeżam UI.');
+          if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'attacks') {
+            ok('Faza Wypraw już zakończona — odświeżam UI.');
             syncUIFromGame();
             return;
           }
-          const pidx = Number.isInteger(st.active_battler_index) ? st.active_battler_index : curPlayerIdx;
-          const msg = game.battles.passTurn(pidx);
-          ok(String(msg || 'PASS (starcia).'));
+          const pidx = Number.isInteger(st.active_attacker_index) ? st.active_attacker_index : curPlayerIdx;
+          const msg = game.attacks.passTurn(pidx);
+          ok(String(msg || 'PASS (wyprawy).'));
           syncUIFromGame();
-          maybeAutoAdvanceAfterBattles();
+          maybeAutoAdvanceAfterAttacks();
+          buildPhaseActionsSmart(game.getPublicState());
         } catch(ex){
-          err('PASS (starcia) nieudany: ' + ex.message);
+          err('PASS (wyprawy) nieudany: ' + ex.message);
         }
       }));
-      
+
       phaseActionsEl.appendChild(box);
       tintByActive();
       return;
