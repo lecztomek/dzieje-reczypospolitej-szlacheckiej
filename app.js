@@ -45,6 +45,20 @@ const EVENT_IMAGES_BY_ID = {
   25: 'clo',            // Cła morskie
 };
 
+const LAW_IMG_BASE = './images/laws';
+const LAW_IMG_BY_ID = {
+  1: 'podatek',     // Podatek
+  2: 'podatek',     // Podatek
+  3: 'wojsko',      // Wojsko
+  4: 'wojsko',      // Wojsko
+  5: 'gospodarka',  // Gospodarka
+  6: 'pokoj',       // Pokój
+};
+
+function lawImageFor(lawId){
+  const key = LAW_IMG_BY_ID[lawId|0];
+  return key ? `${LAW_IMG_BASE}/${key}.png` : '';
+}
 
 const ATTACK_IMG_LOW  = './images/attack_3.png';   // np. słaba szarża
 const ATTACK_IMG_MID  = './images/attack_2.png';   // wyrównane starcie
@@ -260,6 +274,7 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
         'Za chwilę licytacja marszałkowska (aukcja).'
       ];
       popupFromEngine(`Sejm — wylosowano ustawę: ${_sejmLaw.name}`, lines, {
+        imageUrl: lawImageFor(_sejmLaw.id),
         buttonText: 'Dalej (Aukcja)'
       });
     }
@@ -290,6 +305,7 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
       'Teraz licytacja marszałkowska (aukcja).'
     ];
     popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, lines, {
+      imageUrl: lawImageFor(pick.id),
       buttonText: 'Dalej (Aukcja)'
     });
   }
