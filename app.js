@@ -14,6 +14,7 @@ const INCOME_POPUP_IMG = './images/income.png';
 const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 const FINAL_SUMMARY_POPUP_IMG = './images/gameover.png';
+const PEACE_BORDER_IMG = './images/spokoj_granica.png';
 
 const EVENT_IMG_BASE = './images/events';
 
@@ -1922,6 +1923,14 @@ if (phase === 'auction' || phase === 'sejm'){
       const N=r(), S=r(), E=r();
     
       const lines = game.devastation.resolve({ N, S, E });
+
+      const after = game.getPublicState?.() || {};
+      const n = (after.raid_tracks?.N | 0);
+      const s = (after.raid_tracks?.S | 0);
+      const e = (after.raid_tracks?.E | 0);
+      // „spokój na granicy” gdy WSZYSTKIE tory < 3
+      const noDevastation = n < 3 && s < 3 && e < 3;
+      
       ok(`(UI) spustoszenia: N=${N}, S=${S}, E=${E}`);
       logEngine(lines);
       syncUIFromGame();
@@ -1930,7 +1939,7 @@ if (phase === 'auction' || phase === 'sejm'){
         `Rzuty: N=${N}, S=${S}, E=${E}.`,
         ...(Array.isArray(lines) ? lines : [lines]),
       ], {
-        imageUrl: DEVASTATION_POPUP_IMG,
+        imageUrl: noDevastation ? PEACE_BORDER_IMG : DEVASTATION_POPUP_IMG,
         buttonText: 'Dalej',
         onAction: () => {
           const nxt = game.finishPhaseAndAdvance();
