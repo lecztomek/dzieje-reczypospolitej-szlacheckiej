@@ -845,7 +845,7 @@ class AttackInvadersAPI {
     if (!this.ctx.attackTurn) throw new Error("To nie jest faza ataków.");
     if (this.ctx.attackTurn.done) throw new Error("Faza ataków już zakończona.");
   }
-  // NEW:
+
   #requireActive(playerIndex) {
     this.#ensurePhase();
     const t = this.ctx.attackTurn;
@@ -856,7 +856,7 @@ class AttackInvadersAPI {
       throw new Error(`Teraz atakuje ${want}. (Akcja ${you} zablokowana.)`);
     }
   }
-  // NEW:
+
   #anyEligibleAttacksLeft() {
     const { raid_tracks, troops } = this.ctx;
     // ktoś ma wojsko w zasięgu i istnieje cel (tor > 0)
@@ -876,24 +876,32 @@ class AttackInvadersAPI {
     }
     return false;
   }
-  // NEW:
+  
   #advance(turnWasAttack) {
     const t = this.ctx.attackTurn;
-    // po udanym "attack" nie oznaczamy passa — tylko zmieniamy indeks
-    // po "pass" oznaczamy passed[current]=true
-    const n = t.order.length;
-
-    // koniec, jeśli wszyscy passed ALBO nie ma już sensownych ataków
+    if (!t) return;
+  
+    // Po realnym ataku zaczynamy nową mini-rundę: zdejmij wszystkie PASS-y
+    if (turnWasAttack) {
+      t.passed = t.passed.map(() => false);
+    }
+  
+    // Koniec fazy tylko gdy w TEJ mini-rundzie wszyscy mają PASS
     const allPassed = t.passed.every(Boolean);
     if (allPassed || !this.#anyEligibleAttacksLeft()) {
-      t.done = true; return;
+      t.done = true;
+      return;
     }
-
-    // znajdź następnego, który nie spassował
+  
+    // Przejdź do następnego gracza bez PASS
+    const n = t.order.length;
     for (let step = 1; step <= n; step++) {
       const nextIdx = (t.idx + step) % n;
       const pidx = t.order[nextIdx];
-      if (!t.passed[pidx]) { t.idx = nextIdx; break; }
+      if (!t.passed[pidx]) {
+        t.idx = nextIdx;
+        break;
+      }
     }
   }
 
