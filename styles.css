@@ -730,3 +730,14 @@ svg{
   display:block;
   filter: drop-shadow(0 16px 24px rgba(0,0,0,.35));
 }
+
+.players-list .rankbar{
+  height: 8px;
+  border-radius: 6px;
+  background: currentColor;
+  display: inline-block;
+  min-width: 14px;      /* żeby nigdy nie zniknął */
+  transition: width .18s ease;
+}
+.players-list .player-chip{ gap:8px; }
+
