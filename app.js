@@ -978,33 +978,39 @@ function setPhase(n){
   return true;
 }
 
-function applyRankingBarsFromEngine(){
+function applyRankingBarsFromEngine(publicState){
+  // 1) surowe wyniki z silnika
   let raw;
-  try { raw = game.getScoresRaw?.(); } catch{ raw = null; }
-  if (!raw || !raw.players) return;  // nic nie ruszaj, jeśli silnik nie gotowy
+  try { raw = game.getScoresRaw?.(); } catch { raw = null; }
+  if (!raw || !raw.players) return;
 
-  // Minimalne szerokości tak, by „dążyć do minimalizacji długości”.
-  // 1. miejsce najszersze, kolejne węższe; remis → ta sama szerokość.
-  const step = [0, 64, 46, 36, 28, 24, 20]; // place 1..N
-  const places = raw.places;                // indeks gracza → miejsce
+  // 2) gracze z PUBLICZNEGO stanu (ten sam porządek indeksów!)
+  const players = publicState?.settings?.players || [];
+  if (!players.length) return;
 
-  // kolor z Twojej mapy PLAYERS (UI), fallback do złota
-  (state.settings.players || []).forEach((sp, idx) => {
+  // 3) mapping: miejsce → szerokość (remis = ta sama długość)
+  const step = [0, 64, 46, 36, 28, 24, 20]; // 1..N; możesz podstroić
+  const places = raw.places || [];
+
+  players.forEach((sp, idx) => {
     const chip = document.getElementById(`player-${playerKey(sp.name)}`);
-    const bar  = chip?.querySelector('.rankbar');
+    if (!chip) return;
+    const bar  = chip.querySelector('.rankbar');
     if (!bar) return;
 
-    const ui = PLAYERS.find(p => p.name === sp.name);
-    const color = ui?.color || '#eab308';
+    // kolor: spróbuj z datasetu chipa, potem z PLAYERS, na końcu akcent
+    const ui = (typeof PLAYERS !== 'undefined') ? PLAYERS.find(p => p.name === sp.name) : null;
+    const color = chip.dataset.color || ui?.color || '#eab308';
 
     const place = places[idx] || 7;
-    const w = step[place] || 18;
+    const width = step[place] || 18;
 
     bar.style.color = color;
-    bar.style.width = `${w}px`;
+    bar.style.width = `${width}px`;
     bar.title = `Miejsce: ${place} — ${raw.players[idx].score} pkt`;
   });
 }
+
 
 
 // ===== Gracze (UI) =====
@@ -2027,7 +2033,7 @@ function syncUIFromGame(){
   roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; 
   updateRoundUI();
   updatePlayersUIFromState(s);
-  applyRankingBarsFromEngine();
+  applyRankingBarsFromEngine(s);
   applyCurrentTurnFromState(s);
   applyPhaseFromEngineState(s);
   buildPhaseActionsSmart(game.getPublicState());
