@@ -710,6 +710,11 @@ class PlayerBattleAPI {
       if (!t.passed[pidx]) { t.idx = nextIdx; break; }
     }
   }
+
+  #resetPasses() {
+    const t = this.ctx.attackTurn;
+    t.passed.fill(false);
+  }
   
   /**
    * Jedna akcja ataku gracz→gracz oparta o progi:
@@ -781,6 +786,7 @@ class PlayerBattleAPI {
       + `${d}=${c.troops.per_province[provinceId][def]} w ${provinceId}.`
     );
 
+    this.#resetPasses();
     this.#advance(); // utrzymujemy rotację tury w fazie "battles"
     return out;
   }
@@ -874,6 +880,11 @@ class AttackInvadersAPI {
     }
   }
 
+  #resetPasses() {
+    const t = this.ctx.attackTurn;
+    t.passed.fill(false);
+  }
+
   attack({ playerIndex, enemy, from, rolls, dice /* optional: ile kości chcesz rzucić */ }) {
     this.#requireActive(playerIndex);
     const c = this.ctx; ensurePerProvinceArrays(c);
@@ -963,6 +974,7 @@ class AttackInvadersAPI {
     out.push(`Użyte kości: ${usedDice}/${maxAvailableDice} (jednostki=${units}${hasArtilleryBonus ? ", +1 artyleria możliwa" : ""})`);
     out.push(`Po ataku: ${track.id}=${track.value}, ${from}: jednostek=${c.troops.per_province[from][pidx]}`);
 
+    this.#resetPasses();
     this.#advance(true);
     return out;
   }
