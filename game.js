@@ -1036,64 +1036,107 @@ class DevastationAPI {
   }
 }
 
-function computeFinalScores(ctx) {
+// === NEW: surowa punktacja dla UI i raportu ===
+function computeScoresRaw(ctx){
   const players = ctx.settings.players;
   const pcount = players.length;
-  players.forEach((p) => { p.score = 0; });
 
-  // (1) Posiadłości = 1 pkt za każdą posiadłość (bez zwycięzcy większości)
+  // (0) wyzeruj tymczasowo
+  const tmpScore = Array(pcount).fill(0);
+
+  // (1) Posiadłości → 1 pkt każda
   const estatesTotal = Array(pcount).fill(0);
   for (const prov of Object.values(ctx.provinces)) {
     for (const owner of prov.estates) if (owner >= 0 && owner < pcount) estatesTotal[owner] += 1;
   }
-  // przyznaj punkty: liczba posiadłości = punkty
-  players.forEach((p, i) => { p.score += estatesTotal[i]; });
+  estatesTotal.forEach((v,i)=> tmpScore[i]+=v);
 
-  // (2) Wpływy w prowincjach (po 1 pkt za jednoznaczną kontrolę)
+  // (2) Wpływy (jednoznaczna kontrola) → 1 pkt
+  const provinceWinners = {};
+  for (const pid of Object.values(ProvinceID)) {
+    const winners = influenceWinnersInProvince(ctx, pid);
+    if (winners.length === 1) { tmpScore[winners[0]] += 1; provinceWinners[pid] = winners[0]; }
+    else { provinceWinners[pid] = null; }
+  }
+
+  // (3) Honor → 1:1
+  players.forEach((p,i)=> tmpScore[i] += p.honor|0);
+
+  // (4) Złoto → 1 pkt za każde pełne 5 zł (jak w Twoim computeFinalScores)
+  const goldPts = players.map(p => Math.floor((p.gold|0)/5));
+  goldPts.forEach((v,i)=> tmpScore[i]+=v);
+
+  // Zbuduj tablicę
+  const rows = players.map((p,i)=>({
+    index: i,
+    name: p.name,
+    score: tmpScore[i],
+    breakdown: {
+      estates: estatesTotal[i],
+      control: Object.values(provinceWinners).filter(w=>w===i).length,
+      honor: p.honor|0,
+      goldPts: goldPts[i],
+      gold: p.gold|0
+    }
+  }));
+
+  // Miejsca z remisami
+  const sorted = [...rows].sort((a,b)=> b.score - a.score);
+  const placeByIndex = Array(pcount).fill(0);
+  let curPlace = 1;
+  for (let k=0; k<sorted.length; k++){
+    if (k>0 && sorted[k].score < sorted[k-1].score) curPlace = k+1;
+    placeByIndex[sorted[k].index] = curPlace;
+  }
+
+  return {
+    players: rows,                // w kolejności oryginalnej
+    standings: sorted,            // posortowane malejąco
+    places: placeByIndex          // indeks gracza → miejsce (1..n)
+  };
+}
+
+
+function computeFinalScores(ctx) {
+  const players = ctx.settings.players;
+  // policz surowo
+  const raw = computeScoresRaw(ctx);
+
+  // zapisz score do obiektów graczy (jak wcześniej)
+  raw.players.forEach(r => { players[r.index].score = r.score; });
+
+  // zbuduj linie raportu (to co już miałeś)
+  const estatesLine = "Posiadłości→pkt: " + raw.players.map(r => `${players[r.index].name}=+${r.breakdown.estates}`).join(", ");
+  const honorLine   = "Honor: " + raw.players.map(r => `${players[r.index].name}=+${r.breakdown.honor}`).join(", ");
+  const goldLine    = "Złoto→pkt: " + raw.players.map(r => `${players[r.index].name}=+${r.breakdown.goldPts} (z ${r.breakdown.gold} zł)`).join(", ");
+
+  // wpływy z prowincji (rekonstrukcja jak wcześniej)
   const influenceLines = [];
   for (const pid of Object.values(ProvinceID)) {
     const winners = influenceWinnersInProvince(ctx, pid);
-    if (!winners.length) {
-      influenceLines.push(`${pid}: brak wpływu`);
-    } else if (winners.length === 1) {
-      const w = winners[0];
-      players[w].score += 1;
-      influenceLines.push(`${pid}: ${players[w].name}`);
-    } else {
-      influenceLines.push(`${pid}: remis – nikt`);
-    }
+    if (!winners.length) influenceLines.push(`  • ${pid}: brak wpływu`);
+    else if (winners.length === 1) influenceLines.push(`  • ${pid}: ${players[winners[0]].name}`);
+    else influenceLines.push(`  • ${pid}: remis – nikt`);
   }
-
-  // (3) Honor = punkty
-  players.forEach((p) => p.score += p.honor);
-
-  // (4) Złoto → 1 pkt za każde pełne 3 zł
-  players.forEach((p) => p.score += Math.floor(p.gold / 5));
-
-  // Tabela i zwycięzcy
-  const standings = players
-    .map((p) => ({ name: p.name, score: p.score }))
-    .sort((a, b) => b.score - a.score);
-
-  const topScore = standings.length ? standings[0].score : 0;
-  const winners = standings.filter(s => s.score === topScore).map(s => s.name);
 
   const lines = [];
   lines.push("[Punktacja końcowa]");
-  lines.push("Posiadłości→pkt: " + players.map((p, i) => `${p.name}=+${estatesTotal[i]}`).join(", "));
+  lines.push(estatesLine);
   lines.push("Wpływy z prowincji:");
-  influenceLines.forEach((s) => lines.push("  • " + s));
-  lines.push("Honor: " + players.map((p) => `${p.name}=+${p.honor}`).join(", "));
-  lines.push("Złoto→pkt: " + players.map((p) => `${p.name}=+${Math.floor(p.gold/5)} (z ${p.gold} zł)`).join(", "));
+  influenceLines.forEach(s => lines.push(s));
+  lines.push(honorLine);
+  lines.push(goldLine);
   lines.push("Tabela wyników:");
-  standings.forEach((s, idx) => lines.push(`  ${idx + 1}. ${s.name} — ${s.score} pkt`));
+  raw.standings.forEach((s, idx) => lines.push(`  ${idx + 1}. ${s.name} — ${s.score} pkt`));
+
+  const top = raw.standings[0]?.score ?? 0;
+  const winners = raw.standings.filter(s=>s.score===top).map(s=>s.name);
   lines.push(winners.length === 1
-    ? `Zwycięzca: ${winners[0]} (${topScore} pkt)`
-    : `Zwycięzcy: ${winners.join(", ")} (${topScore} pkt)`);
+    ? `Zwycięzca: ${winners[0]} (${top} pkt)`
+    : `Zwycięzcy: ${winners.join(", ")} (${top} pkt)`);
 
-  return lines; // ← ZWRACAMY TABLICĘ LINII (UI i tak to łyka)
+  return lines;
 }
-
 
 // ---------------- Round + Game orchestration (programmatic) ----------------
 class RoundEngine {
@@ -1187,6 +1230,10 @@ export class ConsoleGame {
     if (prev === "attacks" && next !== "attacks") this.ctx.attackTurn = null;
 
     return this.round.currentPhaseId();
+  }
+
+  getScoresRaw(){
+    return computeScoresRaw(this.ctx);
   }
 
   _initAttacksTurn() {
