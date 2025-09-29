@@ -942,7 +942,7 @@ class AttackInvadersAPI {
     // ile kości faktycznie używamy w tej akcji
     const requestedDice = Number(dice) > 0 ? Number(dice) | 0
                          : (Array.isArray(rolls) ? rolls.length : maxAvailableDice);
-    const usedDice = Math.max(1, Math.min(requestedDice, maxAvailableDice));
+   const usedDice = Math.max(1, Math.min(requestedDice + (hasArtilleryBonus && requestedDice <= units ? 1 : 0), maxAvailableDice));
 
     // jeśli podano rzuty, upewnij się że mamy ich tyle, ile chcemy użyć
     if (Array.isArray(rolls) && rolls.length < usedDice) {
