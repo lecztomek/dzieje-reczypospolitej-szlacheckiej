@@ -1504,7 +1504,9 @@ function buildPhaseActionsSmart(s){
           ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
         
           const s2 = game.getPublicState?.();
-          if (isFirstRound(s2)) {
+          const veto = !!s2.round_status?.sejm_canceled;
+
+          if (isFirstRound(s2) || veto) {
             // 1. runda => pomijamy 'auction' i 'sejm'
             const a = game.finishPhaseAndAdvance(); // auction -> sejm
             ok(`Silnik: next -> ${a || game.round.currentPhaseId() || 'koniec gry'}`);
@@ -1532,32 +1534,6 @@ function buildPhaseActionsSmart(s){
 
 // ====== SEJM (losowanie ustawy -> aukcja -> wybór wariantu) ======
 if (phase === 'auction' || phase === 'sejm'){
-  const canceled = !!s.round_status?.sejm_canceled;
-
-  if (canceled){
-    const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
-    phaseActionsEl.appendChild(info);
-  
-    // pokaż popup tylko raz na rundę
-    const curRound = (s.round_status?.current_round ?? roundCur) | 0;
-    if (_sejmSkipPopupRound !== curRound) {
-      _sejmSkipPopupRound = curRound;
-      popupFromEngine('Sejm zerwany', [
-        'Liberum veto — przechodzimy od razu do fazy Akcji.'
-      ], {
-        buttonText: 'Dalej (Akcje)',
-        onAction: () => {
-          const a = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${a || game.round.currentPhaseId() || 'koniec gry'}`);
-          const b = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${b || game.round.currentPhaseId() || 'koniec gry'}`);
-          syncUIFromGame();
-        }
-      });
-    }
-  
-    tintByActive(); return;
-  }
-
-
   // Upewnij się, że ustawa na tę rundę jest ustawiona (i jeśli trzeba — pokaż popup)
   ensureSejmLawForRound(s);
 
