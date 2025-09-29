@@ -437,8 +437,8 @@ class SejmAPI {
           if (arr.length === 1 && arr[0] === playerIndex) {
             c.troops.per_province[provinceId][playerIndex] += 1;
             const arr = c.troops_kind.per_province[provinceId];
-            if ((arr[playerIndex] | 0) === TroopKind.NONE){
-              c.troops_kind.per_province[provinceId][playerIndex] = TroopKind.INF;
+            if ((arr[playerIndex] | 0) === UnitKind.NONE){
+              c.troops_kind.per_province[provinceId][playerIndex] = UnitKind.INF;
             }
             
             log.push(`  ${c.settings.players[playerIndex].name}: +1 jednostka w ${provinceId}`);
