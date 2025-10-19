@@ -1429,6 +1429,11 @@ function buildPhaseActionsSmart(s){
       chip('Start 10 rund', ()=>run('gstart 10 6')),
       chip('Start 15 rund', ()=>run('gstart 15 6')),
       chip('Start 20 rund', ()=>run('gstart 20 6')),
+      el('div', {style:{height:'8px'}}),
+      chip('Start 5 rund — reset złota',  ()=>run('gstart 5 0 reset')),
+      chip('Start 10 rund — reset złota', ()=>run('gstart 10 0 reset')),
+      chip('Start 15 rund — reset złota', ()=>run('gstart 15 0 reset')),
+      chip('Start 20 rund — reset złota', ()=>run('gstart 20 0 reset')),
     );
     phaseActionsEl.appendChild(box);
     tintByActive();
@@ -2140,11 +2145,16 @@ function execCommand(raw){
     const maxRounds = tokens[1] ? parseInt(tokens[1],10) : 3;
     const startingGold = tokens[2] ? parseInt(tokens[2],10) : 6;
     if (PLAYERS.length === 0) return err('Najpierw dodaj graczy: gracz <imię> <kolor>.');
+  
+    const flag = (tokens[3] || '').toLowerCase();
+    const resetGoldEachRound = ['reset', 'zr', '--reset', 'goldreset', 'resetgold', 'zero'].includes(flag);
+    
     const names = PLAYERS.map(p => p.name);
-    game.startGame({ players: names, startingGold, maxRounds });
+    game.startGame({ players: names, startingGold, maxRounds, resetGoldEachRound });
     
     buildEventSchedule(maxRounds);
-    ok(`Start gry: gracze=${names.join(', ')}, rund=${maxRounds}, złoto start=${startingGold}.`);
+    const mode = resetGoldEachRound ? ' (tryb: reset złota co rundę)' : '';
+    ok(`Start gry: gracze=${names.join(', ')}, rund=${maxRounds}, złoto start=${startingGold}${mode}.`);
     syncUIFromGame(); return;
   }
 
