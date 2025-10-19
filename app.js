@@ -1430,10 +1430,10 @@ function buildPhaseActionsSmart(s){
       chip('Start 15 rund', ()=>run('gstart 15 6')),
       chip('Start 20 rund', ()=>run('gstart 20 6')),
       el('div', {style:{height:'8px'}}),
-      chip('Start 5 rund — reset złota',  ()=>run('gstart 5 0 reset')),
-      chip('Start 10 rund — reset złota', ()=>run('gstart 10 0 reset')),
-      chip('Start 15 rund — reset złota', ()=>run('gstart 15 0 reset')),
-      chip('Start 20 rund — reset złota', ()=>run('gstart 20 0 reset')),
+      chip('Start 5 rund — reset złota',  ()=>run('gstart 5 6 reset')),
+      chip('Start 10 rund — reset złota', ()=>run('gstart 10 6 reset')),
+      chip('Start 15 rund — reset złota', ()=>run('gstart 15 6 reset')),
+      chip('Start 20 rund — reset złota', ()=>run('gstart 20 6 reset')),
     );
     phaseActionsEl.appendChild(box);
     tintByActive();
