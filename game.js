@@ -80,7 +80,7 @@ class RoundStatus {
 
 class GameContext {
   constructor() {
-    this.settings = { players: [], max_rounds: 3 };
+    this.settings = { players: [], max_rounds: 3, reset_gold_each_round: false };
     this.round_status = new RoundStatus(3, 0);
     this.last_output = ""; // optional log aggregator
     this.turn = null;
@@ -1176,11 +1176,12 @@ export class ConsoleGame {
   }
 
   // ------------ Lifecycle ------------
-  startGame({ players = [], startingGold = 6, maxRounds = 3 } = {}) {
+startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = false } = {}) {
     if (!players.length) players = ["Player1"]; // default
     this.ctx.settings.players = players.map((name) => new Player(String(name), startingGold | 0));
     this.ctx.settings.max_rounds = Math.max(1, maxRounds | 0 || 1);
     this.ctx.round_status = new RoundStatus(this.ctx.settings.max_rounds, this.ctx.settings.players.length);
+    this.ctx.settings.reset_gold_each_round = !!resetGoldEachRound;
 
     // init boards
     ensurePerProvinceArrays(this.ctx);
@@ -1191,6 +1192,10 @@ export class ConsoleGame {
   }
 
   _startRound() {
+    if (this.ctx.settings.reset_gold_each_round && this.ctx.round_status.current_round > 1) {
+      this.ctx.settings.players.forEach(p => { p.gold = 0; });
+    }
+    
     const rs = this.ctx.round_status;
     // reset per-round modifiers
     rs.sejm_canceled = false; rs.admin_yield = 2; rs.prusy_estate_income_penalty = 0; rs.discount_litwa_wplyw_pos = 0;
@@ -1323,7 +1328,8 @@ export class ConsoleGame {
         players: this.ctx.settings.players.map((p) => ({
           name: p.name, score: p.score, gold: p.gold, honor: p.honor, majority: p.majority, last_bid: p.last_bid
         })),
-      max_rounds: this.ctx.settings.max_rounds,
+        max_rounds: this.ctx.settings.max_rounds,
+        reset_gold_each_round: this.ctx.settings.reset_gold_each_round, 
       },
       round_status: deepClone(this.ctx.round_status),
       provinces: deepClone(this.ctx.provinces),
