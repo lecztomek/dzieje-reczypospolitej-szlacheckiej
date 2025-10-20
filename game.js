@@ -175,6 +175,15 @@ function destroyLastEstateAny(ctx, pid) {
   return null;
 }
 
+function lastOccupiedEstateSlot(ctx, pid) {
+  const est = ctx.provinces[pid].estates;
+  for (let i = est.length - 1; i >= 0; i--) {
+    const owner = est[i];
+    if (owner !== -1) return { ownerIndex: owner, slotIndex: i };
+  }
+  return null;
+}
+
 function uniqueEstateOwner(ctx, pid) {
   const est = ctx.provinces[pid].estates;
   let owner = -1;
@@ -716,16 +725,19 @@ class ArsonAPI {
   }
 
   #eligibleTargetsFor(playerIndex) {
-    // ✅ defensywnie zadbaj o tablice
     ensurePerProvinceArrays(this.ctx);
     const s = this.ctx;
     const out = [];
     for (const pid of Object.values(ProvinceID)) {
       const troops = (s.troops.per_province[pid]?.[playerIndex] | 0);
       if (troops <= 0) continue;
-      const info = uniqueEstateOwner(s, pid);
+  
+      const info = lastOccupiedEstateSlot(s, pid);
       if (!info) continue;
+  
+      // tylko jeśli ostatnia posiadłość należy do przeciwnika
       if (info.ownerIndex === playerIndex) continue;
+  
       out.push(pid);
     }
     return out;
@@ -763,9 +775,12 @@ class ArsonAPI {
     this.#requireActive(playerIndex);
     const legal = this.#eligibleTargetsFor(playerIndex);
     if (!legal.includes(provinceId)) throw new Error("Ta prowincja nie jest legalnym celem do spalenia.");
-
+  
     const c = this.ctx; ensurePerProvinceArrays(c);
-    const info = uniqueEstateOwner(c, provinceId);
+    const info = lastOccupiedEstateSlot(c, provinceId);
+    if (!info) throw new Error("Brak posiadłości do spalenia.");
+    if (info.ownerIndex === playerIndex) throw new Error("Nie możesz spalić własnej posiadłości.");
+
     c.provinces[provinceId].estates[info.slotIndex] = -1;
 
     const beforeWealth = c.provinces[provinceId].wealth;
