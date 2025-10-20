@@ -155,10 +155,10 @@ const LAW_VARIANTS = {
   6: { // Pokój
     title: 'Pokój',
     buttons: [
-      { label: 'Pokój — wariant A (wszystkie tory −1)', choice: 'A' },
-      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'N' },
-      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'E' },
-      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'S' },
+      { label: 'Pokój — wariant A (N, E, S −1 każdy)', choice: 'A' },
+      { label: 'Pokój — wariant B (−2 na torze N)', choice: 'B', track: 'N' },
+      { label: 'Pokój — wariant B (−2 na torze E)', choice: 'B', track: 'E' },
+      { label: 'Pokój — wariant B (−2 na torze S)', choice: 'B', track: 'S' },
     ],
     describe: [
       'A: wszystkie trzy tory (N, E, S) −1.',
