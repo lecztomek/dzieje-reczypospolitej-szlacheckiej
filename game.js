@@ -771,6 +771,7 @@ class ArsonAPI {
     const atk = c.settings.players[playerIndex].name;
     const def = c.settings.players[info.ownerIndex].name;
 
+    this.#resetPasses();
     this.#advanceToNext();
     return `[Palenie] ${atk} spalił ostatnią posiadłość gracza ${def} w ${provinceId}.`;
   }
@@ -784,6 +785,12 @@ class ArsonAPI {
 
   // alias dla spójności z battles
   passTurn(playerIndex) { return this.pass(playerIndex); }
+
+  #resetPasses) {
+    const t = this.ctx.arsonTurn;
+    if (!t) return;  
+    t.passed.fill(false);
+  }
 }
 
 class PlayerBattleAPI {
