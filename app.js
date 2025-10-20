@@ -15,6 +15,7 @@ const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 const FINAL_SUMMARY_POPUP_IMG = './images/gameover.png';
 const PEACE_BORDER_IMG = './images/spokoj_granica.png';
+const ARSON_POPUP_IMG = './images/burn.png';
 
 const EVENT_IMG_BASE = './images/events';
 
@@ -1870,11 +1871,15 @@ if (phase === 'auction' || phase === 'sejm'){
         row.append(el('span', { style:{ minWidth:'220px', fontWeight:'800' } }, `${key} — ofiara: ${victim}`));
         row.append(chip(`spal ${key}`, ()=>{
           try{
-            const lines = game.arson.burn({ playerIndex: pidx, provinceId: toProvEnum(key) });
+            const stNow = game.getPublicState?.() || {};
+            const pidxNow = Number.isInteger(stNow.active_arson_index) ? stNow.active_arson_index : curPlayerIdx;
+            const lines = game.arson.burn({ playerIndex: pidxNow, provinceId: toProvEnum(key) });
+
             logEngine(lines);
             syncUIFromGame();
             maybeAutoAdvanceAfterArson();
             popupFromEngine(`Palenie — ${key}`, Array.isArray(lines)?lines:[String(lines)], {
+              imageUrl: ARSON_POPUP_IMG, 
               buttonText: 'OK',
               onClose: () => {
                 maybeAutoAdvanceAfterArson();
@@ -1898,7 +1903,7 @@ if (phase === 'auction' || phase === 'sejm'){
           return;
         }
         const fresh = Number.isInteger(st.active_arson_index) ? st.active_arson_index : pidx;
-        const msg = game.arson.pass(fresh);
+        const msg = game.arson.passTurn(fresh);
         ok(String(msg || 'PASS (palenie).'));
         syncUIFromGame();
         maybeAutoAdvanceAfterArson();
@@ -2506,7 +2511,7 @@ function execCommand(raw){
     if (sub === 'pass'){
       if (curPlayerIdx < 0) return err('Brak aktywnego gracza.');
       try{
-        const msg = game.arson.pass(curPlayerIdx);
+        const msg = game.arson.passTurn(curPlayerIdx);
         ok(String(msg || 'PASS (palenie).'));
         syncUIFromGame();
       } catch(ex){ err('PASS (palenie) nieudany: ' + ex.message); }
