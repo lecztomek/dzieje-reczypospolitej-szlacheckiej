@@ -1917,7 +1917,6 @@ if (phase === 'auction' || phase === 'sejm'){
         }
         err('PASS (palenie) nieudany: ' + ex.message);
        }
-      }
     }, 'garson pass'));
   
     phaseActionsEl.appendChild(box);
