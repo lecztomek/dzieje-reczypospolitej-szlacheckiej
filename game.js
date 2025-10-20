@@ -768,12 +768,17 @@ class ArsonAPI {
     const info = uniqueEstateOwner(c, provinceId);
     c.provinces[provinceId].estates[info.slotIndex] = -1;
 
+    const beforeWealth = c.provinces[provinceId].wealth;
+    addProvinceWealth(c, provinceId, -1);
+    const afterWealth = c.provinces[provinceId].wealth;
+    
     const atk = c.settings.players[playerIndex].name;
     const def = c.settings.players[info.ownerIndex].name;
 
     this.#resetPasses();
     this.#advanceToNext();
-    return `[Palenie] ${atk} spalił ostatnią posiadłość gracza ${def} w ${provinceId}.`;
+    return `[Palenie] ${atk} spalił posiadłość gracza ${def} w ${provinceId}; `
+         + `zamożność ${beforeWealth}→${afterWealth}.`;
   }
 
   pass(playerIndex) {
