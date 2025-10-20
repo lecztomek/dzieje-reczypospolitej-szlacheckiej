@@ -11,7 +11,6 @@ body{
   margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
   color:var(--text);
   background: radial-gradient(1200px 600px at 60% -10%, #1f2a4a 0%, #0b1020 35%, var(--bg) 100%);
-  padding-bottom: calc(var(--console-h) + var(--safe-bottom));
 }
 
 header{position:sticky;top:0;z-index:5;backdrop-filter:blur(10px);background:#0b1020aa;border-bottom:1px solid #1f2937}
@@ -22,33 +21,20 @@ h1{font-size:clamp(18px,2.4vw,28px);margin:0;letter-spacing:.3px}
 main{max-width:1400px;margin:18px auto 40px;padding:0 20px;display:block}
 .layout{
   display:grid;
-  grid-template-columns: var(--sidebar-w) var(--rightbar-w) 1fr; /* 320 | 300 | reszta */
   gap:16px;
   align-items:start;
+  grid-template-columns:
+    minmax(260px, var(--sidebar-w))
+    minmax(0, 1fr);
 }
 
 .wrap, main{
   max-width: unset;
   width: min(2000px, 96vw); /* wcześniej było 1400px */
 }
-    
-.layout{
-  grid-template-columns:
-    minmax(260px, var(--sidebar-w))
-    minmax(240px, var(--rightbar-w))
-    minmax(0, 1fr);           /* prawa kolumna = cały pozostały obszar */
-}
-
-@media (max-width: 980px){
-  .layout{ grid-template-columns: 1fr; }
-  .sidebar,
-  .rightbar,
-  .console,
-  .map-card{ grid-column:1; grid-row:auto; }
-}
 
 /* 4) Mapa wypełnia wysokość okna (pozwala się „rozepchać”) */
-.map-card{ align-self: stretch; }
+.{ align-self: stretch; }
 .svg-wrap{
   padding: 8px;               /* było 14px – więcej miejsca na SVG */
   height: calc(100vh - 100px);/* dostosuj w razie potrzeby */
@@ -60,7 +46,7 @@ svg{
   filter: drop-shadow(0 16px 24px rgba(0,0,0,.35));
 }
 
-.map-card{
+.{
   overflow: visible;           /* było: hidden */
   align-self: stretch;
 }
@@ -71,10 +57,8 @@ svg{
   height: calc(100vh - 100px); /* było: calc(100vh - 200px); więcej miejsca na dół */
 }
 
-.sidebar{  grid-column:1;        grid-row:1; }
-.rightbar{ grid-column:2;        grid-row:1; }
-.console{  grid-column:1 / span 2; grid-row:2; }  /* konsola pod panelami */
-.map-card{ grid-column:3;        grid-row:1 / span 2; } /* mapa prawa, wysoka */
+.sidebar{  grid-column:1; grid-row:1; }
+.map-card{ grid-column:2; grid-row:1; }
 
 .round { display:flex; align-items:center; gap:8px; }
 #roundLabel { letter-spacing:.8px; font-weight:800; color:#e2e8f0;}
@@ -181,7 +165,37 @@ svg{
 .noble-slot{width:30px;height:30px;border-radius:999px;border:2px solid #475569;background:none;display:grid;place-items:center;font-weight:800;font-size:.95rem;line-height:1;color:#e5e7eb;user-select:none}
 .noble-slot[data-empty="1"]{opacity:.65}
 
-.map-card{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+/* === Szlachcice – LISTA zamiast tabeli === */
+.nobles-list{
+  display:flex; flex-direction:column; gap:8px;
+}
+.nobles-list .province-item{
+  display:flex; align-items:center; gap:10px;
+  padding:8px 10px; border:1px solid #1f2937; border-radius:12px;
+  background:#0f172a;
+}
+.nobles-list .province-name{
+  font-weight:800; color:#e2e8f0; margin-right:auto;
+}
+.nobles-list .badges{
+  display:flex; flex-wrap:wrap; gap:6px;
+}
+.noble-badge{
+  display:flex; align-items:center; gap:6px;
+  border:1px solid #334155; background:#0b1221; color:#e5e7eb;
+  padding:4px 8px; border-radius:999px; font-weight:800;
+}
+.noble-badge .dot{
+  width:14px; height:14px; border-radius:50%;
+  border:2px solid #475569; box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+  background: var(--dot, #fff);
+}
+.nobles-list .empty{
+  color:#94a3b8; font-style:italic; padding:4px 2px;
+}
+
+
+.{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
 .map-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #1f2937}
 .map-header h2{margin:0;font-size:1.05rem;color:#cbd5e1}
 .actions{display:flex;gap:10px;align-items:center}
@@ -324,3 +338,432 @@ footer{max-width:1200px;margin:12px auto 50px;padding:0 20px;color:var(--muted);
   border-radius:12px;
   border:1px solid #1f2937;
 }
+
+/* === Szlachcice – tryb ciasny === */
+.nobles-list{ gap:4px; }
+.nobles-list .province-item{
+  padding:4px 8px;
+  border:none;
+  background:transparent;
+  line-height:1.1;
+  gap:6px;
+}
+.nobles-list .province-name{
+  margin-right:6px;
+  font-weight:800;
+}
+.nobles-list .badges{ gap:4px; }
+.noble-badge{
+  padding:2px 6px;
+  font-weight:800;
+  border:1px solid #2a3446;   /* subtelniej, cieńsza ramka */
+  background:#0d1424;
+}
+.noble-badge .dot{
+  width:10px; height:10px;
+  border-width:1.5px;
+}
+
+/* Szlachcice — wymuś jedną linię na wpis */
+.nobles-list .province-item{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:nowrap;     /* ← nie zawijaj */
+  white-space:nowrap;   /* ← nie zawijaj też tekstu */
+  overflow:hidden;      /* ← obetnij nadmiar */
+}
+
+.nobles-list .province-name{
+  margin-right:6px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;   /* ← skracaj nazwę "...", jeśli brakuje miejsca */
+  flex:1 1 auto;            /* ← niech nazwa zajmuje wolną przestrzeń */
+}
+
+.nobles-list .badges{
+  display:flex;
+  flex-wrap:nowrap;   /* ← pigułki też w jednej linii */
+  gap:4px;
+  flex:0 0 auto;      /* ← bez rozciągania/kurczenia */
+}
+
+.noble-badge{
+  flex:0 0 auto;      /* ← każda pigułka to „inline chip” */
+  padding:2px 6px;
+}
+
+/* --- Szlachcice: twardo w jednej linii, BEZ przerwy przed pierwszą kropką --- */
+.nobles-list .province-item{
+  display:flex;
+  align-items:center;
+  gap:0;               /* zero przerwy między nazwą a pigułkami */
+  flex-wrap:nowrap;    /* nie zawijaj */
+  white-space:nowrap;  /* nie zawijaj tekstu */
+  overflow:visible;    /* nie obcinaj całego wiersza */
+  min-width:0;         /* <<< klucz: pozwól dzieciom się ścinać w poziomie */
+}
+
+.nobles-list .province-name{
+  margin-right:0;          /* żadnej przerwy przed pigułkami */
+  white-space:nowrap;
+  overflow:hidden;         /* ścinaj tylko nazwę */
+  text-overflow:ellipsis;  /* "Litwa..." gdy braknie miejsca */
+  flex:1 1 auto;
+  min-width:0;             /* <<< klucz: pozwól się ścinać */
+}
+
+.nobles-list .badges{
+  display:inline-flex;
+  flex-wrap:nowrap;   /* pigułki też w jednej linii */
+  gap:4px;            /* przerwy tylko między pigułkami */
+  margin-left:0;      /* zero przerwy między nazwą a pierwszą pigułką */
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+
+.noble-badge{
+  display:inline-flex;
+  flex:0 0 auto;
+  padding:2px 6px;
+}
+
+/* === Szlachcice — ciągła, ciasna lista w JEDNEJ linii (zawija się dopiero między prowincjami) === */
+.sidebar .nobles-list{
+  display:flex;
+  flex-direction:row;     /* zamiast kolumny */
+  flex-wrap:wrap;         /* ewentualne zawijanie między PROWINCJAMI */
+  gap:6px;                /* odstęp między prowincjami */
+  align-items:center;
+}
+
+.sidebar .nobles-list .province-item{
+  display:inline-flex;    /* każdy wpis to „chip”, nie pełny wiersz */
+  align-items:center;
+  gap:4px;                /* mini odstęp: nazwa ↔ pigułki */
+  padding:0;              /* zero wewnętrznych paddingów */
+  border:none;
+  background:transparent;
+  white-space:nowrap;     /* trzymaj w jednej linii w obrębie wpisu */
+  width:auto;             /* nie rozciągaj do 100% */
+  flex:0 0 auto;          /* nie rośnij, nie kurcz się do pełnej szerokości */
+}
+
+.sidebar .nobles-list .province-name{
+  margin:0;               /* żadnej „dziury” przed pierwszą kropką */
+  flex:0 0 auto;          /* klucz: NIE rozpychaj – usuwa wyrównanie kropek do prawej */
+  min-width:0;
+  white-space:nowrap;
+  overflow:visible;       /* nie obcinaj nazwy w chipie */
+  text-overflow:clip;
+}
+
+.sidebar .nobles-list .badges{
+  display:inline-flex;
+  flex-wrap:nowrap;       /* pigułki też w jednej linii */
+  gap:4px;                /* odstęp między pigułkami */
+  flex:0 0 auto;
+  margin:0;
+}
+
+.sidebar .noble-badge{
+  display:inline-flex;
+  padding:2px 6px;
+  border:1px solid #2a3446;
+  background:#0d1424;
+  flex:0 0 auto;          /* każda pigułka o stałej szerokości */
+}
+
+/* Schowaj starą listę faz */
+.phasebar{ display:none !important; }
+
+/* Jedna aktualna faza – badge na środku */
+.phase-now{
+  margin: 0 auto;                 /* centrowanie między lewą i prawą stroną */
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:6px 12px; border:1px solid #334155; border-radius:10px;
+  background:#0f172a; color:#e2e8f0; font-weight:800; letter-spacing:.2px;
+  min-width: 160px; text-align:center; box-shadow:var(--shadow);
+}
+
+.phase-now .phase-now-label{
+  opacity:.85;
+  margin-right:6px;
+  letter-spacing:.3px;
+  color:#cbd5e1;
+}
+
+/* === Gracze – lista kompakt jak „szlachcice” (tylko złoto) === */
+.players-list{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.player-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:4px 8px;
+  border:none;
+  background:transparent;
+  line-height:1.1;
+}
+
+.player-dot{
+  width:12px; height:12px; border-radius:50%;
+  border:2px solid #475569;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+}
+
+.player-name{
+  font-weight:800; color:#e2e8f0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  flex:1 1 auto; min-width:0;
+}
+
+.player-gold{
+  display:inline-flex; align-items:center; gap:6px;
+  border:1px solid #2a3446; background:#0d1424; color:#e5e7eb;
+  padding:2px 8px; border-radius:999px; font-weight:800;
+  flex:0 0 auto;
+}
+.player-gold .coin{
+  width:10px; height:10px; border-radius:50%;
+  background:#eab308;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+}
+
+/* === Gracze – tryb ciasny (jak szlachcice) === */
+.players-list{
+  display:flex;
+  flex-wrap:wrap;      /* zawijaj tylko między chipami */
+  gap:4px;             /* minimalny odstęp */
+  margin:0;
+  padding:0;
+}
+
+.player-item{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;             /* odstęp wewnątrz chipa */
+  padding:2px 6px;     /* mała pigułka */
+  border:1px solid #2a3446;
+  background:#0d1424;
+  border-radius:999px;
+  line-height:1.1;
+  font-size:.9rem;     /* mniejsze */
+  white-space:nowrap;  /* wszystko w jednym wierszu */
+}
+
+.player-dot{
+  width:10px; height:10px; border-radius:50%;
+  border:1.5px solid #475569;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+  flex:0 0 auto;
+}
+
+.player-name{
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;   /* jakby imię było bardzo długie */
+  max-width:160px;          /* możesz zmniejszyć, gdy będzie potrzeba */
+}
+
+.player-gold{
+  display:inline-flex; align-items:center; gap:4px;
+  flex:0 0 auto;
+}
+
+.player-gold .coin{
+  width:10px; height:10px; border-radius:50%;
+  border:1.5px solid #a16207;      /* obwódka „monety” */
+  background:#eab308;              /* złoto */
+  display:inline-block;
+}
+
+.player-gold .val{
+  font-weight:800;
+}
+
+/* === Gracze – ciasne „chipsy” w jednej linii, bez ramek === */
+.players-list{
+  display:flex;
+  flex-wrap:wrap;   /* zawijaj tylko między chipami */
+  gap:4px;          /* minimalny odstęp między chipami */
+  margin:0; padding:0;
+}
+
+.player-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:0 6px;           /* mały „oddech” wewnątrz */
+  background:transparent;  /* bez tła */
+  border:none;             /* bez obramowań */
+  line-height:1.1;
+  white-space:nowrap;      /* chip nie łamie się w środku */
+  flex:0 0 auto;           /* nie rozciągaj na całą szerokość */
+}
+
+.player-dot{
+  width:10px; height:10px; border-radius:50%;
+  background: currentColor;      /* kropka w kolorze gracza */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+  flex:0 0 auto;
+}
+
+.player-name{
+  font-weight:800;
+  max-width:140px;              /* skracanie bardzo długich nazw */
+  overflow:hidden; text-overflow:ellipsis;
+}
+
+.player-gold{
+  display:inline-flex; align-items:center; gap:4px;
+  font-weight:800;
+}
+
+.player-gold .coin{
+  width:8px; height:8px; border-radius:50%;
+  background:#eab308;           /* „złota” kropka */
+  flex:0 0 auto;
+}
+
+/* === PLAYERS: twarde nadpisania, żeby było ciasno jak u szlachty === */
+
+/* Lista graczy = „chipsy” obok siebie */
+.players-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;           /* mała przerwa tylko między graczami */
+  margin:0; padding:0;
+}
+
+/* Jeden gracz jako chip bez ramek/tła */
+.players-list .player-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;           /* ODSTĘP MIĘDZY KROPKĄ–NAZWĄ–ZŁOTEM */
+  padding:0 4px;
+  border:none;
+  background:transparent;
+  line-height:1.1;
+  white-space:nowrap;
+  flex:0 0 auto;
+}
+
+/* Kropka w kolorze gracza */
+.players-list .player-dot{
+  width:10px; height:10px; border-radius:50%;
+  background: currentColor;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+  flex:0 0 auto;
+}
+
+/* NAJWAŻNIEJSZE: nazwa NIE może się rozpychać */
+.players-list .player-name{
+  font-weight:800;
+  max-width:140px;
+  overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap;
+  flex:0 0 auto !important;   /* zabija wcześniejsze flex:1 1 auto */
+  margin:0 !important;        /* żadnych „dziur” przed złotem */
+}
+
+/* Złoto — mały chip, bez marginesów */
+.players-list .player-gold{
+  display:inline-flex; align-items:center; gap:4px;
+  flex:0 0 auto;
+  margin:0 !important;        /* zero odstępu od nazwy */
+  border:none !important;     /* usuń zbędne obramowania z wcześniejszych reguł */
+  background:transparent !important;
+  padding:0;
+}
+.players-list .player-gold .coin{
+  width:8px; height:8px; border-radius:50%;
+  background:#eab308;
+  display:inline-block;
+  flex:0 0 auto;
+}
+.players-list .player-gold .val{ font-weight:800; }
+
+/* Bezpieczne czyszczenie starych styli, jeśli gdzieś zostało .player-item */
+.players-list .player-item{ border:none !important; background:transparent !important; padding:0 !important; }
+.players-list .player-item .player-name{ flex:0 0 auto !important; margin:0 !important; }
+
+#phaseActions{display:flex;flex-wrap:wrap;gap:8px}
+#phaseActions button{
+  border:1px solid #334155;background:#0f172a;color:#e2e8f0;
+  padding:8px 10px;border-radius:10px;font-weight:700;cursor:pointer
+}
+#phaseActions button:hover{background:#111827;border-color:#475569}
+#pickedRegion{font-weight:800;color:#e2e8f0;opacity:.9}
+
+@media (max-width: 980px){
+  .layout{ grid-template-columns: 1fr; }
+  .sidebar, .map-card{ grid-column:1; grid-row:auto; }
+}
+
+.map-card{
+  background:var(--card);
+  border:1px solid #1f2937;
+  border-radius:16px;
+  box-shadow:var(--shadow);
+  position:relative;
+  overflow:hidden;      /* trzymamy w karcie */
+  align-self:start;     /* bez pionowego rozciągania */
+}
+
+.svg-wrap{
+  position:relative;
+  padding: 8px 8px 16px; /* lekki oddech u dołu */
+  height:auto;           /* KLUCZ: brak 100vh */
+  min-height:0;
+}
+
+svg{
+  width:100%;
+  height:auto;           /* proporcje z viewBox */
+  display:block;
+  filter: drop-shadow(0 16px 24px rgba(0,0,0,.35));
+}
+
+.players-list .rankbar{
+  height: 8px;
+  border-radius: 6px;
+  background: currentColor;
+  display: inline-block;
+  min-width: 14px;      /* żeby nigdy nie zniknął */
+  transition: width .18s ease;
+}
+.players-list .player-chip{ gap:8px; }
+
+/* --- usuń znaczniki listy wszędzie w tych blokach --- */
+.players-list,
+.players-list ul,
+.players-list ol,
+.players-list li,
+.nobles-list,
+.nobles-list ul,
+.nobles-list ol,
+.nobles-list li{
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Safari/WebKit – jeszcze potrafi dodać wcięcie */
+.players-list, .nobles-list{
+  -webkit-padding-start: 0 !important;
+  padding-inline-start: 0 !important;
+}
+
+/* zabij marker całkiem */
+.players-list li::marker,
+.nobles-list li::marker{
+  content: '' !important;
+}
+

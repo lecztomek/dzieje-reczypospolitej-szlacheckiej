@@ -26,35 +26,28 @@
             <button id="marshalResetBtn" class="marshal-reset" type="button">Wyczyść</button>
           </div>
         </div>
-
-        <div class="section" aria-label="Tabela Graczy">
+  
+        <div class="section" aria-label="Gracze">
           <h2 style="font-size:1rem;margin:0 0 10px;color:#cbd5e1">Gracze</h2>
-          <table class="players-table" id="playersTable" aria-describedby="players-desc">
-            <caption id="players-desc" style="clip:rect(0 0 0 0);position:absolute">
-              Tabela graczy z kolorem, liczbą złota, punktami honoru i punktami końcowymi
-            </caption>
-            <thead>
-              <tr>
-                <th style="width:36px" aria-label="Kolor"></th>
-                <th style="text-align:left">Imię</th>
-                <th>Złoto</th>
-                <th>Honor</th>
-                <th>Punkty</th>
-              </tr>
-            </thead>
-            <tbody id="playersBody"></tbody>
-          </table>
+          <div id="playersBody" class="players-list"></div>
         </div>
 
-        <!-- Szlachcice -->
-        <div class="section" aria-label="Tabela Szlachciców">
+        <div class="section" aria-label="Lista Szlachciców">
           <h2 style="font-size:1rem;margin:0 0 10px;color:#cbd5e1">Szlachcice</h2>
-          <table class="nobles-table" id="noblesTable" aria-describedby="nobles-desc">
-            <caption id="nobles-desc" style="clip:rect(0 0 0 0);position:absolute">Tabela 4 slotów dla każdej prowincji</caption>
-            <thead></thead>
-            <tbody id="noblesBody"></tbody>
-          </table>
+          <div id="noblesList" class="nobles-list" aria-live="polite"></div>
         </div>
+
+        <div class="section" aria-label="Akcje fazy">
+          <h2 style="font-size:1rem;margin:0 0 8px;color:#cbd5e1">Akcje fazy</h2>
+          <div style="color:#94a3b8;font-size:.9rem;margin-bottom:6px">Wybrana prowincja:</div>
+          <div id="pickedRegion" style="font-weight:800;color:#e2e8f0;opacity:.9">–</div>
+        
+          <div style="height:8px"></div>
+        
+          <h3 style="margin:0 0 8px;font-size:1rem;color:#cbd5e1">Przyciski</h3>
+          <div id="phaseActions" role="group" aria-label="Przyciski fazy"></div>
+        </div>
+        
       </aside>
 
       <section class="map-card" aria-describedby="map-desc">
@@ -115,36 +108,22 @@
           <div class="coords" id="coords">x: –, y: –</div>
         </div>
       </section>
-
-      <aside class="rightbar" id="rightBar" aria-label="Szybkie akcje">
-        <div class="head">
-          <h2>Akcje fazy</h2>
-        </div>
-        <div class="section">
-          <div style="color:#94a3b8;font-size:.9rem">Wybrana prowincja:</div>
-          <div id="pickedRegion">–</div>
-        </div>
-        <div class="section">
-          <h3 style="margin:0 0 8px;font-size:1rem;color:#cbd5e1">Przyciski</h3>
-          <div id="phaseActions" role="group" aria-label="Przyciski fazy"></div>
-        </div>
-      </aside>
-
-      <!-- KONSOLA -->
-      <section class="console" aria-label="Konsola poleceń">
-        <div class="bar">
-          <span class="title">Konsola</span>
-          <button id="btnHelp" type="button">Pomoc</button>
-          <button id="btnClearLog" type="button">Wyczyść log</button>
-          <span class="hint">Enter = wykonaj • Strzałki ↑/↓ = historia</span>
-        </div>
-        <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
-        <form id="cmdForm" autocomplete="off">
-          <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "wealth litwa 3", "wealthall 1", "armia litwa 2 #34d399 7", "armset prusy 1 12", "armclr malopolska 3", "armreset ukraina", "pomoc"'>
-          <button type="submit">Wykonaj</button>
-        </form>
-      </section>
     </div>
+
+    <!-- KONSOLA -->
+    <section class="console" aria-label="Konsola poleceń">
+      <div class="bar">
+        <span class="title">Konsola</span>
+        <button id="btnHelp" type="button">Pomoc</button>
+        <button id="btnClearLog" type="button">Wyczyść log</button>
+        <span class="hint">Enter = wykonaj • Strzałki ↑/↓ = historia</span>
+      </div>
+      <div class="log" id="log" aria-live="polite" aria-atomic="false"></div>
+      <form id="cmdForm" autocomplete="off">
+        <input id="cmdInput" type="text" inputmode="text" spellcheck="false" placeholder='np. "wealth litwa 3", "wealthall 1", "armia litwa 2 #34d399 7", "armset prusy 1 12", "armclr malopolska 3", "armreset ukraina", "pomoc"'>
+        <button type="submit">Wykonaj</button>
+      </form>
+    </section>
   </main>
 
   <!-- [DODAJ] Popup (modal) -->
