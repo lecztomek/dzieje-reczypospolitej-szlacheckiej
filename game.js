@@ -786,7 +786,7 @@ class ArsonAPI {
   // alias dla spójności z battles
   passTurn(playerIndex) { return this.pass(playerIndex); }
 
-  #resetPasses) {
+  #resetPasses() {
     const t = this.ctx.arsonTurn;
     if (!t) return;  
     t.passed.fill(false);
