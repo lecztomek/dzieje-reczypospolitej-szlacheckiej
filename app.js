@@ -1902,14 +1902,21 @@ if (phase === 'auction' || phase === 'sejm'){
           buildPhaseActionsSmart(game.getPublicState());
           return;
         }
-        const fresh = Number.isInteger(st.active_arson_index) ? st.active_arson_index : pidx;
+        const fresh = Number.isInteger(st.active_arson_index) ? st.active_arson_index : curPlayerIdx;
         const msg = game.arson.passTurn(fresh);
         ok(String(msg || 'PASS (palenie).'));
         syncUIFromGame();
         maybeAutoAdvanceAfterArson();
         buildPhaseActionsSmart(game.getPublicState());
       } catch(ex){
+        if (String(ex?.message || '').includes('Faza palenia już zakończona')) {
+          ok('Silnik zamknął fazę Palenia — odświeżam UI.');
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+          return;
+        }
         err('PASS (palenie) nieudany: ' + ex.message);
+       }
       }
     }, 'garson pass'));
   
