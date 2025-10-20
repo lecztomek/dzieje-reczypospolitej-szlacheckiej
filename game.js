@@ -732,32 +732,31 @@ class ArsonAPI {
   }
 
   #advanceToNext() {
-    const t = this.ctx.arsonTurn; if (!t) return;
-    const P = t.order.length;
-
-    // Jeśli wszyscy mają PASS → koniec
-    if (t.passed.every(Boolean)) { t.done = true; return; }
-
-    // Znajdź następnego gracza bez PASS i z legalnym celem
+    const t = this.ctx.arsonTurn;
+    if (!t) return;
+  
+    const P = t.order.length | 0;
+    if (P === 0) { t.done = true; return; }
+  
+    // 1) wszyscy już PASS → koniec fazy
+    if (t.passed.every(Boolean)) {
+      t.done = true;
+      return;
+    }
+  
+    // 2) znajdź NASTĘPNEGO gracza, który JESZCZE nie zagrał (nie sprawdzamy celów!)
+    //    — dokładnie tak jak w battles: gracz bez celów ma turę i klika PASS ręcznie.
     for (let step = 1; step <= P; step++) {
-      const nextIdx = (t.idx + step) % P;
-      const pidx = t.order[nextIdx];
-      if (t.passed[pidx]) continue;
-
-      if (this.#eligibleTargetsFor(pidx).length > 0) {
-        t.idx = nextIdx;
+      const nextIdx = (t.idx + step) % P;   // indeks w kolejności tury
+      const pidx    = t.order[nextIdx];     // indeks gracza
+      if (!t.passed[pidx]) {
+        t.idx = nextIdx;                    // przekazujemy turę temu graczowi
         return;
       }
     }
-
-    // Nikt nie ma celów → oznacz brakujących jako PASS i zamknij
-    for (let k = 0; k < P; k++) {
-      const pidx = t.order[k];
-      if (!t.passed[pidx] && this.#eligibleTargetsFor(pidx).length === 0) {
-        t.passed[pidx] = true;
-      }
-    }
-    t.done = t.passed.every(Boolean);
+  
+    // 3) awaryjnie (gdyby pętla nic nie znalazła) – zamknij
+    t.done = true;
   }
 
   burn({ playerIndex, provinceId }) {
