@@ -208,34 +208,40 @@ function maybeAutoAdvanceAfterAttacks(){
   }
 }
 
-function uiUniqueEstateOwner(state, pid /* klucz enuma, np. 'Prusy' */){
+function uiRightmostForeignEstate(state, pid, pidx){
   const prov = state.provinces?.[pid];
   if (!prov) return null;
-  const arr = Array.isArray(prov.estates) ? prov.estates : [];
-  let owner = -1, slot = -1;
-  for (let i = 0; i < arr.length; i++){
-    const v = arr[i];
-    if (v < 0) continue;
-    if (owner === -1) { owner = v; slot = i; }
-    else if (owner !== v) { return null; } // różnych właścicieli → nielegalne
+
+  const est = Array.isArray(prov.estates) ? prov.estates : [];
+  for (let i = est.length - 1; i >= 0; i--) {
+    const owner = est[i] | 0;             // -1 = puste, 0.. = indeks gracza
+    if (owner >= 0) {
+      if (owner !== pidx) {
+        return { ownerIndex: owner, slotIndex: i }; // ostatnia zajęta jest cudza → można palić
+      }
+      return null; // ostatnia zajęta jest nasza → nie wolno palić
+    }
   }
-  return (owner >= 0) ? { ownerIndex: owner, slotIndex: slot } : null;
+  return null; // brak jakichkolwiek posiadłości
 }
 
 function uiArsonEligibleTargets(state, pidx){
   const out = [];
   for (const pid of Object.keys(state.provinces || {})) {
     const key = provKeyFromId(pid); if (!key) continue;
+
+    // możesz palić tylko tam, gdzie masz wojsko
     const myTroops = (state.troops?.[pid]?.[pidx] | 0) > 0;
     if (!myTroops) continue;
-    const info = uiUniqueEstateOwner(state, pid);
+
+    // nowa reguła: tylko skrajna prawa posiadłość i tylko jeśli jest cudza
+    const info = uiRightmostForeignEstate(state, pid, pidx);
     if (!info) continue;
-    if (info.ownerIndex === pidx) continue; // nie palimy swoich
-    out.push({ pid, key, ownerIndex: info.ownerIndex });
+
+    out.push({ pid, key, ownerIndex: info.ownerIndex, slotIndex: info.slotIndex });
   }
   return out;
 }
-
 
 function attackImageForRoll(roll){
   const r = roll|0;
