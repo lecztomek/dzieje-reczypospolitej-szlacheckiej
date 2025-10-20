@@ -716,10 +716,12 @@ class ArsonAPI {
   }
 
   #eligibleTargetsFor(playerIndex) {
+    // ✅ defensywnie zadbaj o tablice
+    ensurePerProvinceArrays(this.ctx);
     const s = this.ctx;
     const out = [];
     for (const pid of Object.values(ProvinceID)) {
-      const troops = (s.troops.per_province?.[pid]?.[playerIndex] | 0);
+      const troops = (s.troops.per_province[pid]?.[playerIndex] | 0);
       if (troops <= 0) continue;
       const info = uniqueEstateOwner(s, pid);
       if (!info) continue;
@@ -733,44 +735,44 @@ class ArsonAPI {
     const t = this.ctx.arsonTurn; if (!t) return;
     const P = t.order.length;
 
-    // jeśli wszyscy mają PASS → koniec
-    if (t.order.every(pidx => t.passed[pidx])) { t.done = true; return; }
+    // Jeśli wszyscy mają PASS → koniec
+    if (t.passed.every(Boolean)) { t.done = true; return; }
 
-    // round-robin do kolejnego nie-PASS z legalnym celem (bezcelowych auto-PASS)
+    // Znajdź następnego gracza bez PASS i z legalnym celem
     for (let step = 1; step <= P; step++) {
       const nextIdx = (t.idx + step) % P;
       const pidx = t.order[nextIdx];
       if (t.passed[pidx]) continue;
 
-      if (this.#eligibleTargetsFor(pidx).length === 0) {
-        t.passed[pidx] = true; // auto-pass
-        continue;
+      if (this.#eligibleTargetsFor(pidx).length > 0) {
+        t.idx = nextIdx;
+        return;
       }
-      t.idx = nextIdx;
-      return;
     }
 
-    t.done = true;
+    // Nikt nie ma celów → oznacz brakujących jako PASS i zamknij
+    for (let k = 0; k < P; k++) {
+      const pidx = t.order[k];
+      if (!t.passed[pidx] && this.#eligibleTargetsFor(pidx).length === 0) {
+        t.passed[pidx] = true;
+      }
+    }
+    t.done = t.passed.every(Boolean);
   }
 
   burn({ playerIndex, provinceId }) {
     this.#requireActive(playerIndex);
-
     const legal = this.#eligibleTargetsFor(playerIndex);
-    if (!legal.includes(provinceId)) {
-      throw new Error("Ta prowincja nie jest legalnym celem do spalenia.");
-    }
+    if (!legal.includes(provinceId)) throw new Error("Ta prowincja nie jest legalnym celem do spalenia.");
 
     const c = this.ctx; ensurePerProvinceArrays(c);
     const info = uniqueEstateOwner(c, provinceId);
-    // fort nie chroni — usuwamy tę jedyną posiadłość:
     c.provinces[provinceId].estates[info.slotIndex] = -1;
 
     const atk = c.settings.players[playerIndex].name;
     const def = c.settings.players[info.ownerIndex].name;
 
     this.#advanceToNext();
-
     return `[Palenie] ${atk} spalił ostatnią posiadłość gracza ${def} w ${provinceId}.`;
   }
 
@@ -781,12 +783,9 @@ class ArsonAPI {
     return `PASS (palenie) — ${this.ctx.settings.players[playerIndex].name}`;
   }
 
-  passTurn(playerIndex) {
-    // alias dla spójności z PlayerBattleAPI
-    return this.pass(playerIndex);
-  }
+  // alias dla spójności z battles
+  passTurn(playerIndex) { return this.pass(playerIndex); }
 }
-
 
 class PlayerBattleAPI {
   constructor(ctx) { this.ctx = ctx; }
@@ -1385,10 +1384,12 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
 
   _initArsonTurn(){
     const P = this.ctx.settings.players.length;
+    const start = this.ctx.round_status.marshal_index;
+    const order = Array.from({length:P}, (_,k)=> (start + k) % P);
     this.ctx.arsonTurn = {
-      order: Array.from({length:P}, (_,i)=>i),
+      order,
       idx: 0,
-      passed: Object.fromEntries(Array.from({length:P}, (_,i)=>[i,false])),
+      passed: Array(P).fill(false),   
       done: false
     };
   }
