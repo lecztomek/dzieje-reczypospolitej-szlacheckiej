@@ -780,6 +780,11 @@ class ArsonAPI {
     this.#advanceToNext();
     return `PASS (palenie) — ${this.ctx.settings.players[playerIndex].name}`;
   }
+
+  passTurn(playerIndex) {
+    // alias dla spójności z PlayerBattleAPI
+    return this.pass(playerIndex);
+  }
 }
 
 
