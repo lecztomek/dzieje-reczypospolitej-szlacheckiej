@@ -1948,7 +1948,7 @@ if (phase === 'auction' || phase === 'sejm'){
   // ====== WZMACNIANIE ======
   if (phase === 'reinforcements'){
     const box = section('Wzmacnianie', 'Wylosuj N, S, E (1–6) i zastosuj wzmocnienia na torach wrogów.');
-    const btn = chip('Wylosuj i zastosuj (greinf N S E)', ()=>{
+    const btn = chip('Wzmocnienie wrogów', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
     
