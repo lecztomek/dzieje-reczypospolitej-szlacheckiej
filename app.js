@@ -173,6 +173,15 @@ function eventImageFor(n){
 
 function randRolls(n){ return Array.from({length: Math.max(1, n|0)}, ()=> 1 + Math.floor(Math.random()*6)); }
 
+function maybeAutoAdvanceAfterArson(){
+  const s = game.getPublicState?.() || {};
+  if ((s.current_phase || game.round?.currentPhaseId?.()) !== 'arson') return;
+  if (s.arson_turn?.done) {
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Auto-next z Palenia -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  }
+}
 
 function maybeAutoAdvanceAfterBattles(){
   const s = game.getPublicState?.() || {};
@@ -197,6 +206,35 @@ function maybeAutoAdvanceAfterAttacks(){
     syncUIFromGame();
   }
 }
+
+function uiUniqueEstateOwner(state, pid /* klucz enuma, np. 'Prusy' */){
+  const prov = state.provinces?.[pid];
+  if (!prov) return null;
+  const arr = Array.isArray(prov.estates) ? prov.estates : [];
+  let owner = -1, slot = -1;
+  for (let i = 0; i < arr.length; i++){
+    const v = arr[i];
+    if (v < 0) continue;
+    if (owner === -1) { owner = v; slot = i; }
+    else if (owner !== v) { return null; } // różnych właścicieli → nielegalne
+  }
+  return (owner >= 0) ? { ownerIndex: owner, slotIndex: slot } : null;
+}
+
+function uiArsonEligibleTargets(state, pidx){
+  const out = [];
+  for (const pid of Object.keys(state.provinces || {})) {
+    const key = provKeyFromId(pid); if (!key) continue;
+    const myTroops = (state.troops?.[pid]?.[pidx] | 0) > 0;
+    if (!myTroops) continue;
+    const info = uiUniqueEstateOwner(state, pid);
+    if (!info) continue;
+    if (info.ownerIndex === pidx) continue; // nie palimy swoich
+    out.push({ pid, key, ownerIndex: info.ownerIndex });
+  }
+  return out;
+}
+
 
 function attackImageForRoll(roll){
   const r = roll|0;
@@ -737,6 +775,7 @@ const PHASE_LABELS = {
   sejm:   'Sejm',
   actions:'Akcje',
   battles:'Starcia',
+  arson:  'Palenie posiadłości',
   reinforcements:'Wzmacnianie',
   attacks:'Wyprawy',
   devastation:'Spustoszenia'
@@ -759,7 +798,9 @@ function applyCurrentTurnFromState(s){
   } else if (phase === 'attacks' && Number.isInteger(s.active_attacker_index)) {
     idx = s.active_attacker_index;
   } else if (phase === 'battles' && Number.isInteger(s.active_battler_index)) {
-    idx = s.active_battler_index;          // <<<<< NOWE
+    idx = s.active_battler_index;          
+  } else if (phase === 'arson' && Number.isInteger(s.active_arson_index)) {
+    idx = s.active_arson_index;
   } else {
     idx = -1;
   }
@@ -936,7 +977,7 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Wzmacnianie', 'Wyprawy','Spustoszenia'];
+const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Palenie', 'Wzmacnianie', 'Wyprawy','Spustoszenia'];
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -1344,9 +1385,10 @@ const ENGINE_TO_UI_PHASE = {
   sejm: 3,
   actions: 4,
   battles: 5,
-  attacks: 7,
-  reinforcements: 6,
-  devastation: 8, // nie mamy osobnej pozycji w UI — podpinamy pod „Najazdy”
+  arson: 6,            
+  reinforcements: 7,
+  attacks: 8,
+  devastation: 9,
 };
 
 function applyPhaseFromEngineState(s){
@@ -1808,6 +1850,67 @@ if (phase === 'auction' || phase === 'sejm'){
   
     phaseActionsEl.appendChild(box);
     tintByActive(); return;
+  }
+
+  // ====== PALENIE POSIADŁOŚCI ======
+  if (phase === 'arson'){
+    const box = section('Palenie posiadłości', 'Możesz spalić jedyną posiadłość w prowincji, w której masz wojsko. Albo PASS.');
+    const pidx = Number.isInteger(s.active_arson_index) ? s.active_arson_index : curPlayerIdx;
+    const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
+    box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } }, `Aktywny gracz: ${activePlayerName}`));
+  
+    const targets = uiArsonEligibleTargets(s, pidx);
+  
+    if (targets.length === 0){
+      box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } }, 'Brak legalnych celów — możesz PASS.'));
+    } else {
+      targets.forEach(({ pid, key, ownerIndex }) => {
+        const victim = s.settings?.players?.[ownerIndex]?.name || `#${ownerIndex}`;
+        const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
+        row.append(el('span', { style:{ minWidth:'220px', fontWeight:'800' } }, `${key} — ofiara: ${victim}`));
+        row.append(chip(`spal ${key}`, ()=>{
+          try{
+            const lines = game.arson.burn({ playerIndex: pidx, provinceId: toProvEnum(key) });
+            logEngine(lines);
+            syncUIFromGame();
+            maybeAutoAdvanceAfterArson();
+            popupFromEngine(`Palenie — ${key}`, Array.isArray(lines)?lines:[String(lines)], {
+              buttonText: 'OK',
+              onClose: () => {
+                maybeAutoAdvanceAfterArson();
+                buildPhaseActionsSmart(game.getPublicState());
+              }
+            });
+          } catch(e){ err('Błąd palenia: ' + e.message); }
+        }, `garson burn ${key}`));
+        box.append(row);
+      });
+    }
+  
+    box.append(el('div', { style:{ height:'6px' } }));
+    box.append(chip('PASS (palenie)', ()=>{
+      try{
+        const st = game.getPublicState?.() || {};
+        if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'arson') {
+          ok('Faza Palenia już zakończona — odświeżam UI.');
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+          return;
+        }
+        const fresh = Number.isInteger(st.active_arson_index) ? st.active_arson_index : pidx;
+        const msg = game.arson.pass(fresh);
+        ok(String(msg || 'PASS (palenie).'));
+        syncUIFromGame();
+        maybeAutoAdvanceAfterArson();
+        buildPhaseActionsSmart(game.getPublicState());
+      } catch(ex){
+        err('PASS (palenie) nieudany: ' + ex.message);
+      }
+    }, 'garson pass'));
+  
+    phaseActionsEl.appendChild(box);
+    tintByActive();
+    return;
   }
 
   // ====== WZMACNIANIE ======
@@ -2386,6 +2489,46 @@ function execCommand(raw){
     return;
   }
 
+  if (cmd === 'garson'){
+    const sub = norm(tokens[1]||'');
+    if (sub === 'burn'){
+      if (curPlayerIdx < 0) return err('Ustaw aktywnego gracza: turn <...>.');
+      const prov = toProvEnum(tokens[2]);
+      if (!prov) return err('Użycie: garson burn <prowincja>.');
+      try{
+        const lines = game.arson.burn({ playerIndex: curPlayerIdx, provinceId: prov });
+        ok('Spalono posiadłość.');
+        logEngine(lines);
+        syncUIFromGame();
+      } catch(ex){ err('Błąd: ' + ex.message); }
+      return;
+    }
+    if (sub === 'pass'){
+      if (curPlayerIdx < 0) return err('Brak aktywnego gracza.');
+      try{
+        const msg = game.arson.pass(curPlayerIdx);
+        ok(String(msg || 'PASS (palenie).'));
+        syncUIFromGame();
+      } catch(ex){ err('PASS (palenie) nieudany: ' + ex.message); }
+      return;
+    }
+    return err('Użycie: garson burn <prowincja> | garson pass');
+  }
+  
+  if (cmd === 'gburn'){
+    if (curPlayerIdx < 0) return err('Ustaw aktywnego gracza: turn <...>.');
+    const prov = toProvEnum(tokens[1]);
+    if (!prov) return err('Użycie: gburn <prowincja>.');
+    try{
+      const lines = game.arson.burn({ playerIndex: curPlayerIdx, provinceId: prov });
+      ok('Spalono posiadłość.');
+      logEngine(lines);
+      syncUIFromGame();
+    } catch(ex){ err('Błąd: ' + ex.message); }
+    return;
+  }
+
+
   // gdevast <N> <S> <E>
   if (cmd === 'gdevast'){
     const N = parseInt(tokens[1],10), S = parseInt(tokens[2],10), E = parseInt(tokens[3],10);
@@ -2426,7 +2569,8 @@ function showHelp(){
   print('• clear — wyczyść rysunki • reset — pełny reset UI');
   print('• gduel <prow> <A> <B> <rzutyA...> | <rzutyB...> — potyczka między graczami w prowincji (rzuty 1–6, liczba = ich jednostkom)');
   print('• gduelauto <prow> <A> <B> — szybka potyczka (losowe rzuty w liczbie = jednostkom)');
-
+  print('• garson burn <prow> — spal jedyną posiadłość w prowincji (jeśli legalne) • garson pass — PASS w fazie palenia');
+  print('• gburn <prow> — skrót do garson burn');
 }
 
 // ===================== Obsługa konsoli =====================
