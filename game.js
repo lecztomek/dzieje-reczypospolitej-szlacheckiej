@@ -86,6 +86,7 @@ class GameContext {
     this.turn = null;
     this.attackTurn = null; 
     this.battlesTurn = null; 
+    this.arsonTurn = null;
     
     this.provinces = {
       [ProvinceID.PRUSY]: new Province(ProvinceID.PRUSY),
@@ -173,6 +174,23 @@ function destroyLastEstateAny(ctx, pid) {
   }
   return null;
 }
+
+function uniqueEstateOwner(ctx, pid) {
+  const est = ctx.provinces[pid].estates;
+  let owner = -1;
+  let slotIndex = -1;
+
+  for (let i = 0; i < est.length; i++) {
+    const v = est[i];
+    if (v === -1) continue;        // puste pole
+    if (owner === -1) { owner = v; slotIndex = i; }
+    else if (v !== owner) { return null; }  // różni właściciele → nie jest „ostatnia”
+    else { slotIndex = i; }        // zapamiętaj najpóźniejsze wystąpienie
+  }
+
+  return (owner >= 0) ? { ownerIndex: owner, slotIndex } : null;
+}
+
 function plunderProvince(ctx, pid) {
   const prov = ctx.provinces[pid];
   const msgs = [`[Spustoszenie] ${pid}: `];
@@ -679,6 +697,92 @@ class ActionAPI {
   }
 }
 
+class ArsonAPI {
+  constructor(ctx) { this.ctx = ctx; }
+
+  #ensurePhase() {
+    if (!this.ctx.arsonTurn) throw new Error("To nie jest faza palenia posiadłości.");
+    if (this.ctx.arsonTurn.done) throw new Error("Faza palenia posiadłości już zakończona.");
+  }
+
+  #requireActive(playerIndex) {
+    this.#ensurePhase();
+    const t = this.ctx.arsonTurn;
+    const expected = t.order[t.idx];
+    if (playerIndex !== expected) {
+      const want = this.ctx.settings.players[expected]?.name ?? `#${expected}`;
+      throw new Error(`Teraz ruch ma ${want}.`);
+    }
+  }
+
+  #eligibleTargetsFor(playerIndex) {
+    const s = this.ctx;
+    const out = [];
+    for (const pid of Object.values(ProvinceID)) {
+      const troops = (s.troops.per_province?.[pid]?.[playerIndex] | 0);
+      if (troops <= 0) continue;
+      const info = uniqueEstateOwner(s, pid);
+      if (!info) continue;
+      if (info.ownerIndex === playerIndex) continue;
+      out.push(pid);
+    }
+    return out;
+  }
+
+  #advanceToNext() {
+    const t = this.ctx.arsonTurn; if (!t) return;
+    const P = t.order.length;
+
+    // jeśli wszyscy mają PASS → koniec
+    if (t.order.every(pidx => t.passed[pidx])) { t.done = true; return; }
+
+    // round-robin do kolejnego nie-PASS z legalnym celem (bezcelowych auto-PASS)
+    for (let step = 1; step <= P; step++) {
+      const nextIdx = (t.idx + step) % P;
+      const pidx = t.order[nextIdx];
+      if (t.passed[pidx]) continue;
+
+      if (this.#eligibleTargetsFor(pidx).length === 0) {
+        t.passed[pidx] = true; // auto-pass
+        continue;
+      }
+      t.idx = nextIdx;
+      return;
+    }
+
+    t.done = true;
+  }
+
+  burn({ playerIndex, provinceId }) {
+    this.#requireActive(playerIndex);
+
+    const legal = this.#eligibleTargetsFor(playerIndex);
+    if (!legal.includes(provinceId)) {
+      throw new Error("Ta prowincja nie jest legalnym celem do spalenia.");
+    }
+
+    const c = this.ctx; ensurePerProvinceArrays(c);
+    const info = uniqueEstateOwner(c, provinceId);
+    // fort nie chroni — usuwamy tę jedyną posiadłość:
+    c.provinces[provinceId].estates[info.slotIndex] = -1;
+
+    const atk = c.settings.players[playerIndex].name;
+    const def = c.settings.players[info.ownerIndex].name;
+
+    this.#advanceToNext();
+
+    return `[Palenie] ${atk} spalił ostatnią posiadłość gracza ${def} w ${provinceId}.`;
+  }
+
+  pass(playerIndex) {
+    this.#requireActive(playerIndex);
+    this.ctx.arsonTurn.passed[playerIndex] = true;
+    this.#advanceToNext();
+    return `PASS (palenie) — ${this.ctx.settings.players[playerIndex].name}`;
+  }
+}
+
+
 class PlayerBattleAPI {
   constructor(ctx) { this.ctx = ctx; }
   #ensurePhase() {
@@ -1146,7 +1250,7 @@ function computeFinalScores(ctx) {
 // ---------------- Round + Game orchestration (programmatic) ----------------
 class RoundEngine {
   constructor(ctx) { this.ctx = ctx; this.phaseIndex = 0; this.phases = [
-    "events", "income", "auction", "sejm", "actions", "battles", "reinforcements", "attacks", "devastation"
+    "events", "income", "auction", "sejm", "actions", "battles", "arson", "reinforcements", "attacks", "devastation"
   ]; }
   currentPhaseId() { return this.phases[this.phaseIndex] ?? null; }
   nextPhase() {
@@ -1171,6 +1275,7 @@ export class ConsoleGame {
     this.reinforce = new EnemyReinforcementAPI(this.ctx);
     this.attacks = new AttackInvadersAPI(this.ctx);
     this.devastation = new DevastationAPI(this.ctx);
+    this.arson = new ArsonAPI(this.ctx); 
 
     this.round = null; // RoundEngine
   }
@@ -1239,6 +1344,9 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
     if (next === "attacks") this._initAttacksTurn();
     if (prev === "attacks" && next !== "attacks") this.ctx.attackTurn = null;
 
+    if (next === "arson") this._initArsonTurn();                 
+    if (prev === "arson" && next !== "arson") this.ctx.arsonTurn = null;
+
     return this.round.currentPhaseId();
   }
 
@@ -1270,7 +1378,16 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
     };
   }
 
-  // NEW: inicjalizacja tury akcji – kolejność od marszałka, każdy ma wykonać 2 akcje
+  _initArsonTurn(){
+    const P = this.ctx.settings.players.length;
+    this.ctx.arsonTurn = {
+      order: Array.from({length:P}, (_,i)=>i),
+      idx: 0,
+      passed: Object.fromEntries(Array.from({length:P}, (_,i)=>[i,false])),
+      done: false
+    };
+  }
+
   _initActionsTurn() {
     const pcount = this.ctx.settings.players.length;
     const start = this.ctx.round_status.marshal_index;
@@ -1322,6 +1439,11 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
         ? this.ctx.battlesTurn.order[this.ctx.battlesTurn.idx]
         : null;
 
+    const activeArsonIdx =
+      (phase === "arson" && this.ctx.arsonTurn && !this.ctx.arsonTurn.done)
+        ? this.ctx.arsonTurn.order[this.ctx.arsonTurn.idx]
+        : null;
+    
     return deepClone({
       state: this.state,
       settings: {
@@ -1339,8 +1461,7 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
       nobles: deepClone(this.ctx.nobles.per_province),
       current_phase: this.round?.currentPhaseId() ?? null,
       marshal: this.ctx.settings.players[this.ctx.round_status.marshal_index]?.name ?? null,
-
-      // NEW:
+      
       active_player_index: activeActionIdx,
       active_player: activeActionIdx != null ? this.ctx.settings.players[activeActionIdx].name : null,
       actions_turn: this.ctx.turn ? deepClone(this.ctx.turn) : null,
@@ -1352,6 +1473,11 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
       active_battler_index: activeBattleIdx,
       active_battler: activeBattleIdx != null ? this.ctx.settings.players[activeBattleIdx].name : null,
       battles_turn: this.ctx.battlesTurn ? deepClone(this.ctx.battlesTurn) : null,
+
+      active_arson_index: activeArsonIdx,
+      active_arson: activeArsonIdx != null ? this.ctx.settings.players[activeArsonIdx].name : null,
+      arson_turn: this.ctx.arsonTurn ? deepClone(this.ctx.arsonTurn) : null,
+
       });
   }
 }
