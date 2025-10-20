@@ -1856,10 +1856,13 @@ if (phase === 'auction' || phase === 'sejm'){
   // ====== PALENIE POSIADŁOŚCI ======
   if (phase === 'arson'){
     const box = section('Palenie posiadłości', 'Możesz spalić jedyną posiadłość w prowincji, w której masz wojsko. Albo PASS.');
+  
+    // aktywny gracz (jak w battles)
     const pidx = Number.isInteger(s.active_arson_index) ? s.active_arson_index : curPlayerIdx;
     const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
     box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } }, `Aktywny gracz: ${activePlayerName}`));
   
+    // kandydaci (jak w battles liczy przeciwników)
     const targets = uiArsonEligibleTargets(s, pidx);
   
     if (targets.length === 0){
@@ -1868,18 +1871,23 @@ if (phase === 'auction' || phase === 'sejm'){
       targets.forEach(({ pid, key, ownerIndex }) => {
         const victim = s.settings?.players?.[ownerIndex]?.name || `#${ownerIndex}`;
         const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
+  
         row.append(el('span', { style:{ minWidth:'220px', fontWeight:'800' } }, `${key} — ofiara: ${victim}`));
+  
+        // przycisk akcji (jak „atak” w battles)
         row.append(chip(`spal ${key}`, ()=>{
           try{
+            // świeże indeksy (jak w battles)
             const stNow = game.getPublicState?.() || {};
             const pidxNow = Number.isInteger(stNow.active_arson_index) ? stNow.active_arson_index : curPlayerIdx;
+  
             const lines = game.arson.burn({ playerIndex: pidxNow, provinceId: toProvEnum(key) });
-
             logEngine(lines);
             syncUIFromGame();
-            maybeAutoAdvanceAfterArson();
+  
+            // popup (jak w battles: obrazek, OK) i dopiero w onClose -> maybeAuto…
             popupFromEngine(`Palenie — ${key}`, Array.isArray(lines)?lines:[String(lines)], {
-              imageUrl: ARSON_POPUP_IMG, 
+              imageUrl: ARSON_POPUP_IMG,
               buttonText: 'OK',
               onClose: () => {
                 maybeAutoAdvanceAfterArson();
@@ -1888,11 +1896,14 @@ if (phase === 'auction' || phase === 'sejm'){
             });
           } catch(e){ err('Błąd palenia: ' + e.message); }
         }, `garson burn ${key}`));
+  
         box.append(row);
       });
     }
   
     box.append(el('div', { style:{ height:'6px' } }));
+  
+    // PASS (jak w battles)
     box.append(chip('PASS (palenie)', ()=>{
       try{
         const st = game.getPublicState?.() || {};
@@ -1903,9 +1914,12 @@ if (phase === 'auction' || phase === 'sejm'){
           return;
         }
         const fresh = Number.isInteger(st.active_arson_index) ? st.active_arson_index : curPlayerIdx;
+  
         const msg = game.arson.passTurn(fresh);
         ok(String(msg || 'PASS (palenie).'));
+  
         syncUIFromGame();
+        // identycznie jak w battles: sprawdź czy faza jest DONE i wtedy auto-next
         maybeAutoAdvanceAfterArson();
         buildPhaseActionsSmart(game.getPublicState());
       } catch(ex){
@@ -1916,13 +1930,14 @@ if (phase === 'auction' || phase === 'sejm'){
           return;
         }
         err('PASS (palenie) nieudany: ' + ex.message);
-       }
+      }
     }, 'garson pass'));
   
     phaseActionsEl.appendChild(box);
     tintByActive();
     return;
   }
+
 
   // ====== WZMACNIANIE ======
   if (phase === 'reinforcements'){
