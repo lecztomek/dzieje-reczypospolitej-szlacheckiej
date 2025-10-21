@@ -186,7 +186,7 @@ const ORIENT={A:+1,O:-1};
 const Terrain={PLAIN:'.',FOREST:'L',HILL:'W',BOG:'B',WATER:'~',FORD:'='};
 const Orders={UTRZYMAJ:'UTRZYMAJ', NAPRZOD:'NAPRZOD', SZARZA:'SZARZA', SKOS_L:'SKOS_L', SKOS_P:'SKOS_P', PRZES_L:'PRZES_L', PRZES_P:'PRZES_P', PRZECHWYC:'PRZECHWYC', OBRONA_SKRZYDLA:'OBRONA_SKRZYDLA'};
 const Weather={POGODNIE:'pogodnie',DESZCZ:'deszcz',BLOTO:'bloto'};
-const clamp=(v,min,max)=>Math.max(min,Math.min(max,v)), rIdx=r=>ROWS.indexOf(r), stepRow=(r,d)=>ROWS[rIdx(r)+d]||null, d6=()=>1+Math.floor(Math.random()*6);
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v)), rIdx=r=>ROWS.indexOf(r), stepRow=(r,d)=>ROWS[rIdx(r)+d]||null, d6=()=>1+Math.floor(Math.random()*10);
 
 class Unit{
   constructor(side,type,num){
@@ -195,41 +195,66 @@ class Unit{
     this.order=Orders.UTRZYMAJ; this.flankGuard=false;
     this.hits=0; this.routed=false; this.bloodied=false; this.dead=false; this.escaped=false;
     this.didKill=false;
+
     this.formation = (type==='P~'?'SZACH' : type==='P□'?'CZWOR' : (type[0]==='K'?'KLIN':'LINIA'));
+
+    // NOWE: klin – bonus przy pierwszym ataku
+    this._wedgeFirstAttackDone = false;
   }
-  setTypeAndFormation(t){ this.type=t; this.formation = (t==='P~'?'SZACH' : t==='P□'?'CZWOR' : (t[0]==='K'?'KLIN':'LINIA')); }
+
+  setTypeAndFormation(t){
+    const prev = this.formation;           // NOWE
+    this.type=t;
+    this.formation = (t==='P~'?'SZACH' : t==='P□'?'CZWOR' : (t[0]==='K'?'KLIN':'LINIA'));
+
+    // NOWE: jeśli przechodzimy na KLIN z innej formacji, zresetuj „pierwszy atak”
+    if (this.formation==='KLIN' && prev!=='KLIN'){
+      this._wedgeFirstAttackDone = false;
+    }
+  }
 }
+
 
 class Game{
   constructor(){ this.map=this.emptyMap(); this.units=[]; this.weather=Weather.POGODNIE; this.step=0; this.finished=false; this.endMsg=''; }
   emptyMap(){ const m={}; ROWS.forEach(r=>{ m[r]={}; COLS.forEach(c=> m[r][c]=Terrain.PLAIN ); }); return m; }
-  randomMap(seed=123){
-    const R=()=>Math.random(); this.map=this.emptyMap();
-    // Woda/ford tylko w strefie bitwy (2–7), żeby bufory były czyste dla uciekinierów
-    if (R()<0.35){
-      const rr=ROWS[Math.floor(R()*ROWS.length)], sc=4+Math.floor(R()*2); // 4..5 start w środku
-      for(let c=sc;c<=BTL_MAX;c++) this.map[rr][c]=Terrain.WATER;
-      const fordCol = clamp(sc, BTL_MIN, BTL_MAX-1);
-      this.map[rr][fordCol]=Terrain.FORD;
-    }
-    // Lasy
-    for(let i=0,n=1+Math.floor(R()*3);i<n;i++){
-      const r=ROWS[Math.floor(R()*ROWS.length)], c=BTL_MIN+Math.floor(R()*(BTL_MAX-BTL_MIN+1));
-      this.map[r][c]=Terrain.FOREST; if (c<BTL_MAX && R()<0.6) this.map[r][c+1]=Terrain.FOREST;
-    }
-    // Bagna
-    for(let i=0,n=Math.floor(R()*3);i<n;i++){
-      const r=ROWS[Math.floor(R()*ROWS.length)], c=4+Math.floor(R()*3); // środek
-      const cc=clamp(c, BTL_MIN, BTL_MAX);
-      this.map[r][cc]=Terrain.BOG;
-    }
-    // Wzgórza
-    for(let i=0,n=1+Math.floor(R()*2);i<n;i++){
-      const r=ROWS[Math.floor(R()*ROWS.length)], c=2+Math.floor(R()*5);
-      const cc=clamp(c, BTL_MIN, BTL_MAX);
-      this.map[r][cc]=Terrain.HILL;
-    }
-  }
+	randomMap(seed=123){
+	  const R=()=>Math.random(); 
+	  this.map=this.emptyMap();
+
+	  // wiersze, na których NIE rozstawiamy graczy
+	  const waterRows = ROWS.filter(r => !SETUP_ROWS.includes(r));
+
+	  // Woda/ford tylko w strefie bitwy (2–7) i NIGDY na A/B/C
+	  if (R()<0.35 && waterRows.length){
+		const rr = waterRows[Math.floor(R()*waterRows.length)];
+		const sc = 4+Math.floor(R()*2); // 4..5 start w środku
+		for(let c=sc;c<=BTL_MAX;c++) this.map[rr][c]=Terrain.WATER;
+		const fordCol = clamp(sc, BTL_MIN, BTL_MAX-1);
+		this.map[rr][fordCol]=Terrain.FORD;
+	  }
+
+	  // Lasy (bez ograniczeń — mogą być na liniach startowych)
+	  for(let i=0,n=1+Math.floor(R()*3);i<n;i++){
+		const r=ROWS[Math.floor(R()*ROWS.length)], c=BTL_MIN+Math.floor(R()*(BTL_MAX-BTL_MIN+1));
+		this.map[r][c]=Terrain.FOREST; if (c<BTL_MAX && R()<0.6) this.map[r][c+1]=Terrain.FOREST;
+	  }
+
+	  // Bagna (w środku)
+	  for(let i=0,n=Math.floor(R()*3);i<n;i++){
+		const r=ROWS[Math.floor(R()*ROWS.length)], c=4+Math.floor(R()*3);
+		const cc=clamp(c, BTL_MIN, BTL_MAX);
+		this.map[r][cc]=Terrain.BOG;
+	  }
+
+	  // Wzgórza
+	  for(let i=0,n=1+Math.floor(R()*2);i<n;i++){
+		const r=ROWS[Math.floor(R()*ROWS.length)], c=2+Math.floor(R()*5);
+		const cc=clamp(c, BTL_MIN, BTL_MAX);
+		this.map[r][cc]=Terrain.HILL;
+	  }
+	}
+
   start({attacker=["K","P","P"],defender=["P~","P","K"],weather='pogodnie',seed=123}={}){
     this.weather=weather; this.step=0; this.finished=false; this.endMsg=''; this.units=[]; this.randomMap(seed);
     const addSide=(s,arr)=>{ let p=0,k=0; arr.forEach(t=>{ let type=(t==='P~'||t==='P□')?t:t.toUpperCase(); if (type==='P[]'||type==='P#') type='P□'; const n=type[0]==='K'? ++k : ++p; this.units.push(new Unit(s,type,n)); }); };
@@ -274,55 +299,121 @@ adjEnemies(u){
     else { victim.bloodied=true; victim.routed=false; log(`   ✚ ${victim.type[0]}${victim.num}(${victim.side}) POZOSTAJE (krwawi).`); }
   }
 
-  /* ===== Walka z modyfikatorami ===== */
-  combat(att,def,ctx,log){
-    if(att.dead||def.dead||att.escaped||def.escaped) return;
-	if(att.routed||def.routed) return; 
+	/* ===== Walka z modyfikatorami ===== */
+	combat(att,def,ctx,log){
+	  if(att.dead||def.dead||att.escaped||def.escaped) return;
+	  if(att.routed||def.routed) return; 
 
-    let attNeed=5,defNeed=5;
-    const modA=[], modD=[];
-    const tTo=this.map[ctx.to.row][ctx.to.col];
-    const isCavA=att.type[0]==='K',isCavD=def.type[0]==='K';
+	  let attNeed=8,defNeed=8;
+	  const modA=[], modD=[];
+	  const tTo=this.map[ctx.to.row][ctx.to.col];
+	  const isCavA=att.type[0]==='K',isCavD=def.type[0]==='K';
 
-    const cavPenalty=(ter)=>{ let pen=0; if(ter==='L'||ter==='B') pen=Math.max(pen,2); if(this.weather==='bloto') pen=Math.max(pen,2); else if(this.weather==='deszcz') pen=Math.max(pen,1); return pen; };
-    if(isCavA){ const p=cavPenalty(tTo); if(p){ attNeed+=p; modA.push(`+${p} kawaleria w ${nameTer(tTo)} / pogoda`); } }
-    if(isCavD){ const p=cavPenalty(this.map[def.row][def.col]); if(p){ defNeed+=p; modD.push(`+${p} kawaleria w ${nameTer(this.map[def.row][def.col])} / pogoda`); } }
+	  // Kawaleria: kary za teren/pogodę
+	  const cavPenalty=(ter)=>{ 
+		let pen=0; 
+		if(ter==='L'||ter==='B') pen=Math.max(pen,2); 
+		if(this.weather==='bloto') pen=Math.max(pen,2); 
+		else if(this.weather==='deszcz') pen=Math.max(pen,1); 
+		return pen; 
+	  };
+	  if(isCavA){ const p=cavPenalty(tTo); if(p){ attNeed+=p; modA.push(`+${p} kawaleria w ${nameTer(tTo)} / pogoda`); } }
+	  if(isCavD){ const p=cavPenalty(this.map[def.row][def.col]); if(p){ defNeed+=p; modD.push(`+${p} kawaleria w ${nameTer(this.map[def.row][def.col])} / pogoda`); } }
 
-    if(att.order===Orders.SZARZA && tTo==='.' && this.weather==='pogodnie'){ attNeed--; modA.push(`−1 szarża na równinie (pogodnie)`); }
+	  // Szarża piech./kaw. na równinie przy pogodnie
+	  if(att.order===Orders.SZARZA && tTo==='.' && this.weather==='pogodnie'){ 
+		attNeed--; 
+		modA.push(`−1 szarża na równinie (pogodnie)`); 
+	  }
 
-    const flank=ctx.flank || this.isFlank(att,def,ctx);
-    if(flank && !def.flankGuard){ attNeed--; modA.push(`−1 atak z flanki/tyłu`); }
-    if(flank && def.flankGuard){ modD.push(`0 osłona skrzydła`); }
+	  // Flanka/tył
+	  const flank=ctx.flank || this.isFlank(att,def,ctx);
+	  if(flank && !def.flankGuard){ attNeed--; modA.push(`−1 atak z flanki/tyłu`); }
+	  if(flank && def.flankGuard){ modD.push(`0 osłona skrzydła`); }
 
-    if(this.map[def.row][def.col]==='W'){ defNeed--; attNeed++; modD.push(`−1 obrona na wzgórzu`); modA.push(`+1 atak pod górę`); }
-    if(this.map[def.row][def.col]==='=' && this.isFrontal(att,def)){ defNeed-=2; attNeed++; modD.push(`−2 obrona na brodzie`); modA.push(`+1 atak na brodzie`); }
-    if(def.type==='P~' && this.map[def.row][def.col]==='L'){ defNeed--; modD.push(`−1 piechota-szach w lesie`); }
-    if(att.type==='P~' && tTo==='L'){ attNeed--; modA.push(`−1 piechota-szach idzie w las`); }
-    if(def.type==='P□' && isCavA){ defNeed--; modD.push(`−1 czworobok vs kawaleria`); }
+	  // Wzgórza, bród
+	  if(this.map[def.row][def.col]==='W'){ 
+		defNeed--; attNeed++; 
+		modD.push(`−1 obrona na wzgórzu`); 
+		modA.push(`+1 atak pod górę`); 
+	  }
+	  if(this.map[def.row][def.col]==='=' && this.isFrontal(att,def)){ 
+		defNeed-=2; attNeed++; 
+		modD.push(`−2 obrona na brodzie`); 
+		modA.push(`+1 atak na brodzie`); 
+	  }
 
-    const defAdjEnemies = this.adjEnemies(def);
-    if(defAdjEnemies.length>=2){
-      defNeed+=2; attNeed--; modD.push(`+2 okrążenie`); modA.push(`−1 okrążenie`);
-    }
+	  // Piechota-szach sprzyja się w lesie (jak u Ciebie)
+	  if(def.type==='P~' && this.map[def.row][def.col]==='L'){ defNeed--; modD.push(`−1 piechota-szach w lesie`); }
+	  if(att.type==='P~' && tTo==='L'){ attNeed--; modA.push(`−1 piechota-szach idzie w las`); }
 
-    attNeed=clamp(attNeed,2,6); defNeed=clamp(defNeed,2,6);
+	  // Czworobok broni się lepiej vs kawaleria (jak u Ciebie)
+	  if(def.type==='P□' && isCavA){ defNeed--; modD.push(`−1 czworobok vs kawaleria`); }
 
-    const rA=d6(), rD=d6();
-    const aHit=rA>=attNeed && !att.didKill;
-    const dHit=rD>=defNeed && !def.didKill;
+	  // Okrążenie (≥2 wrogów przy obrońcy)
+	  const defAdjEnemies = this.adjEnemies(def);
+	  if(defAdjEnemies.length>=2){
+		defNeed+=2; attNeed--; 
+		modD.push(`+2 okrążenie`); 
+		modA.push(`−1 okrążenie`);
+	  }
 
-    log(`Starcie ${att.type[0]}${att.num}(${att.side}) ▶ ${def.type[0]}${def.num}(${def.side})`);
-    log(`  A: potrzeba ≥${attNeed} [${modA.length?modA.join('; '):'brak modyf.'}] | rzut=${rA}`);
-    log(`  O: potrzeba ≥${defNeed} [${modD.length?modD.join('; '):'brak modyf.'}] | rzut=${rD}`);
+	  /* ==== Formacje: klin + kontra piechota vs linia piechoty ==== */
 
-    if(aHit && dHit) log(`  → WYNIK: OBIE strony trafione.`);
-    else if(aHit)    log(`  → WYNIK: A trafił | O pudłuje.`);
-    else if(dHit)    log(`  → WYNIK: O trafił | A pudłuje.`);
-    else             log(`  → WYNIK: nikt nie trafił.`);
+	  // KLIN (tylko gdy to on ATAKUJE)
+	  if (att.formation === 'KLIN'){
+		if (!att._wedgeFirstAttackDone){
+		  attNeed -= 2; 
+		  modA.push('−2 klin: pierwszy atak');
+		  att._wedgeFirstAttackDone = true;
+		} else {
+		  attNeed += 1; 
+		  modA.push('+1 klin: kolejne ataki');
+		}
+	  }
 
-    if(aHit){ this.registerHit(def, log); att.didKill=true; }
-    if(dHit){ this.registerHit(att, log); def.didKill=true; }
-  }
+	  // Pomocniki do rozpoznawania piechoty/kawalerii w liniach
+	  const isInfLine  = u => u.formation === 'LINIA' && u.type[0] === 'P';
+	  const isInfSquare= u => u.formation === 'CZWOR' && u.type[0] === 'P';
+	  const isInfSzach = u => u.formation === 'SZACH'  && u.type[0] === 'P';
+
+	  // KARA tylko w starciu z LINIĄ PIECHOTY (P w LINIA). 
+	  // LINIA KAWALERII (K w LINIA) NIE uruchamia kary.
+
+	  // Atakujący: P□ / P~ kontra linia piechoty
+	  if ((isInfSquare(att) || isInfSzach(att)) && isInfLine(def)){
+		attNeed += 1;
+		modA.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
+	  }
+
+	  // Broniący: P□ / P~ kontra linia piechoty
+	  if ((isInfSquare(def) || isInfSzach(def)) && isInfLine(att)){
+		defNeed += 1;
+		modD.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
+	  }
+
+	  // Przytnij do 2..10 (k6)
+	  attNeed=clamp(attNeed,2,10); 
+	  defNeed=clamp(defNeed,2,10);
+
+	  // Rzuty i wynik
+	  const rA=d6(), rD=d6();
+	  const aHit=rA>=attNeed && !att.didKill;
+	  const dHit=rD>=defNeed && !def.didKill;
+
+	  log(`Starcie ${att.type[0]}${att.num}(${att.side}) ▶ ${def.type[0]}${def.num}(${def.side})`);
+	  log(`  A: potrzeba ≥${attNeed} [${modA.length?modA.join('; '):'brak modyf.'}] | rzut=${rA}`);
+	  log(`  O: potrzeba ≥${defNeed} [${modD.length?modD.join('; '):'brak modyf.'}] | rzut=${rD}`);
+
+	  if(aHit && dHit) log(`  → WYNIK: OBIE strony trafione.`);
+	  else if(aHit)    log(`  → WYNIK: A trafił | O pudłuje.`);
+	  else if(dHit)    log(`  → WYNIK: O trafił | A pudłuje.`);
+	  else             log(`  → WYNIK: nikt nie trafił.`);
+
+	  if(aHit){ this.registerHit(def, log); att.didKill=true; }
+	  if(dHit){ this.registerHit(att, log); def.didKill=true; }
+	}
+
 
   isFlank(att,def,ctx){ const dr=rIdx(ctx.from.row)-rIdx(def.row), dc=ctx.from.col-def.col; const back=(ORIENT[def.side]===+1? dc<0: dc>0); return dr!==0 || back; }
   isFrontal(att,def){ const dc=att.col-def.col; return (ORIENT[def.side]===+1 ? dc<0 : dc>0); }
