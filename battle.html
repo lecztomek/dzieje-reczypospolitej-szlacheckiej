@@ -214,6 +214,8 @@ class Unit{
 
 /* ===== Pomoc diagnostyczna dla ruchu ===== */
 const cellStr = (r,c)=> `${r}${c}`;
+const unitKey = (u) => `${u.side}:${u.type}:${u.num}`; // np. "A:K:1", "O:P□:2"
+
 function whyBlocked(G, u, t, {respectBattleZone=true} = {}){
   if (!t || !t.row)         return { blocked:true, reason:'brak kafla (krawędź planszy)' };
   if (t.col < COLS[0] || t.col > COLS[COLS.length-1])
@@ -269,6 +271,29 @@ class Game{
       this.map[r][cc]=Terrain.HILL;
     }
   }
+  
+	advanceDir(u){
+	  // Domyślny kierunek (A: +1, O: -1)
+	  const def = ORIENT[u.side];
+
+	  // Bierzemy pod uwagę tylko zdolnych do walki wrogów (ignoruj routed/escaped/dead)
+	  const foes = this.units.filter(x =>
+		!x.dead && !x.escaped && !x.routed && x.side !== u.side
+	  );
+
+	  if (!foes.length) return def;
+
+	  // Czy ktoś jest "z przodu" względem domyślnego kierunku?
+	  const anyForward  = foes.some(f => def === +1 ? (f.col >= u.col) : (f.col <= u.col));
+	  // Czy ktoś jest "z tyłu"?
+	  const anyBackward = foes.some(f => def === +1 ? (f.col <  u.col) : (f.col >  u.col));
+
+	  // Jeśli z przodu brak, a z tyłu są — zawróć
+	  if (!anyForward && anyBackward) return -def;
+
+	  return def;
+	}
+
 
   start({attacker=["K","P","P"],defender=["P~","P","K"],weather='pogodnie',seed=123}={}){
     this.weather=weather; this.step=0; this.finished=false; this.endMsg=''; this.units=[]; this.randomMap(seed);
@@ -513,19 +538,18 @@ Obrońca (O):
 	const engaged = new Set();
 	const pairs = [];
 
-	// zbierz wszystkie pary w kontakcie (N/S/E/W), bez duplikatów
 	for (const u of this.units.filter(x => !x.dead && !x.escaped && !x.routed)) {
 	  const adj = this.adjEnemies(u);
 	  for (const e of adj) {
-		const key = [u.side, u.num, e.side, e.num].sort().join('|');
+		const key = [unitKey(u), unitKey(e)].sort().join('|'); // unikalny klucz pary
 		if (!pairs.find(p => p.key === key)) pairs.push({ a: u, b: e, key });
 	  }
 	}
 
-	// jednostki w kontakcie nie poruszają się w tej turze – zaznacz wszystkich
+	// zaznacz uczestników kontaktu
 	for (const { a, b } of pairs) {
-	  engaged.add(`${a.side}:${a.num}`);
-	  engaged.add(`${b.side}:${b.num}`);
+	  engaged.add(unitKey(a));
+	  engaged.add(unitKey(b));
 	}
 
 	// rozdziel pary na frontalne i pozostałe
@@ -557,29 +581,64 @@ Obrońca (O):
     log('1) UCIECZKI');
     this.units.filter(u=>!u.dead && !u.escaped && u.routed).forEach(u=> this.retreatStep(u));
 
-    // 2) Ruch (bez nowych starć)
-    log('2) RUCH (bez nowych starć)');
+	// 2) RUCH (bez nowych starć)
+	log('2) RUCH (bez nowych starć)');
 
-    // Wyjaśnienia, czemu część stoi w tej fazie
-    this.units
-      .filter(u => !u.dead && !u.escaped)
-      .forEach(u => {
-        const key = `${u.side}:${u.num}`;
-        if (u.routed){
-          log(`(stoi ${u.type[0]}${u.num}(${u.side}): w ucieczce)`);
-        } else if (engaged.has(key)){
-          log(`(stoi ${u.type[0]}${u.num}(${u.side}): był w kontakcie w tej turze)`);
-        } else if (u.order === Orders.UTRZYMAJ){
-          log(`(stoi ${u.type[0]}${u.num}(${u.side}): rozkaz UTRZYMAJ)`);
-        }
-      });
+	this.units
+	  .filter(u => !u.dead && !u.escaped)
+	  .forEach(u => {
+		if (u.routed){
+		  log(`(stoi ${u.type[0]}${u.num}(${u.side}): w ucieczce)`);
+		} else if (engaged.has(unitKey(u))){
+		  log(`(stoi ${u.type[0]}${u.num}(${u.side}): był w kontakcie w tej turze)`);
+		} else if (u.order === Orders.UTRZYMAJ){
+		  log(`(stoi ${u.type[0]}${u.num}(${u.side}): rozkaz UTRZYMAJ)`);
+		}
+	  });
 
-    const prio=[Orders.SZARZA,Orders.NAPRZOD,Orders.SKOS_L,Orders.SKOS_P,Orders.PRZES_L,Orders.PRZES_P,Orders.PRZECHWYC];
 
-    for(const p of prio){
-      const movers=this.units.filter(u=>!u.dead && !u.escaped && !u.routed && u.order===p && !engaged.has(`${u.side}:${u.num}`));
-      for(const u of movers){ this.applyMove(u,log); if(this.finished){ log(this.endMsg); return true; } }
-    }
+	const prio = [Orders.SZARZA, Orders.NAPRZOD, Orders.SKOS_L, Orders.SKOS_P, Orders.PRZES_L, Orders.PRZES_P, Orders.PRZECHWYC];
+
+	const canTryMove = (u) =>
+	  !u.dead && !u.escaped && !u.routed && !engaged.has(unitKey(u));
+
+	const moved = new Set();
+	const markMoved   = (u) => moved.add(unitKey(u));
+	const notMovedYet = (u) => !moved.has(unitKey(u));
+
+	const isCav = (u) => u.type[0] === 'K';
+	const isInf = (u) => u.type[0] === 'P';
+
+
+	const runWave = (filterFn, label) => {
+	  if (label) log(`(fala ruchu: ${label})`);
+	  for (const p of prio) {
+		// **opcjonalne sortowanie**: np. numerem (od mniejszych do większych)
+		const group = this.units
+		  .filter(u => canTryMove(u) && notMovedYet(u) && filterFn(u) && u.order === p)
+		  .sort((a,b) => a.num - b.num);
+
+		for (const u of group) {
+		  const ok = this.applyMove(u, log);
+		  if (ok) markMoved(u);   // oznaczamy jako ruszone TYLKO gdy faktycznie się poruszył
+		  if (this.finished) { log(this.endMsg); return true; }
+		}
+	  }
+	  return false;
+	};
+
+	// 1) Kawaleria atakującego
+	if (runWave(u => u.side==='A' && isCav(u), 'kawaleria A')) return true;
+	// 2) Kawaleria obrońcy
+	if (runWave(u => u.side==='O' && isCav(u), 'kawaleria O')) return true;
+	// 3) Piechota atakującego
+	if (runWave(u => u.side==='A' && isInf(u), 'piechota A')) return true;
+	// 4) Piechota obrońcy
+	if (runWave(u => u.side==='O' && isInf(u), 'piechota O')) return true;
+	// 5) Pozostali (druga szansa po „odkorkowaniu”)
+	if (runWave(u => true, 'pozostali')) return true;
+
+
 
     // 3) Autokońiec, jeśli brak zdolnych do walki
     if (this.autoFinishIfNoActives()){ return true; }
@@ -591,79 +650,82 @@ Obrońca (O):
   distToEnemy(u){ const foes=this.units.filter(x=>!x.dead && !x.escaped && x.side!==u.side); if(!foes.length) return 999;
     return foes.map(f=>Math.abs(rIdx(u.row)-rIdx(f.row))+Math.abs(u.col-f.col)).sort((a,b)=>a-b)[0]; }
 
-  applyMove(u,log){
-    const dir=ORIENT[u.side];
-    const tryGo = (r,c,opts)=> this.tryMove(u,r,c,opts);
+	applyMove(u, log){
+	  const dir = this.advanceDir(u);
+	  let didMove = false;
 
-    const canEnter = (t) => {
-      if (!t || !t.row) return false;
-      if (t.col < COLS[0] || t.col > COLS[COLS.length-1]) return false;
-      if (this.map[t.row][t.col] === Terrain.WATER) return false;
-      return true;
-    };
+	  const tryGo = (r,c,opts)=> this.tryMove(u,r,c,opts);
 
-    // Wrapper: diagnozuje blokadę i loguje udany ruch
-    const tryMoveWithWhy = (target, {respectBattleZone=true}={})=>{
-      const info = whyBlocked(this, u, target, {respectBattleZone});
-      if (info.blocked){
-        log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): ${info.reason})`);
-        return false;
-      }
-      const from = cellStr(u.row,u.col), to = cellStr(target.row,target.col);
-      if (this.tryMove(u, target.row, target.col, {respectBattleZone})){
-        log(`ruch ${u.type[0]}${u.num}(${u.side}): ${from} → ${to}`);
-        return true;
-      }
-      log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): nie można wejść na ${to})`);
-      return false;
-    };
+	  const canEnter = (t) => {
+		if (!t || !t.row) return false;
+		if (t.col < COLS[0] || t.col > COLS[COLS.length-1]) return false;
+		if (this.map[t.row][t.col] === Terrain.WATER) return false;
+		return true;
+	  };
 
-    const targetFor = (ord)=>{
-      switch(ord){
-        case Orders.NAPRZOD: return {row:u.row, col:u.col+dir};
-        case Orders.SZARZA:  return {row:u.row, col:u.col+dir};
-        case Orders.SKOS_L:  return {row:stepRow(u.row,-1), col:u.col+dir};
-        case Orders.SKOS_P:  return {row:stepRow(u.row,+1), col:u.col+dir};
-        case Orders.PRZES_L: return {row:u.row, col:u.col-1};
-        case Orders.PRZES_P: return {row:u.row, col:u.col+1};
-        case Orders.PRZECHWYC:{
-          const fwd=this.unitAt(u.row,u.col+dir);
-          return fwd ? {row:u.row, col:u.col} : {row:u.row, col:u.col+dir};
-        }
-        default: return {row:u.row, col:u.col};
-      }
-    };
+	  const tryMoveWithWhy = (target, {respectBattleZone=true}={})=>{
+		const info = whyBlocked(this, u, target, {respectBattleZone});
+		if (info.blocked){
+		  log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): ${info.reason})`);
+		  return false;
+		}
+		const from = cellStr(u.row,u.col), to = cellStr(target.row,target.col);
+		if (this.tryMove(u, target.row, target.col, {respectBattleZone})){
+		  log(`ruch ${u.type[0]}${u.num}(${u.side}): ${from} → ${to}`);
+		  didMove = true;
+		  return true;
+		}
+		log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): nie można wejść na ${to})`);
+		return false;
+	  };
 
-    const isDiagonal = (u.order===Orders.SKOS_L || u.order===Orders.SKOS_P);
-    let tgt = targetFor(u.order);
+	  const targetFor = (ord)=>{
+		switch(ord){
+		  case Orders.NAPRZOD: return {row:u.row, col:u.col+dir};
+		  case Orders.SZARZA:  return {row:u.row, col:u.col+dir};
+		  case Orders.SKOS_L:  return {row:stepRow(u.row,-1), col:u.col+dir};
+		  case Orders.SKOS_P:  return {row:stepRow(u.row,+1), col:u.col+dir};
+		  case Orders.PRZES_L: return {row:u.row, col:u.col-1};
+		  case Orders.PRZES_P: return {row:u.row, col:u.col+1};
+		  case Orders.PRZECHWYC:{
+			const fwd=this.unitAt(u.row,u.col+dir);
+			return fwd ? {row:u.row, col:u.col} : {row:u.row, col:u.col+dir};
+		  }
+		  default: return {row:u.row, col:u.col};
+		}
+	  };
 
-    if (isDiagonal){
-      // kolejność: primary → alt → forward → pionowe docięcie
-      const dCol = dir;
-      const dRowPref = (u.order===Orders.SKOS_L ? -1 : +1);
-      const rowPref = stepRow(u.row, dRowPref);      // preferowany skos
-      const rowAlt  = stepRow(u.row, -dRowPref);     // alternatywny skos (odwrócony)
-      const primary = rowPref ? {row: rowPref, col: u.col + dCol} : null;
-      const alt     = rowAlt  ? {row: rowAlt,  col: u.col + dCol} : null;
-      const forward = {row: u.row, col: u.col + dCol};
+	  const isDiagonal = (u.order===Orders.SKOS_L || u.order===Orders.SKOS_P);
+	  let tgt = targetFor(u.order);
 
-      if (primary && tryMoveWithWhy(primary)) return;
-      if (alt     && tryMoveWithWhy(alt))     return;
-      if (tryMoveWithWhy(forward))            return;
+	  if (isDiagonal){
+		const dCol = dir;
+		const dRowPref = (u.order===Orders.SKOS_L ? -1 : +1);
+		const rowPref = stepRow(u.row, dRowPref);
+		const rowAlt  = stepRow(u.row, -dRowPref);
+		const primary = rowPref ? {row: rowPref, col: u.col + dCol} : null;
+		const alt     = rowAlt  ? {row: rowAlt,  col: u.col + dCol} : null;
+		const forward = {row: u.row, col: u.col + dCol};
 
-      const upDown1 = rowPref ? {row: rowPref, col: u.col} : null;
-      const upDown2 = rowAlt  ? {row: rowAlt,  col: u.col} : null;
+		if (primary && tryMoveWithWhy(primary)) return true;
+		if (alt     && tryMoveWithWhy(alt))     return true;
+		if (tryMoveWithWhy(forward))            return true;
 
-      if (upDown1 && tryMoveWithWhy(upDown1)) return;
-      if (upDown2 && tryMoveWithWhy(upDown2)) return;
+		const upDown1 = rowPref ? {row: rowPref, col: u.col} : null;
+		const upDown2 = rowAlt  ? {row: rowAlt,  col: u.col} : null;
 
-      // wszystko zablokowane
-      return;
-    }
+		if (upDown1 && tryMoveWithWhy(upDown1)) return true;
+		if (upDown2 && tryMoveWithWhy(upDown2)) return true;
 
-    // ruch prosty / przechwyty
-    tryMoveWithWhy(tgt);
-  }
+		return false;
+	  }
+
+	  // Ruch prosty / przechwyty
+	  tryMoveWithWhy(tgt);
+
+	  return didMove;
+	}
+
 
 }
 
