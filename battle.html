@@ -32,27 +32,25 @@
   .f-linia{ border-radius:999px; width:58px; height:34px; }
   .f-czwor{ width:42px; height:42px; border-radius:8px; }
   .f-szach{ width:42px; height:42px; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
-	/* Klin jako normalny kontener + clip-path (łatwe centrowanie literki) */
-	.f-klin{
-	  width:46px; height:44px; border-radius:0; background:transparent;
-	  box-shadow:0 6px 16px #0008; border:2px solid #0008;
-	}
-
-	/* A (czerwony) szpic w PRAWO, O (niebieski) szpic w LEWO */
-	.A.f-klin{
-	  background:linear-gradient(#d31b1b,#8f1212);
-	  clip-path: polygon(0 0, 100% 50%, 0 100%);           /* ► */
-	}
-	.O.f-klin{
-	  background:linear-gradient(#2e62ff,#1942c9);
-	  clip-path: polygon(100% 0, 0 50%, 100% 100%);        /* ◄ */
-	}
-
-	/* Literka w klinie – NIE absolute; centrowanie bierze się z flexa rodzica .unit */
-	.f-klin .letter{
-	  position:static;           /* było: absolute */
-	  width:auto; height:auto;   /* nie potrzebne sztuczne wymiary */
-	}
+  /* Klin jako normalny kontener + clip-path (łatwe centrowanie literki) */
+  .f-klin{
+    width:46px; height:44px; border-radius:0; background:transparent;
+    box-shadow:0 6px 16px #0008; border:2px solid #0008;
+  }
+  /* A (czerwony) szpic w PRAWO, O (niebieski) szpic w LEWO */
+  .A.f-klin{
+    background:linear-gradient(#d31b1b,#8f1212);
+    clip-path: polygon(0 0, 100% 50%, 0 100%);           /* ► */
+  }
+  .O.f-klin{
+    background:linear-gradient(#2e62ff,#1942c9);
+    clip-path: polygon(100% 0, 0 50%, 100% 100%);        /* ◄ */
+  }
+  /* Literka w klinie – NIE absolute; centrowanie bierze się z flexa rodzica .unit */
+  .f-klin .letter{
+    position:static;
+    width:auto; height:auto;
+  }
 
   /* Odznaki */
   .flag{ position:absolute; top:2px; left:2px; width:0; height:0; border-left:10px solid #ddd; border-top:6px solid transparent; border-bottom:6px solid transparent; filter:drop-shadow(0 1px 0 #000a); }
@@ -71,18 +69,17 @@
   .tag{padding:2px 8px;border-radius:8px;background:#0e1330;border:1px solid #313867}
   .pill{padding:2px 8px;border-radius:999px;background:#0e1330;border:1px solid #313867; font-size:12px}
   
-	.stepper { display:flex; align-items:center; gap:8px; }
-	.stepper .gap { width:16px; }
-	.stepper-label { opacity:.85; margin-right:4px; }
-	.btn-step{
-	  width:28px; height:28px; line-height:26px; padding:0;
-	  display:inline-flex; align-items:center; justify-content:center;
-	  border-radius:8px; border:1px solid #4250a9; background:#1f2760; font-weight:900;
-	}
-	.stepper-val{
-	  min-width:22px; text-align:center; font-weight:800; display:inline-block;
-	}
-
+  .stepper { display:flex; align-items:center; gap:8px; }
+  .stepper .gap { width:16px; }
+  .stepper-label { opacity:.85; margin-right:4px; }
+  .btn-step{
+    width:28px; height:28px; line-height:26px; padding:0;
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:8px; border:1px solid #4250a9; background:#1f2760; font-weight:900;
+  }
+  .stepper-val{
+    min-width:22px; text-align:center; font-weight:800; display:inline-block;
+  }
 </style>
 </head>
 <body>
@@ -115,45 +112,45 @@
   </div>
 
   <div class="side">
-	<div class="sec">
-	  <h3>Skład armii</h3>
+    <div class="sec">
+      <h3>Skład armii</h3>
 
-	  <!-- ATAKUJĄCY -->
-	  <div class="row">
-		<label style="min-width:90px">Atakujący:</label>
-		<div class="stepper" data-side="A">
-		  <span class="stepper-label">P:</span>
-		  <button class="btn-step" data-type="P" data-delta="-1">−</button>
-		  <span class="stepper-val" id="A-P">2</span>
-		  <button class="btn-step" data-type="P" data-delta="1">+</button>
-		  <span class="gap"></span>
-		  <span class="stepper-label">K:</span>
-		  <button class="btn-step" data-type="K" data-delta="-1">−</button>
-		  <span class="stepper-val" id="A-K">1</span>
-		  <button class="btn-step" data-type="K" data-delta="1">+</button>
-		</div>
-	  </div>
+      <!-- ATAKUJĄCY -->
+      <div class="row">
+        <label style="min-width:90px">Atakujący:</label>
+        <div class="stepper" data-side="A">
+          <span class="stepper-label">P:</span>
+          <button class="btn-step" data-type="P" data-delta="-1">−</button>
+          <span class="stepper-val" id="A-P">2</span>
+          <button class="btn-step" data-type="P" data-delta="1">+</button>
+          <span class="gap"></span>
+          <span class="stepper-label">K:</span>
+          <button class="btn-step" data-type="K" data-delta="-1">−</button>
+          <span class="stepper-val" id="A-K">1</span>
+          <button class="btn-step" data-type="K" data-delta="1">+</button>
+        </div>
+      </div>
 
-	  <!-- OBRONCA -->
-	  <div class="row">
-		<label style="min-width:90px">Obrońca:</label>
-		<div class="stepper" data-side="O">
-		  <span class="stepper-label">P:</span>
-		  <button class="btn-step" data-type="P" data-delta="-1">−</button>
-		  <span class="stepper-val" id="O-P">2</span>
-		  <button class="btn-step" data-type="P" data-delta="1">+</button>
-		  <span class="gap"></span>
-		  <span class="stepper-label">K:</span>
-		  <button class="btn-step" data-type="K" data-delta="-1">−</button>
-		  <span class="stepper-val" id="O-K">1</span>
-		  <button class="btn-step" data-type="K" data-delta="1">+</button>
-		</div>
-	  </div>
+      <!-- OBRONCA -->
+      <div class="row">
+        <label style="min-width:90px">Obrońca:</label>
+        <div class="stepper" data-side="O">
+          <span class="stepper-label">P:</span>
+          <button class="btn-step" data-type="P" data-delta="-1">−</button>
+          <span class="stepper-val" id="O-P">2</span>
+          <button class="btn-step" data-type="P" data-delta="1">+</button>
+          <span class="gap"></span>
+          <span class="stepper-label">K:</span>
+          <button class="btn-step" data-type="K" data-delta="-1">−</button>
+          <span class="stepper-val" id="O-K">1</span>
+          <button class="btn-step" data-type="K" data-delta="1">+</button>
+        </div>
+      </div>
 
-	  <div class="row">
-		<button id="btnApplyArmy">Zastosuj składy</button>
-	  </div>
-	</div>
+      <div class="row">
+        <button id="btnApplyArmy">Zastosuj składy</button>
+      </div>
+    </div>
 
     <div class="sec" id="editBox" style="display:none">
       <h3>Edycja zaznaczonej jednostki</h3>
@@ -215,45 +212,63 @@ class Unit{
 }
 
 
+/* ===== Pomoc diagnostyczna dla ruchu ===== */
+const cellStr = (r,c)=> `${r}${c}`;
+function whyBlocked(G, u, t, {respectBattleZone=true} = {}){
+  if (!t || !t.row)         return { blocked:true, reason:'brak kafla (krawędź planszy)' };
+  if (t.col < COLS[0] || t.col > COLS[COLS.length-1])
+                           return { blocked:true, reason:'poza planszą' };
+  if (respectBattleZone && (t.col < BTL_MIN || t.col > BTL_MAX))
+                           return { blocked:true, reason:'poza strefą bitwy (2–7)' };
+  if (G.map[t.row][t.col] === Terrain.WATER)
+                           return { blocked:true, reason:`woda na ${cellStr(t.row,t.col)}` };
+	const ally = G.unitAt(t.row, t.col);
+	if (ally && ally === u) return { blocked:false, reason:'' }; // to jest ten sam żeton
+  if (ally && ally.side === u.side && !ally.dead && !ally.escaped)
+                           return { blocked:true, reason:`sojusznik na ${cellStr(t.row,t.col)}` };
+  const foe  = G.enemyAt(t.row, t.col, u.side);
+  if (foe)                  return { blocked:true, reason:`wróg na ${cellStr(t.row,t.col)} (walka tylko w fazie 0)` };
+  return { blocked:false, reason:'' };
+}
+
+
 class Game{
   constructor(){ this.map=this.emptyMap(); this.units=[]; this.weather=Weather.POGODNIE; this.step=0; this.finished=false; this.endMsg=''; }
   emptyMap(){ const m={}; ROWS.forEach(r=>{ m[r]={}; COLS.forEach(c=> m[r][c]=Terrain.PLAIN ); }); return m; }
-	randomMap(seed=123){
-	  const R=()=>Math.random(); 
-	  this.map=this.emptyMap();
+  randomMap(seed=123){
+    const R=()=>Math.random(); 
+    this.map=this.emptyMap();
 
-	  // wiersze, na których NIE rozstawiamy graczy
-	  const waterRows = ROWS.filter(r => !SETUP_ROWS.includes(r));
+    // wiersze, na których NIE rozstawiamy graczy
+    const waterRows = ROWS.filter(r => !SETUP_ROWS.includes(r));
 
-	  // Woda/ford tylko w strefie bitwy (2–7) i NIGDY na A/B/C
-	  if (R()<0.35 && waterRows.length){
-		const rr = waterRows[Math.floor(R()*waterRows.length)];
-		const sc = 4+Math.floor(R()*2); // 4..5 start w środku
-		for(let c=sc;c<=BTL_MAX;c++) this.map[rr][c]=Terrain.WATER;
-		const fordCol = clamp(sc, BTL_MIN, BTL_MAX-1);
-		this.map[rr][fordCol]=Terrain.FORD;
-	  }
+    // Woda/ford tylko w strefie bitwy (2–7) i NIGDY na A/B/C
+    if (R()<0.35 && waterRows.length){
+      const rr = waterRows[Math.floor(R()*waterRows.length)];
+      const sc = 4+Math.floor(R()*2); // 4..5 start w środku
+      for(let c=sc;c<=BTL_MAX;c++) this.map[rr][c]=Terrain.WATER;
+      const fordCol = clamp(sc, BTL_MIN, BTL_MAX-1);
+      this.map[rr][fordCol]=Terrain.FORD;
+    }
 
-	  // Lasy (bez ograniczeń — mogą być na liniach startowych)
-	  for(let i=0,n=1+Math.floor(R()*3);i<n;i++){
-		const r=ROWS[Math.floor(R()*ROWS.length)], c=BTL_MIN+Math.floor(R()*(BTL_MAX-BTL_MIN+1));
-		this.map[r][c]=Terrain.FOREST; if (c<BTL_MAX && R()<0.6) this.map[r][c+1]=Terrain.FOREST;
-	  }
-
-	  // Bagna (w środku)
-	  for(let i=0,n=Math.floor(R()*3);i<n;i++){
-		const r=ROWS[Math.floor(R()*ROWS.length)], c=4+Math.floor(R()*3);
-		const cc=clamp(c, BTL_MIN, BTL_MAX);
-		this.map[r][cc]=Terrain.BOG;
-	  }
-
-	  // Wzgórza
-	  for(let i=0,n=1+Math.floor(R()*2);i<n;i++){
-		const r=ROWS[Math.floor(R()*ROWS.length)], c=2+Math.floor(R()*5);
-		const cc=clamp(c, BTL_MIN, BTL_MAX);
-		this.map[r][cc]=Terrain.HILL;
-	  }
-	}
+    // Lasy
+    for(let i=0,n=1+Math.floor(R()*3);i<n;i++){
+      const r=ROWS[Math.floor(R()*ROWS.length)], c=BTL_MIN+Math.floor(R()*(BTL_MAX-BTL_MIN+1));
+      this.map[r][c]=Terrain.FOREST; if (c<BTL_MAX && R()<0.6) this.map[r][c+1]=Terrain.FOREST;
+    }
+    // Bagna (w środku)
+    for(let i=0,n=Math.floor(R()*3);i<n;i++){
+      const r=ROWS[Math.floor(R()*ROWS.length)], c=4+Math.floor(R()*3);
+      const cc=clamp(c, BTL_MIN, BTL_MAX);
+      this.map[r][cc]=Terrain.BOG;
+    }
+    // Wzgórza
+    for(let i=0,n=1+Math.floor(R()*2);i<n;i++){
+      const r=ROWS[Math.floor(R()*ROWS.length)], c=2+Math.floor(R()*5);
+      const cc=clamp(c, BTL_MIN, BTL_MAX);
+      this.map[r][cc]=Terrain.HILL;
+    }
+  }
 
   start({attacker=["K","P","P"],defender=["P~","P","K"],weather='pogodnie',seed=123}={}){
     this.weather=weather; this.step=0; this.finished=false; this.endMsg=''; this.units=[]; this.randomMap(seed);
@@ -274,18 +289,18 @@ class Game{
   enemyAt(r,c,side){ return this.units.find(u=>!u.dead && !u.escaped && u.row===r && u.col===c && u.side!==side); }
   setOrder(u,ord){ if(u.routed||u.dead||u.escaped) return; u.order=ord; u.flankGuard=(ord===Orders.OBRONA_SKRZYDLA); }
 
-adjEnemies(u){
-  if (u.routed) return []; // jednostka w ucieczce nie walczy
-  const n=[[0,1],[0,-1],[-1,0],[1,0]];
-  const out=[];
-  for(const [dr,dc] of n){
-	const rr=ROWS[rIdx(u.row)+dr]; const cc=u.col+dc;
-	if(!rr||cc<COLS[0]||cc>COLS[COLS.length-1]) continue;
-	const e=this.enemyAt(rr,cc,u.side);
-	if(e && !e.routed) out.push(e); // <- pomiń uciekających
+  adjEnemies(u){
+    if (u.routed) return []; // jednostka w ucieczce nie walczy
+    const n=[[0,1],[0,-1],[-1,0],[1,0]];
+    const out=[];
+    for(const [dr,dc] of n){
+      const rr=ROWS[rIdx(u.row)+dr]; const cc=u.col+dc;
+      if(!rr||cc<COLS[0]||cc>COLS[COLS.length-1]) continue;
+      const e=this.enemyAt(rr,cc,u.side);
+      if(e && !e.routed) out.push(e); // <- pomiń uciekających
+    }
+    return out;
   }
-  return out;
-}
 
   registerHit(victim, log){
     victim.hits++;
@@ -299,121 +314,120 @@ adjEnemies(u){
     else { victim.bloodied=true; victim.routed=false; log(`   ✚ ${victim.type[0]}${victim.num}(${victim.side}) POZOSTAJE (krwawi).`); }
   }
 
-	/* ===== Walka z modyfikatorami ===== */
-	combat(att,def,ctx,log){
-	  if(att.dead||def.dead||att.escaped||def.escaped) return;
-	  if(att.routed||def.routed) return; 
+  /* ===== Walka z modyfikatorami ===== */
+  combat(att,def,ctx,log){
+    if(att.dead||def.dead||att.escaped||def.escaped) return;
+    if(att.routed||def.routed) return; 
 
-	  let attNeed=8,defNeed=8;
-	  const modA=[], modD=[];
-	  const tTo=this.map[ctx.to.row][ctx.to.col];
-	  const isCavA=att.type[0]==='K',isCavD=def.type[0]==='K';
+    let attNeed=8,defNeed=8;
+    const modA=[], modD=[];
+    const tTo=this.map[ctx.to.row][ctx.to.col];
+    const isCavA=att.type[0]==='K',isCavD=def.type[0]==='K';
 
-	  // Kawaleria: kary za teren/pogodę
-	  const cavPenalty=(ter)=>{ 
-		let pen=0; 
-		if(ter==='L'||ter==='B') pen=Math.max(pen,2); 
-		if(this.weather==='bloto') pen=Math.max(pen,2); 
-		else if(this.weather==='deszcz') pen=Math.max(pen,1); 
-		return pen; 
-	  };
-	  if(isCavA){ const p=cavPenalty(tTo); if(p){ attNeed+=p; modA.push(`+${p} kawaleria w ${nameTer(tTo)} / pogoda`); } }
-	  if(isCavD){ const p=cavPenalty(this.map[def.row][def.col]); if(p){ defNeed+=p; modD.push(`+${p} kawaleria w ${nameTer(this.map[def.row][def.col])} / pogoda`); } }
+    // Kawaleria: kary za teren/pogodę
+    const cavPenalty=(ter)=>{ 
+      let pen=0; 
+      if(ter==='L'||ter==='B') pen=Math.max(pen,2); 
+      if(this.weather==='bloto') pen=Math.max(pen,2); 
+      else if(this.weather==='deszcz') pen=Math.max(pen,1); 
+      return pen; 
+    };
+    if(isCavA){ const p=cavPenalty(tTo); if(p){ attNeed+=p; modA.push(`+${p} kawaleria w ${nameTer(tTo)} / pogoda`); } }
+    if(isCavD){ const p=cavPenalty(this.map[def.row][def.col]); if(p){ defNeed+=p; modD.push(`+${p} kawaleria w ${nameTer(this.map[def.row][def.col])} / pogoda`); } }
 
-	  // Szarża piech./kaw. na równinie przy pogodnie
-	  if(att.order===Orders.SZARZA && tTo==='.' && this.weather==='pogodnie'){ 
-		attNeed--; 
-		modA.push(`−1 szarża na równinie (pogodnie)`); 
-	  }
+    // Szarża piech./kaw. na równinie przy pogodnie
+    if(att.order===Orders.SZARZA && tTo==='.' && this.weather==='pogodnie'){ 
+      attNeed--; 
+      modA.push(`−1 szarża na równinie (pogodnie)`); 
+    }
 
-	  // Flanka/tył
-	  const flank=ctx.flank || this.isFlank(att,def,ctx);
-	  if(flank && !def.flankGuard){ attNeed--; modA.push(`−1 atak z flanki/tyłu`); }
-	  if(flank && def.flankGuard){ modD.push(`0 osłona skrzydła`); }
+    // Flanka/tył
+    const flank=ctx.flank || this.isFlank(att,def,ctx);
+    if(flank && !def.flankGuard){ attNeed--; modA.push(`−1 atak z flanki/tyłu`); }
+    if(flank && def.flankGuard){ modD.push(`0 osłona skrzydła`); }
 
-	  // Wzgórza, bród
-	  if(this.map[def.row][def.col]==='W'){ 
-		defNeed--; attNeed++; 
-		modD.push(`−1 obrona na wzgórzu`); 
-		modA.push(`+1 atak pod górę`); 
-	  }
-	  if(this.map[def.row][def.col]==='=' && this.isFrontal(att,def)){ 
-		defNeed-=2; attNeed++; 
-		modD.push(`−2 obrona na brodzie`); 
-		modA.push(`+1 atak na brodzie`); 
-	  }
+    // Wzgórza, bród
+    if(this.map[def.row][def.col]==='W'){ 
+      defNeed--; attNeed++; 
+      modD.push(`−1 obrona na wzgórzu`); 
+      modA.push(`+1 atak pod górę`); 
+    }
+    if(this.map[def.row][def.col]==='=' && this.isFrontal(att,def)){ 
+      defNeed-=2; attNeed++; 
+      modD.push(`−2 obrona na brodzie`); 
+      modA.push(`+1 atak na brodzie`); 
+    }
 
-	  // Piechota-szach sprzyja się w lesie (jak u Ciebie)
-	  if(def.type==='P~' && this.map[def.row][def.col]==='L'){ defNeed--; modD.push(`−1 piechota-szach w lesie`); }
-	  if(att.type==='P~' && tTo==='L'){ attNeed--; modA.push(`−1 piechota-szach idzie w las`); }
+    // Piechota-szach sprzyja się w lesie
+    if(def.type==='P~' && this.map[def.row][def.col]==='L'){ defNeed--; modD.push(`−1 piechota-szach w lesie`); }
+    if(att.type==='P~' && tTo==='L'){ attNeed--; modA.push(`−1 piechota-szach idzie w las`); }
 
-	  // Czworobok broni się lepiej vs kawaleria (jak u Ciebie)
-	  if(def.type==='P□' && isCavA){ defNeed--; modD.push(`−1 czworobok vs kawaleria`); }
+    // Czworobok broni się lepiej vs kawaleria
+    if(def.type==='P□' && isCavA){ defNeed--; modD.push(`−1 czworobok vs kawaleria`); }
 
-	  // Okrążenie (≥2 wrogów przy obrońcy)
-	  const defAdjEnemies = this.adjEnemies(def);
-	  if(defAdjEnemies.length>=2){
-		defNeed+=2; attNeed--; 
-		modD.push(`+2 okrążenie`); 
-		modA.push(`−1 okrążenie`);
-	  }
+    // Okrążenie (≥2 wrogów przy obrońcy)
+    const defAdjEnemies = this.adjEnemies(def);
+    if(defAdjEnemies.length>=2){
+      defNeed+=2; attNeed--; 
+      modD.push(`+2 okrążenie`); 
+      modA.push(`−1 okrążenie`);
+    }
 
-	  /* ==== Formacje: klin + kontra piechota vs linia piechoty ==== */
+    /* ==== Formacje: klin + kontra piechota vs linia piechoty ==== */
 
-	  // KLIN (tylko gdy to on ATAKUJE)
-	  if (att.formation === 'KLIN'){
-		if (!att._wedgeFirstAttackDone){
-		  attNeed -= 2; 
-		  modA.push('−2 klin: pierwszy atak');
-		  att._wedgeFirstAttackDone = true;
-		} else {
-		  attNeed += 1; 
-		  modA.push('+1 klin: kolejne ataki');
-		}
-	  }
+    // KLIN (tylko gdy to on ATAKUJE)
+    if (att.formation === 'KLIN'){
+      if (!att._wedgeFirstAttackDone){
+        attNeed -= 2; 
+        modA.push('−2 klin: pierwszy atak');
+        att._wedgeFirstAttackDone = true;
+      } else {
+        attNeed += 1; 
+        modA.push('+1 klin: kolejne ataki');
+      }
+    }
 
-	  // Pomocniki do rozpoznawania piechoty/kawalerii w liniach
-	  const isInfLine  = u => u.formation === 'LINIA' && u.type[0] === 'P';
-	  const isInfSquare= u => u.formation === 'CZWOR' && u.type[0] === 'P';
-	  const isInfSzach = u => u.formation === 'SZACH'  && u.type[0] === 'P';
+    // Pomocniki do rozpoznawania piechoty/kawalerii w liniach
+    const isInfLine  = u => u.formation === 'LINIA' && u.type[0] === 'P';
+    const isInfSquare= u => u.formation === 'CZWOR' && u.type[0] === 'P';
+    const isInfSzach = u => u.formation === 'SZACH'  && u.type[0] === 'P';
 
-	  // KARA tylko w starciu z LINIĄ PIECHOTY (P w LINIA). 
-	  // LINIA KAWALERII (K w LINIA) NIE uruchamia kary.
+    // KARA tylko w starciu z LINIĄ PIECHOTY (P w LINIA).
+    // LINIA KAWALERII (K w LINIA) NIE uruchamia kary.
 
-	  // Atakujący: P□ / P~ kontra linia piechoty
-	  if ((isInfSquare(att) || isInfSzach(att)) && isInfLine(def)){
-		attNeed += 1;
-		modA.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
-	  }
+    // Atakujący: P□ / P~ kontra linia piechoty
+    if ((isInfSquare(att) || isInfSzach(att)) && isInfLine(def)){
+      attNeed += 1;
+      modA.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
+    }
 
-	  // Broniący: P□ / P~ kontra linia piechoty
-	  if ((isInfSquare(def) || isInfSzach(def)) && isInfLine(att)){
-		defNeed += 1;
-		modD.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
-	  }
+    // Broniący: P□ / P~ kontra linia piechoty
+    if ((isInfSquare(def) || isInfSzach(def)) && isInfLine(att)){
+      defNeed += 1;
+      modD.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
+    }
 
-	  // Przytnij do 2..10 (k6)
-	  attNeed=clamp(attNeed,2,10); 
-	  defNeed=clamp(defNeed,2,10);
+    // Przytnij do 2..10 (k10)
+    attNeed=clamp(attNeed,2,10); 
+    defNeed=clamp(defNeed,2,10);
 
-	  // Rzuty i wynik
-	  const rA=d6(), rD=d6();
-	  const aHit=rA>=attNeed && !att.didKill;
-	  const dHit=rD>=defNeed && !def.didKill;
+    // Rzuty i wynik
+    const rA=d6(), rD=d6();
+    const aHit=rA>=attNeed && !att.didKill;
+    const dHit=rD>=defNeed && !def.didKill;
 
-	  log(`Starcie ${att.type[0]}${att.num}(${att.side}) ▶ ${def.type[0]}${def.num}(${def.side})`);
-	  log(`  A: potrzeba ≥${attNeed} [${modA.length?modA.join('; '):'brak modyf.'}] | rzut=${rA}`);
-	  log(`  O: potrzeba ≥${defNeed} [${modD.length?modD.join('; '):'brak modyf.'}] | rzut=${rD}`);
+    log(`Starcie ${att.type[0]}${att.num}(${att.side}) ▶ ${def.type[0]}${def.num}(${def.side})`);
+    log(`  A: potrzeba ≥${attNeed} [${modA.length?modA.join('; '):'brak modyf.'}] | rzut=${rA}`);
+    log(`  O: potrzeba ≥${defNeed} [${modD.length?modD.join('; '):'brak modyf.'}] | rzut=${rD}`);
 
-	  if(aHit && dHit) log(`  → WYNIK: OBIE strony trafione.`);
-	  else if(aHit)    log(`  → WYNIK: A trafił | O pudłuje.`);
-	  else if(dHit)    log(`  → WYNIK: O trafił | A pudłuje.`);
-	  else             log(`  → WYNIK: nikt nie trafił.`);
+    if(aHit && dHit) log(`  → WYNIK: OBIE strony trafione.`);
+    else if(aHit)    log(`  → WYNIK: A trafił | O pudłuje.`);
+    else if(dHit)    log(`  → WYNIK: O trafił | A pudłuje.`);
+    else             log(`  → WYNIK: nikt nie trafił.`);
 
-	  if(aHit){ this.registerHit(def, log); att.didKill=true; }
-	  if(dHit){ this.registerHit(att, log); def.didKill=true; }
-	}
-
+    if(aHit){ this.registerHit(def, log); att.didKill=true; }
+    if(dHit){ this.registerHit(att, log); def.didKill=true; }
+  }
 
   isFlank(att,def,ctx){ const dr=rIdx(ctx.from.row)-rIdx(def.row), dc=ctx.from.col-def.col; const back=(ORIENT[def.side]===+1? dc<0: dc>0); return dr!==0 || back; }
   isFrontal(att,def){ const dc=att.col-def.col; return (ORIENT[def.side]===+1 ? dc<0 : dc>0); }
@@ -495,22 +509,49 @@ Obrońca (O):
     log(`\n─────────────────[ MIKRO-KROK ${stepNo} ]─────────────────`);
     log('0) WALKA W KONTAKCIE');
 
-    // 0) walka w kontakcie
-    const engaged=new Set();
-    const pairs=[];
-    for(const u of this.units.filter(x=>!x.dead && !x.escaped && !x.routed)){
-      const adj=this.adjEnemies(u);
-      for(const e of adj){
-        const key=[u.side,u.num,e.side,e.num].sort().join('|');
-        if(!pairs.find(p=>p.key===key)) pairs.push({a:u,b:e,key});
-      }
-    }
-    for(const {a,b} of pairs){
-      engaged.add(`${a.side}:${a.num}`); engaged.add(`${b.side}:${b.num}`);
-      log(`(kontakt: ${a.type[0]}${a.num} z ${b.type[0]}${b.num})`);
-      this.combat(a,b,{from:{row:a.row,col:a.col},to:{row:b.row,col:b.col}},log);
-      if(this.finished){ log(this.endMsg); return true; }
-    }
+	// 0) walka w kontakcie
+	const engaged = new Set();
+	const pairs = [];
+
+	// zbierz wszystkie pary w kontakcie (N/S/E/W), bez duplikatów
+	for (const u of this.units.filter(x => !x.dead && !x.escaped && !x.routed)) {
+	  const adj = this.adjEnemies(u);
+	  for (const e of adj) {
+		const key = [u.side, u.num, e.side, e.num].sort().join('|');
+		if (!pairs.find(p => p.key === key)) pairs.push({ a: u, b: e, key });
+	  }
+	}
+
+	// jednostki w kontakcie nie poruszają się w tej turze – zaznacz wszystkich
+	for (const { a, b } of pairs) {
+	  engaged.add(`${a.side}:${a.num}`);
+	  engaged.add(`${b.side}:${b.num}`);
+	}
+
+	// rozdziel pary na frontalne i pozostałe
+	const frontalPairs = [];
+	const nonFrontalPairs = [];
+	for (const { a, b, key } of pairs) {
+	  // „frontalne” = obie strony mają kontakt od frontu względem orientacji przeciwnika
+	  const abFront = this.isFrontal(a, b);
+	  const baFront = this.isFrontal(b, a);
+	  if (abFront && baFront) frontalPairs.push({ a, b, key });
+	  else nonFrontalPairs.push({ a, b, key });
+	}
+
+	// jeśli są frontalne – rozgrywamy tylko je; w przeciwnym razie rozgrywamy flankowe
+	const toResolve = frontalPairs.length > 0 ? frontalPairs : nonFrontalPairs;
+
+	if (frontalPairs.length > 0 && nonFrontalPairs.length > 0) {
+	  log(`(priorytet: ${frontalPairs.length} starć FRONTALNYCH; pozostałe w kontakcie czekają)`);
+	}
+
+	for (const { a, b } of toResolve) {
+	  log(`(kontakt: ${a.type[0]}${a.num} z ${b.type[0]}${b.num})`);
+	  this.combat(a, b, { from: { row: a.row, col: a.col }, to: { row: b.row, col: b.col } }, log);
+	  if (this.finished) { log(this.endMsg); return true; }
+	}
+
 
     // 1) Uciekinierzy
     log('1) UCIECZKI');
@@ -518,14 +559,30 @@ Obrońca (O):
 
     // 2) Ruch (bez nowych starć)
     log('2) RUCH (bez nowych starć)');
-    const prio=[Orders.SZARZA,Orders.NAPRZOD,Orders.SKOS_L,Orders.SKOS_P,Orders.PRZES_L,Orders.PRZES_P,Orders.PRZECHWYC,Orders.UTRZYMAJ,Orders.OBRONA_SKRZYDLA];
+
+    // Wyjaśnienia, czemu część stoi w tej fazie
+    this.units
+      .filter(u => !u.dead && !u.escaped)
+      .forEach(u => {
+        const key = `${u.side}:${u.num}`;
+        if (u.routed){
+          log(`(stoi ${u.type[0]}${u.num}(${u.side}): w ucieczce)`);
+        } else if (engaged.has(key)){
+          log(`(stoi ${u.type[0]}${u.num}(${u.side}): był w kontakcie w tej turze)`);
+        } else if (u.order === Orders.UTRZYMAJ){
+          log(`(stoi ${u.type[0]}${u.num}(${u.side}): rozkaz UTRZYMAJ)`);
+        }
+      });
+
+    const prio=[Orders.SZARZA,Orders.NAPRZOD,Orders.SKOS_L,Orders.SKOS_P,Orders.PRZES_L,Orders.PRZES_P,Orders.PRZECHWYC];
+
     for(const p of prio){
       const movers=this.units.filter(u=>!u.dead && !u.escaped && !u.routed && u.order===p && !engaged.has(`${u.side}:${u.num}`));
       for(const u of movers){ this.applyMove(u,log); if(this.finished){ log(this.endMsg); return true; } }
     }
 
     // 3) Autokońiec, jeśli brak zdolnych do walki
-    if (this.autoFinishIfNoActives()){ log(this.endMsg); return true; }
+    if (this.autoFinishIfNoActives()){ return true; }
 
     this.step++;
     return this.finished;
@@ -534,93 +591,79 @@ Obrońca (O):
   distToEnemy(u){ const foes=this.units.filter(x=>!x.dead && !x.escaped && x.side!==u.side); if(!foes.length) return 999;
     return foes.map(f=>Math.abs(rIdx(u.row)-rIdx(f.row))+Math.abs(u.col-f.col)).sort((a,b)=>a-b)[0]; }
 
-	applyMove(u,log){
-	  const dir=ORIENT[u.side];
-	  const tryGo = (r,c,opts)=> this.tryMove(u,r,c,opts);
+  applyMove(u,log){
+    const dir=ORIENT[u.side];
+    const tryGo = (r,c,opts)=> this.tryMove(u,r,c,opts);
 
-	  const canEnter = (t) => {
-		if (!t || !t.row) return false;
-		if (t.col < COLS[0] || t.col > COLS[COLS.length-1]) return false;
-		if (this.map[t.row][t.col] === Terrain.WATER) return false;
-		return true;
-	  };
+    const canEnter = (t) => {
+      if (!t || !t.row) return false;
+      if (t.col < COLS[0] || t.col > COLS[COLS.length-1]) return false;
+      if (this.map[t.row][t.col] === Terrain.WATER) return false;
+      return true;
+    };
 
-	  // czysto ruchowy helper: nie walczy; loguje blokadę i udany ruch
-	  const moveIfEmpty = (target) => {
-		const foeX = this.enemyAt(target.row, target.col, u.side);
-		if (foeX && !foeX.routed) {
-		  log(`(ruch zablokowany: wróg na ${target.row}${target.col})`);
-		  return false;
-		}
-		const before = `${u.row}${u.col}`;
-		if (this.tryMove(u, target.row, target.col, {respectBattleZone:true})) {
-		  log(`ruch ${u.type[0]}${u.num}(${u.side}): ${before} → ${u.row}${u.col}`);
-		  return true;
-		}
-		return false;
-	  };
+    // Wrapper: diagnozuje blokadę i loguje udany ruch
+    const tryMoveWithWhy = (target, {respectBattleZone=true}={})=>{
+      const info = whyBlocked(this, u, target, {respectBattleZone});
+      if (info.blocked){
+        log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): ${info.reason})`);
+        return false;
+      }
+      const from = cellStr(u.row,u.col), to = cellStr(target.row,target.col);
+      if (this.tryMove(u, target.row, target.col, {respectBattleZone})){
+        log(`ruch ${u.type[0]}${u.num}(${u.side}): ${from} → ${to}`);
+        return true;
+      }
+      log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): nie można wejść na ${to})`);
+      return false;
+    };
 
-	  const targetFor = (ord)=>{
-		switch(ord){
-		  case Orders.NAPRZOD: return {row:u.row, col:u.col+dir};
-		  case Orders.SZARZA:  return {row:u.row, col:u.col+dir};
-		  case Orders.SKOS_L:  return {row:stepRow(u.row,-1), col:u.col+dir};
-		  case Orders.SKOS_P:  return {row:stepRow(u.row,+1), col:u.col+dir};
-		  case Orders.PRZES_L: return {row:u.row, col:u.col-1};
-		  case Orders.PRZES_P: return {row:u.row, col:u.col+1};
-		  case Orders.PRZECHWYC:{
-			const fwd=this.unitAt(u.row,u.col+dir);
-			return fwd ? {row:u.row, col:u.col} : {row:u.row, col:u.col+dir};
-		  }
-		  default: return {row:u.row, col:u.col};
-		}
-	  };
+    const targetFor = (ord)=>{
+      switch(ord){
+        case Orders.NAPRZOD: return {row:u.row, col:u.col+dir};
+        case Orders.SZARZA:  return {row:u.row, col:u.col+dir};
+        case Orders.SKOS_L:  return {row:stepRow(u.row,-1), col:u.col+dir};
+        case Orders.SKOS_P:  return {row:stepRow(u.row,+1), col:u.col+dir};
+        case Orders.PRZES_L: return {row:u.row, col:u.col-1};
+        case Orders.PRZES_P: return {row:u.row, col:u.col+1};
+        case Orders.PRZECHWYC:{
+          const fwd=this.unitAt(u.row,u.col+dir);
+          return fwd ? {row:u.row, col:u.col} : {row:u.row, col:u.col+dir};
+        }
+        default: return {row:u.row, col:u.col};
+      }
+    };
 
-	  const isDiagonal = (u.order===Orders.SKOS_L || u.order===Orders.SKOS_P);
-	  let tgt = targetFor(u.order);
+    const isDiagonal = (u.order===Orders.SKOS_L || u.order===Orders.SKOS_P);
+    let tgt = targetFor(u.order);
 
-	  if (isDiagonal){
-		// --- GAŁĄŹ DIAGONALNA: próbujemy kolejno primary → alt → forward → pionowe docięcie ---
-		const dCol = dir;
-		const dRowPref = (u.order===Orders.SKOS_L ? -1 : +1);
-		const rowPref = stepRow(u.row, dRowPref);      // preferowany skos
-		const rowAlt  = stepRow(u.row, -dRowPref);     // alternatywny skos (odwrócony)
-		const primary = rowPref ? {row: rowPref, col: u.col + dCol} : null;
-		const alt     = rowAlt  ? {row: rowAlt,  col: u.col + dCol} : null;
-		const forward = {row: u.row, col: u.col + dCol};
+    if (isDiagonal){
+      // kolejność: primary → alt → forward → pionowe docięcie
+      const dCol = dir;
+      const dRowPref = (u.order===Orders.SKOS_L ? -1 : +1);
+      const rowPref = stepRow(u.row, dRowPref);      // preferowany skos
+      const rowAlt  = stepRow(u.row, -dRowPref);     // alternatywny skos (odwrócony)
+      const primary = rowPref ? {row: rowPref, col: u.col + dCol} : null;
+      const alt     = rowAlt  ? {row: rowAlt,  col: u.col + dCol} : null;
+      const forward = {row: u.row, col: u.col + dCol};
 
-		if (canEnter(primary) && moveIfEmpty(primary)) return;
-		if (canEnter(alt)     && moveIfEmpty(alt))     return;
-		if (canEnter(forward) && moveIfEmpty(forward)) return;
+      if (primary && tryMoveWithWhy(primary)) return;
+      if (alt     && tryMoveWithWhy(alt))     return;
+      if (tryMoveWithWhy(forward))            return;
 
-		const upDown1 = rowPref ? {row: rowPref, col: u.col} : null;
-		const upDown2 = rowAlt  ? {row: rowAlt,  col: u.col} : null;
+      const upDown1 = rowPref ? {row: rowPref, col: u.col} : null;
+      const upDown2 = rowAlt  ? {row: rowAlt,  col: u.col} : null;
 
-		if (canEnter(upDown1) && moveIfEmpty(upDown1)) return;
-		if (canEnter(upDown2) && moveIfEmpty(upDown2)) return;
+      if (upDown1 && tryMoveWithWhy(upDown1)) return;
+      if (upDown2 && tryMoveWithWhy(upDown2)) return;
 
-		// wszystko zablokowane — kończymy bez ruchu
-		return;
-	  }
+      // wszystko zablokowane
+      return;
+    }
 
-	  // --- GAŁĄŹ NIEDIAGONALNA (naprzód / przesunięcia / przechwyt) ---
-	  const foe = this.enemyAt(tgt.row, tgt.col, u.side);
-	  if (foe && !foe.routed){
-		log(`(ruch zablokowany: wróg na ${tgt.row}${tgt.col})`);
-		return;
-	  }
-
-	  const before = `${u.row}${u.col}`;
-	  if (tryGo(tgt.row, tgt.col, {respectBattleZone:true})) {
-		log(`ruch ${u.type[0]}${u.num}(${u.side}): ${before} → ${u.row}${u.col}`);
-		return;
-	  }
-
-	  const foe2 = this.enemyAt(tgt.row, tgt.col, u.side);
-	  if (foe2 && !foe2.routed) {
-		log(`(ruch zablokowany: wróg na ${tgt.row}${tgt.col})`);
-	  }
-	}
+    // ruch prosty / przechwyty
+    tryMoveWithWhy(tgt);
+  }
 
 }
 
@@ -776,8 +819,7 @@ function renderBoard(){
       }
 
       cell.addEventListener('click', ()=>{
-		if (!SETUP_ROWS.includes(r)) { flash(cell); return; }
-		
+        if (!SETUP_ROWS.includes(r)) { flash(cell); return; }
         if(!elPlace.checked || !selectedKey) return;
         const u=unitAtKey(selectedKey); if(!u || u.dead || u.escaped){ selectedKey=null; renderBoard(); return; }
         const t=G.map[r][c]; if(t==='~') { flash(cell); return; }
@@ -858,46 +900,42 @@ window.addEventListener('DOMContentLoaded', ()=>{
     renderBoard();
   });
   
-	  // Inicjalizacja liczników na starcie (można też zsynchronizować z istniejącymi jednostkami)
-	renderCounters();
+  // Inicjalizacja liczników na starcie
+  renderCounters();
 
-	// Kliknięcia +/- na stepperach
-	document.querySelectorAll('.stepper .btn-step').forEach(btn => {
-	  btn.addEventListener('click', () => {
-		const side = btn.closest('.stepper').dataset.side;  // 'A' lub 'O'
-		const type = btn.dataset.type;                      // 'P' lub 'K'
-		const delta = parseInt(btn.dataset.delta, 10);      // +1 lub -1
+  // Kliknięcia +/- na stepperach
+  document.querySelectorAll('.stepper .btn-step').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const side = btn.closest('.stepper').dataset.side;  // 'A' lub 'O'
+      const type = btn.dataset.type;                      // 'P' lub 'K'
+      const delta = parseInt(btn.dataset.delta, 10);      // +1 lub -1
 
-		const otherType = (type === 'P') ? 'K' : 'P';
+      const otherType = (type === 'P') ? 'K' : 'P';
 
-		// Wylicz nową wartość z ograniczeniami
-		let newVal = COUNTS[side][type] + delta;
-		newVal = clampInt(newVal, 0, MAX_TOTAL_PER_SIDE);
+      // Wylicz nową wartość z ograniczeniami
+      let newVal = COUNTS[side][type] + delta;
+      newVal = clampInt(newVal, 0, MAX_TOTAL_PER_SIDE);
 
-		// Łączna liczba nie może przekroczyć MAX_TOTAL_PER_SIDE
-		const totalOther = COUNTS[side][otherType];
-		if (newVal + totalOther > MAX_TOTAL_PER_SIDE){
-		  // Przyciąć tak, by nie przekroczyć limitu
-		  newVal = MAX_TOTAL_PER_SIDE - totalOther;
-		}
+      // Łączna liczba nie może przekroczyć MAX_TOTAL_PER_SIDE
+      const totalOther = COUNTS[side][otherType];
+      if (newVal + totalOther > MAX_TOTAL_PER_SIDE){
+        newVal = MAX_TOTAL_PER_SIDE - totalOther;
+      }
 
-		COUNTS[side][type] = newVal;
-		renderCounters();
-	  });
-	});
+      COUNTS[side][type] = newVal;
+      renderCounters();
+    });
+  });
 
-	// „Zastosuj składy” – odbudowuje obie strony i automatycznie rozstawia
-	document.getElementById('btnApplyArmy').addEventListener('click', () => {
-	  rebuildSideFromCounts(G, 'A');
-	  rebuildSideFromCounts(G, 'O');
-
-	  // Automatyczne rozmieszczenie w strefie 2–7
-	  G.autoPlaceAll();
-
-	  selectedKey = null;
-	  logMsg('Zastosowano składy na podstawie liczników P/K.');
-	  renderBoard();
-	});
+  // „Zastosuj składy”
+  document.getElementById('btnApplyArmy').addEventListener('click', () => {
+    rebuildSideFromCounts(G, 'A');
+    rebuildSideFromCounts(G, 'O');
+    G.autoPlaceAll();
+    selectedKey = null;
+    logMsg('Zastosowano składy na podstawie liczników P/K.');
+    renderBoard();
+  });
 
 });
 </script>
