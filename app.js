@@ -14,6 +14,8 @@ const INCOME_POPUP_IMG = './images/income.png';
 const DEVASTATION_POPUP_IMG = './images/devast.png';
 const REINFORCEMENTS_POPUP_IMG = './images/reinf.png';
 const FINAL_SUMMARY_POPUP_IMG = './images/gameover.png';
+const PEACE_BORDER_IMG = './images/spokoj_granica.png';
+const ARSON_POPUP_IMG = './images/burn.png';
 
 const EVENT_IMG_BASE = './images/events';
 
@@ -45,11 +47,27 @@ const EVENT_IMAGES_BY_ID = {
   25: 'clo',            // Cła morskie
 };
 
+const LAW_IMG_BASE = './images/laws';
+const LAW_IMG_BY_ID = {
+  1: 'podatek',     // Podatek
+  2: 'podatek',     // Podatek
+  3: 'wojsko',      // Wojsko
+  4: 'wojsko',      // Wojsko
+  5: 'gospodarka',  // Gospodarka
+  6: 'pokoj',       // Pokój
+};
+
+function lawImageFor(lawId){
+  const key = LAW_IMG_BY_ID[lawId|0];
+  return key ? `${LAW_IMG_BASE}/${key}.png` : '';
+}
 
 const ATTACK_IMG_LOW  = './images/attack_3.png';   // np. słaba szarża
 const ATTACK_IMG_MID  = './images/attack_2.png';   // wyrównane starcie
 const ATTACK_IMG_HIGH = './images/attack_1.png';  // miażdżący atak
 
+let _lastPhaseId = null;
+let _lastRoundNo = null;
 let _actionWizard = null; 
 
 // ==== Sejm: stan + opisy ustaw ====
@@ -57,16 +75,6 @@ let _sejmLawRound = -1;                // runda, w której wylosowaliśmy ustaw�
 let _sejmLaw = null;                   // { id, name }
 let _sejmAuctionWinner = null;         // nazwa zwycięzcy aukcji (po rozstrzygnięciu)
 let _sejmSkipPopupRound = -1;
-
-let _attacksPassCycle = new Set();   // dla fazy 'attacks'
-let _battlesPassCycle = new Set();   // dla fazy 'battles'
-let _lastPhaseId = null;
-let _lastRoundNo = null;
-
-function resetPassCycles(){
-  _attacksPassCycle.clear();
-  _battlesPassCycle.clear();
-}
 
 let _finalPopupShown = false;
 
@@ -147,10 +155,10 @@ const LAW_VARIANTS = {
   6: { // Pokój
     title: 'Pokój',
     buttons: [
-      { label: 'Pokój — wariant A (wszystkie tory −1)', choice: 'A' },
-      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'N' },
-      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'E' },
-      { label: 'Pokój — wariant B (wybrany tor −2)', choice: 'B', track: 'S' },
+      { label: 'Pokój — wariant A (N, E, S −1 każdy)', choice: 'A' },
+      { label: 'Pokój — wariant B (−2 na torze N)', choice: 'B', track: 'N' },
+      { label: 'Pokój — wariant B (−2 na torze E)', choice: 'B', track: 'E' },
+      { label: 'Pokój — wariant B (−2 na torze S)', choice: 'B', track: 'S' },
     ],
     describe: [
       'A: wszystkie trzy tory (N, E, S) −1.',
@@ -166,66 +174,73 @@ function eventImageFor(n){
 
 function randRolls(n){ return Array.from({length: Math.max(1, n|0)}, ()=> 1 + Math.floor(Math.random()*6)); }
 
-function hasAnyPossibleAttack(s){
-  for (const [pid, arr] of Object.entries(s.troops || {})){
-    const key = provKeyFromId(pid);                 // 'prusy' | 'litwa' | ...
-    if (!key) continue;
-    const canBeSource =
-      Array.isArray(ATTACK_TARGETS[key]) && ATTACK_TARGETS[key].length > 0;
-    if (!canBeSource) continue;                      // np. wielkopolska = []
-    for (const u of (arr || [])){
-      if ((u|0) > 0) return true;                    // ktoś ma jednostki w źródłowej prowincji
-    }
-  }
-  return false;
-}
-
-
-function maybeAutoAdvanceAfterAttacks(){
+function maybeAutoAdvanceAfterArson(){
   const s = game.getPublicState?.() || {};
-  const phase = s.current_phase || game.round?.currentPhaseId?.();
-  const hasActive = Number.isInteger(s.active_attacker_index);
-
-  if (phase === 'attacks' && !hasActive){
-    if (!hasAnyPossibleAttack(s)) {
-      const nxt = game.finishPhaseAndAdvance();
-      ok(`Auto-next z Wypraw -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-      syncUIFromGame();
-    } else {
-      ok('Wyprawy: kolej na następnego gracza — pozostajemy w fazie Wypraw.');
-    }
+  if ((s.current_phase || game.round?.currentPhaseId?.()) !== 'arson') return;
+  if (s.arson_turn?.done) {
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Auto-next z Palenia -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
   }
 }
-
-
-function hasAnyContestedProvince(s){
-  for (const arr of Object.values(s.troops || {})){
-    let sides = 0;
-    for (const u of arr) {
-      if ((u|0) > 0) {
-        sides++;
-        if (sides >= 2) return true; // w tej prowincji są co najmniej dwie strony
-      }
-    }
-  }
-  return false; // nigdzie nie ma dwóch stron → brak dalszych starć
-}
-
 
 function maybeAutoAdvanceAfterBattles(){
   const s = game.getPublicState?.() || {};
-  const phase = s.current_phase || game.round?.currentPhaseId?.();
-  const hasActive = Number.isInteger(s.active_battler_index);
+  if ((s.current_phase || game.round?.currentPhaseId?.()) !== 'battles') return;
 
-  if (phase === 'battles' && !hasActive){
-    if (!hasAnyContestedProvince(s)) {
-      const nxt = game.finishPhaseAndAdvance();
-      ok(`Auto-next ze Starć -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-      syncUIFromGame();
-    } else {
-      ok('Starcia: kolej na następnego gracza — pozostajemy w fazie Starć.');
+  // Jeżeli silnik mówi, że tura starć jest DONE → przejdź dalej.
+  if (s.battles_turn?.done) {
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Auto-next ze Starć -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  }
+}
+
+function maybeAutoAdvanceAfterAttacks(){
+  const s = game.getPublicState?.() || {};
+  if ((s.current_phase || game.round?.currentPhaseId?.()) !== 'attacks') return;
+
+  // Jeśli silnik zakończył fazę wypraw (turn.done) → przejdź dalej.
+  if (s.attacks_turn?.done) {
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Auto-next z Wypraw -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  }
+}
+
+function uiRightmostForeignEstate(state, pid, pidx){
+  const prov = state.provinces?.[pid];
+  if (!prov) return null;
+
+  const est = Array.isArray(prov.estates) ? prov.estates : [];
+  for (let i = est.length - 1; i >= 0; i--) {
+    const owner = est[i] | 0;             // -1 = puste, 0.. = indeks gracza
+    if (owner >= 0) {
+      if (owner !== pidx) {
+        return { ownerIndex: owner, slotIndex: i }; // ostatnia zajęta jest cudza → można palić
+      }
+      return null; // ostatnia zajęta jest nasza → nie wolno palić
     }
   }
+  return null; // brak jakichkolwiek posiadłości
+}
+
+function uiArsonEligibleTargets(state, pidx){
+  const out = [];
+  for (const pid of Object.keys(state.provinces || {})) {
+    const key = provKeyFromId(pid); if (!key) continue;
+
+    // możesz palić tylko tam, gdzie masz wojsko
+    const myTroops = (state.troops?.[pid]?.[pidx] | 0) > 0;
+    if (!myTroops) continue;
+
+    // nowa reguła: tylko skrajna prawa posiadłość i tylko jeśli jest cudza
+    const info = uiRightmostForeignEstate(state, pid, pidx);
+    if (!info) continue;
+
+    out.push({ pid, key, ownerIndex: info.ownerIndex, slotIndex: info.slotIndex });
+  }
+  return out;
 }
 
 function attackImageForRoll(roll){
@@ -260,6 +275,7 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
         'Za chwilę licytacja marszałkowska (aukcja).'
       ];
       popupFromEngine(`Sejm — wylosowano ustawę: ${_sejmLaw.name}`, lines, {
+        imageUrl: lawImageFor(_sejmLaw.id),
         buttonText: 'Dalej (Aukcja)'
       });
     }
@@ -290,6 +306,7 @@ function ensureSejmLawForRound(state, { forcePopup = false } = {}){
       'Teraz licytacja marszałkowska (aukcja).'
     ];
     popupFromEngine(`Sejm — wylosowano ustawę: ${pick.name}`, lines, {
+      imageUrl: lawImageFor(pick.id),
       buttonText: 'Dalej (Aukcja)'
     });
   }
@@ -676,28 +693,34 @@ function renderPlayerChip(p){
   playersListEl.appendChild(row);
 }
 
-// ZAMIANA: rysowanie gracza jako chip (nie <tr>)
 function renderPlayerRow(p){
   const chip = document.createElement('span');
   chip.id = `player-${p.key}`;
   chip.className = 'player-chip';
 
-  const dot = document.createElement('span');
-  dot.className = 'player-dot';
-  dot.style.color = p.color;
+  // PASEK RANKINGU (kolor gracza)
+  const rank = document.createElement('span');
+  rank.className = 'rankbar';
+  rank.style.color = p.color;     // kolor paska = kolor gracza
+  rank.style.width = '18px';      // startowa szerokość (zostanie nadpisana)
 
+  // IMIĘ
   const name = document.createElement('span');
   name.className = 'player-name';
   name.textContent = p.name;
 
+  // ZŁOTO
   const gold = document.createElement('span');
   gold.className = 'player-gold';
   gold.innerHTML = `<span class="coin"></span><span class="val">—</span>`;
   gold.setAttribute('data-col', 'gold');
 
-  chip.append(dot, name, gold);
+  // KOLEJNOŚĆ: pasek → imię → złoto
+  chip.append(rank, name, gold);
   playersBody.appendChild(chip);
 }
+
+
 
 // bez zmian interfejsu:
 function addPlayer(name, color){
@@ -759,6 +782,7 @@ const PHASE_LABELS = {
   sejm:   'Sejm',
   actions:'Akcje',
   battles:'Starcia',
+  arson:  'Palenie posiadłości',
   reinforcements:'Wzmacnianie',
   attacks:'Wyprawy',
   devastation:'Spustoszenia'
@@ -781,7 +805,9 @@ function applyCurrentTurnFromState(s){
   } else if (phase === 'attacks' && Number.isInteger(s.active_attacker_index)) {
     idx = s.active_attacker_index;
   } else if (phase === 'battles' && Number.isInteger(s.active_battler_index)) {
-    idx = s.active_battler_index;          // <<<<< NOWE
+    idx = s.active_battler_index;          
+  } else if (phase === 'arson' && Number.isInteger(s.active_arson_index)) {
+    idx = s.active_arson_index;
   } else {
     idx = -1;
   }
@@ -958,7 +984,7 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Wzmacnianie', 'Wyprawy','Spustoszenia'];
+const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Palenie', 'Wzmacnianie', 'Wyprawy','Spustoszenia'];
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -1005,6 +1031,40 @@ function setPhase(n){
   ok(`Faza UI ${phaseCur}/${max}: ${PHASES[phaseCur-1]}.`);
   return true;
 }
+
+function applyRankingBarsFromEngine(publicState){
+  let raw;
+  try { raw = game.getScoresRaw?.(); } catch { raw = null; }
+  if (!raw || !raw.players) return;
+
+  // 2) gracze z PUBLICZNEGO stanu (ten sam porządek indeksów!)
+  const players = publicState?.settings?.players || [];
+  if (!players.length) return;
+
+  // 3) mapping: miejsce → szerokość (remis = ta sama długość)
+  const step = [0, 64, 46, 36, 28, 24, 20]; // 1..N; możesz podstroić
+  const places = raw.places || [];
+
+  players.forEach((sp, idx) => {
+    const chip = document.getElementById(`player-${playerKey(sp.name)}`);
+    if (!chip) return;
+    const bar  = chip.querySelector('.rankbar');
+    if (!bar) return;
+
+    // kolor: spróbuj z datasetu chipa, potem z PLAYERS, na końcu akcent
+    const ui = (typeof PLAYERS !== 'undefined') ? PLAYERS.find(p => p.name === sp.name) : null;
+    const color = chip.dataset.color || ui?.color || '#eab308';
+
+    const place = places[idx] || 7;
+    const width = step[place] || 18;
+
+    bar.style.color = color;
+    bar.style.width = `${width}px`;
+    bar.title = `Miejsce: ${place} — ${raw.players[idx].score} pkt`;
+  });
+}
+
+
 
 // ===== Gracze (UI) =====
 const PLAYERS = []; // { key, name, color }
@@ -1332,9 +1392,10 @@ const ENGINE_TO_UI_PHASE = {
   sejm: 3,
   actions: 4,
   battles: 5,
-  attacks: 7,
-  reinforcements: 6,
-  devastation: 8, // nie mamy osobnej pozycji w UI — podpinamy pod „Najazdy”
+  arson: 6,            
+  reinforcements: 7,
+  attacks: 8,
+  devastation: 9,
 };
 
 function applyPhaseFromEngineState(s){
@@ -1415,6 +1476,13 @@ function buildPhaseActionsSmart(s){
       el('div', {style:{height:'8px'}}),
       chip('Start 5 rund',  ()=>run('gstart 5 6')),
       chip('Start 10 rund', ()=>run('gstart 10 6')),
+      chip('Start 15 rund', ()=>run('gstart 15 6')),
+      chip('Start 20 rund', ()=>run('gstart 20 6')),
+      el('div', {style:{height:'8px'}}),
+      chip('Start 5 rund — reset złota',  ()=>run('gstart 5 6 reset')),
+      chip('Start 10 rund — reset złota', ()=>run('gstart 10 6 reset')),
+      chip('Start 15 rund — reset złota', ()=>run('gstart 15 6 reset')),
+      chip('Start 20 rund — reset złota', ()=>run('gstart 20 6 reset')),
     );
     phaseActionsEl.appendChild(box);
     tintByActive();
@@ -1490,7 +1558,9 @@ function buildPhaseActionsSmart(s){
           ok(`Silnik: next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
         
           const s2 = game.getPublicState?.();
-          if (isFirstRound(s2)) {
+          const veto = !!s2.round_status?.sejm_canceled;
+
+          if (isFirstRound(s2) || veto) {
             // 1. runda => pomijamy 'auction' i 'sejm'
             const a = game.finishPhaseAndAdvance(); // auction -> sejm
             ok(`Silnik: next -> ${a || game.round.currentPhaseId() || 'koniec gry'}`);
@@ -1518,32 +1588,6 @@ function buildPhaseActionsSmart(s){
 
 // ====== SEJM (losowanie ustawy -> aukcja -> wybór wariantu) ======
 if (phase === 'auction' || phase === 'sejm'){
-  const canceled = !!s.round_status?.sejm_canceled;
-
-  if (canceled){
-    const info = section('Sejm zerwany', 'Liberum veto — w tej rundzie pomijacie licytację i ustawę.');
-    phaseActionsEl.appendChild(info);
-  
-    // pokaż popup tylko raz na rundę
-    const curRound = (s.round_status?.current_round ?? roundCur) | 0;
-    if (_sejmSkipPopupRound !== curRound) {
-      _sejmSkipPopupRound = curRound;
-      popupFromEngine('Sejm zerwany', [
-        'Liberum veto — przechodzimy od razu do fazy Akcji.'
-      ], {
-        buttonText: 'Dalej (Akcje)',
-        onAction: () => {
-          const a = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${a || game.round.currentPhaseId() || 'koniec gry'}`);
-          const b = game.finishPhaseAndAdvance(); ok(`Silnik: next -> ${b || game.round.currentPhaseId() || 'koniec gry'}`);
-          syncUIFromGame();
-        }
-      });
-    }
-  
-    tintByActive(); return;
-  }
-
-
   // Upewnij się, że ustawa na tę rundę jest ustawiona (i jeśli trzeba — pokaż popup)
   ensureSejmLawForRound(s);
 
@@ -1756,7 +1800,7 @@ if (phase === 'auction' || phase === 'sejm'){
               });
               logEngine(lines);
               syncUIFromGame();
-               _battlesPassCycle.clear();
+              maybeAutoAdvanceAfterBattles();
               
               popupFromEngine(`Starcie — ${key}`, [
                 `Rzut: ${roll}.`,
@@ -1794,27 +1838,15 @@ if (phase === 'auction' || phase === 'sejm'){
         const msg = game.battles.passTurn(freshPidx);
         ok(String(msg || 'PASS (starcia).'));
     
-        _battlesPassCycle.add(freshPidx);
-    
         syncUIFromGame();
+        maybeAutoAdvanceAfterBattles();
         buildPhaseActionsSmart(game.getPublicState());
-    
-        if (_battlesPassCycle.size >= 2) {
-          const nxt = game.finishPhaseAndAdvance();
-          ok(`Starcia: dwóch graczy spasowało — next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-          syncUIFromGame();
-          buildPhaseActionsSmart(game.getPublicState());
-          resetPassCycles();
-        } else {
-          ok('Starcia: kolej na następnego gracza (jeszcze nie kończymy fazy).');
-        }
     
       }catch(ex){
         if (String(ex?.message || '').includes('Faza starć już zakończona')) {
           ok('Silnik zamknął fazę Starć — odświeżam UI.');
           syncUIFromGame();
           buildPhaseActionsSmart(game.getPublicState());
-          resetPassCycles();
           return;
         }
         err('PASS (starcia) nieudany: ' + ex.message);
@@ -1827,10 +1859,96 @@ if (phase === 'auction' || phase === 'sejm'){
     tintByActive(); return;
   }
 
+  // ====== PALENIE POSIADŁOŚCI ======
+  if (phase === 'arson'){
+    const box = section('Palenie posiadłości', 'Możesz spalić jedyną posiadłość w prowincji, w której masz wojsko. Albo PASS.');
+  
+    // aktywny gracz (jak w battles)
+    const pidx = Number.isInteger(s.active_arson_index) ? s.active_arson_index : curPlayerIdx;
+    const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
+    box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } }, `Aktywny gracz: ${activePlayerName}`));
+  
+    // kandydaci (jak w battles liczy przeciwników)
+    const targets = uiArsonEligibleTargets(s, pidx);
+  
+    if (targets.length === 0){
+      box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } }, 'Brak legalnych celów — możesz PASS.'));
+    } else {
+      targets.forEach(({ pid, key, ownerIndex }) => {
+        const victim = s.settings?.players?.[ownerIndex]?.name || `#${ownerIndex}`;
+        const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
+  
+        row.append(el('span', { style:{ minWidth:'220px', fontWeight:'800' } }, `${key} — ofiara: ${victim}`));
+  
+        // przycisk akcji (jak „atak” w battles)
+        row.append(chip(`spal ${key}`, ()=>{
+          try{
+            // świeże indeksy (jak w battles)
+            const stNow = game.getPublicState?.() || {};
+            const pidxNow = Number.isInteger(stNow.active_arson_index) ? stNow.active_arson_index : curPlayerIdx;
+  
+            const lines = game.arson.burn({ playerIndex: pidxNow, provinceId: toProvEnum(key) });
+            logEngine(lines);
+            syncUIFromGame();
+  
+            // popup (jak w battles: obrazek, OK) i dopiero w onClose -> maybeAuto…
+            popupFromEngine(`Palenie — ${key}`, Array.isArray(lines)?lines:[String(lines)], {
+              imageUrl: ARSON_POPUP_IMG,
+              buttonText: 'OK',
+              onClose: () => {
+                maybeAutoAdvanceAfterArson();
+                buildPhaseActionsSmart(game.getPublicState());
+              }
+            });
+          } catch(e){ err('Błąd palenia: ' + e.message); }
+        }, `garson burn ${key}`));
+  
+        box.append(row);
+      });
+    }
+  
+    box.append(el('div', { style:{ height:'6px' } }));
+  
+    // PASS (jak w battles)
+    box.append(chip('PASS (palenie)', ()=>{
+      try{
+        const st = game.getPublicState?.() || {};
+        if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'arson') {
+          ok('Faza Palenia już zakończona — odświeżam UI.');
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+          return;
+        }
+        const fresh = Number.isInteger(st.active_arson_index) ? st.active_arson_index : curPlayerIdx;
+  
+        const msg = game.arson.passTurn(fresh);
+        ok(String(msg || 'PASS (palenie).'));
+  
+        syncUIFromGame();
+        // identycznie jak w battles: sprawdź czy faza jest DONE i wtedy auto-next
+        maybeAutoAdvanceAfterArson();
+        buildPhaseActionsSmart(game.getPublicState());
+      } catch(ex){
+        if (String(ex?.message || '').includes('Faza palenia już zakończona')) {
+          ok('Silnik zamknął fazę Palenia — odświeżam UI.');
+          syncUIFromGame();
+          buildPhaseActionsSmart(game.getPublicState());
+          return;
+        }
+        err('PASS (palenie) nieudany: ' + ex.message);
+      }
+    }, 'garson pass'));
+  
+    phaseActionsEl.appendChild(box);
+    tintByActive();
+    return;
+  }
+
+
   // ====== WZMACNIANIE ======
   if (phase === 'reinforcements'){
     const box = section('Wzmacnianie', 'Wylosuj N, S, E (1–6) i zastosuj wzmocnienia na torach wrogów.');
-    const btn = chip('Wylosuj i zastosuj (greinf N S E)', ()=>{
+    const btn = chip('Wzmocnienie wrogów', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
     
@@ -1906,7 +2024,7 @@ if (phase === 'auction' || phase === 'sejm'){
     
                 logEngine(lines);
                 syncUIFromGame();
-                _attacksPassCycle.clear();
+                maybeAutoAdvanceAfterAttacks(); 
     
                 popupFromEngine(`Wyprawa — ${key} → ${enemyKey}`, [
                   `Rzut: ${roll}.`,
@@ -1931,62 +2049,29 @@ if (phase === 'auction' || phase === 'sejm'){
       }
     
       box.append(el('div', { style:{ height:'6px' } }));
-      box.append(chip('PASS', () => {
-        try {
+      box.append(chip('PASS (wyprawy)', ()=> {
+        try{
           const st = game.getPublicState?.() || {};
           if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'attacks') {
-            ok('Faza Wypraw już się zakończyła — odświeżam UI.');
+            ok('Faza Wypraw już zakończona — odświeżam UI.');
             syncUIFromGame();
-            buildPhaseActionsSmart(game.getPublicState());
             return;
           }
-      
-          // świeży, aktualny gracz
-          const freshPidx = Number.isInteger(st.active_attacker_index)
-            ? st.active_attacker_index
-            : curPlayerIdx;
-      
-          const msg = game.attacks.passTurn(freshPidx);
-          ok(String(msg || 'PASS.'));
-      
-          // zapamiętaj, że ten gracz już spasował w tym cyklu
-          _attacksPassCycle.add(freshPidx);
-      
-          // odśwież UI (może wskoczyć kolejny gracz)
+          const pidx = Number.isInteger(st.active_attacker_index) ? st.active_attacker_index : curPlayerIdx;
+          const msg = game.attacks.passTurn(pidx);
+          ok(String(msg || 'PASS (wyprawy).'));
           syncUIFromGame();
+          maybeAutoAdvanceAfterAttacks();
           buildPhaseActionsSmart(game.getPublicState());
-      
-          // sprawdź, czy mamy 2 różnych PASS w bieżącym objeździe
-          if (_attacksPassCycle.size >= 2) {
-            // przejście do następnej fazy/rundy dopiero teraz
-            const nxt = game.finishPhaseAndAdvance();
-            ok(`Wyprawy: dwóch graczy spasowało — next -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-            syncUIFromGame();
-            buildPhaseActionsSmart(game.getPublicState());
-            resetPassCycles(); // zamknięty cykl
-          } else {
-            ok('Wyprawy: kolej na następnego gracza (jeszcze nie kończymy fazy).');
-          }
-      
-        } catch (ex) {
-          // jeżeli silnik już zamknął fazę — tylko się zsynchronizuj
-          if (String(ex?.message || '').includes('Faza ataków już zakończona')) {
-            ok('Silnik zamknął fazę Wypraw — odświeżam UI.');
-            syncUIFromGame();
-            buildPhaseActionsSmart(game.getPublicState());
-            resetPassCycles();
-            return;
-          }
-          err('PASS nieudany: ' + ex.message);
+        } catch(ex){
+          err('PASS (wyprawy) nieudany: ' + ex.message);
         }
-      }, 'gpass'));
+      }));
 
-    
       phaseActionsEl.appendChild(box);
       tintByActive();
       return;
     }
-
 
   // ====== SPUSTOSZENIA ======
   if (phase === 'devastation'){
@@ -1994,8 +2079,15 @@ if (phase === 'auction' || phase === 'sejm'){
     const btnDev = chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
-    
+
+      const before = game.getPublicState?.() || {};
+      const bn = (before.raid_tracks?.N | 0);
+      const bs = (before.raid_tracks?.S | 0);
+      const be = (before.raid_tracks?.E | 0);
+      const noDevastation = bn < 3 && bs < 3 && be < 3;
+
       const lines = game.devastation.resolve({ N, S, E });
+      
       ok(`(UI) spustoszenia: N=${N}, S=${S}, E=${E}`);
       logEngine(lines);
       syncUIFromGame();
@@ -2004,7 +2096,7 @@ if (phase === 'auction' || phase === 'sejm'){
         `Rzuty: N=${N}, S=${S}, E=${E}.`,
         ...(Array.isArray(lines) ? lines : [lines]),
       ], {
-        imageUrl: DEVASTATION_POPUP_IMG,
+        imageUrl: noDevastation ? PEACE_BORDER_IMG : DEVASTATION_POPUP_IMG,
         buttonText: 'Dalej',
         onAction: () => {
           const nxt = game.finishPhaseAndAdvance();
@@ -2053,7 +2145,6 @@ function syncUIFromGame(){
   const phaseId = s.current_phase || game.round?.currentPhaseId?.();
   const roundNo = s.round_status?.current_round;
   if (phaseId !== _lastPhaseId || roundNo !== _lastRoundNo){
-    resetPassCycles();
     _lastPhaseId = phaseId;
     _lastRoundNo = roundNo;
   }
@@ -2062,6 +2153,7 @@ function syncUIFromGame(){
   roundCur = s.round_status.current_round; roundMax = s.round_status.total_rounds; 
   updateRoundUI();
   updatePlayersUIFromState(s);
+  applyRankingBarsFromEngine(s);
   applyCurrentTurnFromState(s);
   applyPhaseFromEngineState(s);
   buildPhaseActionsSmart(game.getPublicState());
@@ -2188,11 +2280,16 @@ function execCommand(raw){
     const maxRounds = tokens[1] ? parseInt(tokens[1],10) : 3;
     const startingGold = tokens[2] ? parseInt(tokens[2],10) : 6;
     if (PLAYERS.length === 0) return err('Najpierw dodaj graczy: gracz <imię> <kolor>.');
+  
+    const flag = (tokens[3] || '').toLowerCase();
+    const resetGoldEachRound = ['reset', 'zr', '--reset', 'goldreset', 'resetgold', 'zero'].includes(flag);
+    
     const names = PLAYERS.map(p => p.name);
-    game.startGame({ players: names, startingGold, maxRounds });
+    game.startGame({ players: names, startingGold, maxRounds, resetGoldEachRound });
     
     buildEventSchedule(maxRounds);
-    ok(`Start gry: gracze=${names.join(', ')}, rund=${maxRounds}, złoto start=${startingGold}.`);
+    const mode = resetGoldEachRound ? ' (tryb: reset złota co rundę)' : '';
+    ok(`Start gry: gracze=${names.join(', ')}, rund=${maxRounds}, złoto start=${startingGold}${mode}.`);
     syncUIFromGame(); return;
   }
 
@@ -2424,6 +2521,46 @@ function execCommand(raw){
     return;
   }
 
+  if (cmd === 'garson'){
+    const sub = norm(tokens[1]||'');
+    if (sub === 'burn'){
+      if (curPlayerIdx < 0) return err('Ustaw aktywnego gracza: turn <...>.');
+      const prov = toProvEnum(tokens[2]);
+      if (!prov) return err('Użycie: garson burn <prowincja>.');
+      try{
+        const lines = game.arson.burn({ playerIndex: curPlayerIdx, provinceId: prov });
+        ok('Spalono posiadłość.');
+        logEngine(lines);
+        syncUIFromGame();
+      } catch(ex){ err('Błąd: ' + ex.message); }
+      return;
+    }
+    if (sub === 'pass'){
+      if (curPlayerIdx < 0) return err('Brak aktywnego gracza.');
+      try{
+        const msg = game.arson.passTurn(curPlayerIdx);
+        ok(String(msg || 'PASS (palenie).'));
+        syncUIFromGame();
+      } catch(ex){ err('PASS (palenie) nieudany: ' + ex.message); }
+      return;
+    }
+    return err('Użycie: garson burn <prowincja> | garson pass');
+  }
+  
+  if (cmd === 'gburn'){
+    if (curPlayerIdx < 0) return err('Ustaw aktywnego gracza: turn <...>.');
+    const prov = toProvEnum(tokens[1]);
+    if (!prov) return err('Użycie: gburn <prowincja>.');
+    try{
+      const lines = game.arson.burn({ playerIndex: curPlayerIdx, provinceId: prov });
+      ok('Spalono posiadłość.');
+      logEngine(lines);
+      syncUIFromGame();
+    } catch(ex){ err('Błąd: ' + ex.message); }
+    return;
+  }
+
+
   // gdevast <N> <S> <E>
   if (cmd === 'gdevast'){
     const N = parseInt(tokens[1],10), S = parseInt(tokens[2],10), E = parseInt(tokens[3],10);
@@ -2464,7 +2601,8 @@ function showHelp(){
   print('• clear — wyczyść rysunki • reset — pełny reset UI');
   print('• gduel <prow> <A> <B> <rzutyA...> | <rzutyB...> — potyczka między graczami w prowincji (rzuty 1–6, liczba = ich jednostkom)');
   print('• gduelauto <prow> <A> <B> — szybka potyczka (losowe rzuty w liczbie = jednostkom)');
-
+  print('• garson burn <prow> — spal jedyną posiadłość w prowincji (jeśli legalne) • garson pass — PASS w fazie palenia');
+  print('• gburn <prow> — skrót do garson burn');
 }
 
 // ===================== Obsługa konsoli =====================

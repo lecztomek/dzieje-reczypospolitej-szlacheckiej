@@ -80,12 +80,13 @@ class RoundStatus {
 
 class GameContext {
   constructor() {
-    this.settings = { players: [], max_rounds: 3 };
+    this.settings = { players: [], max_rounds: 3, reset_gold_each_round: false };
     this.round_status = new RoundStatus(3, 0);
     this.last_output = ""; // optional log aggregator
     this.turn = null;
     this.attackTurn = null; 
     this.battlesTurn = null; 
+    this.arsonTurn = null;
     
     this.provinces = {
       [ProvinceID.PRUSY]: new Province(ProvinceID.PRUSY),
@@ -173,6 +174,32 @@ function destroyLastEstateAny(ctx, pid) {
   }
   return null;
 }
+
+function lastOccupiedEstateSlot(ctx, pid) {
+  const est = ctx.provinces[pid].estates;
+  for (let i = est.length - 1; i >= 0; i--) {
+    const owner = est[i];
+    if (owner !== -1) return { ownerIndex: owner, slotIndex: i };
+  }
+  return null;
+}
+
+function uniqueEstateOwner(ctx, pid) {
+  const est = ctx.provinces[pid].estates;
+  let owner = -1;
+  let slotIndex = -1;
+
+  for (let i = 0; i < est.length; i++) {
+    const v = est[i];
+    if (v === -1) continue;        // puste pole
+    if (owner === -1) { owner = v; slotIndex = i; }
+    else if (v !== owner) { return null; }  // różni właściciele → nie jest „ostatnia”
+    else { slotIndex = i; }        // zapamiętaj najpóźniejsze wystąpienie
+  }
+
+  return (owner >= 0) ? { ownerIndex: owner, slotIndex } : null;
+}
+
 function plunderProvince(ctx, pid) {
   const prov = ctx.provinces[pid];
   const msgs = [`[Spustoszenie] ${pid}: `];
@@ -436,6 +463,11 @@ class SejmAPI {
           const arr = influenceWinnersInProvince(c, provinceId);
           if (arr.length === 1 && arr[0] === playerIndex) {
             c.troops.per_province[provinceId][playerIndex] += 1;
+            const arr = c.troops_kind.per_province[provinceId];
+            if ((arr[playerIndex] | 0) === UnitKind.NONE){
+              c.troops_kind.per_province[provinceId][playerIndex] = UnitKind.INF;
+            }
+            
             log.push(`  ${c.settings.players[playerIndex].name}: +1 jednostka w ${provinceId}`);
           }
         });
@@ -671,6 +703,113 @@ class ActionAPI {
     addProvinceWealth(c, provinceId, +1); p.gold -= actual; 
     this.#advanceAfterAction(playerIndex);
     return `${p.name} podnosi zamożność ${provinceId}: ${before}→${c.provinces[provinceId].wealth}. (koszt ${actual}, złoto=${p.gold})`;
+  }
+}
+
+class ArsonAPI {
+  constructor(ctx) { this.ctx = ctx; }
+
+  #ensurePhase() {
+    if (!this.ctx.arsonTurn) throw new Error("To nie jest faza palenia posiadłości.");
+    if (this.ctx.arsonTurn.done) throw new Error("Faza palenia posiadłości już zakończona.");
+  }
+
+  #requireActive(playerIndex) {
+    this.#ensurePhase();
+    const t = this.ctx.arsonTurn;
+    const expected = t.order[t.idx];
+    if (playerIndex !== expected) {
+      const want = this.ctx.settings.players[expected]?.name ?? `#${expected}`;
+      throw new Error(`Teraz ruch ma ${want}.`);
+    }
+  }
+
+  #eligibleTargetsFor(playerIndex) {
+    ensurePerProvinceArrays(this.ctx);
+    const s = this.ctx;
+    const out = [];
+    for (const pid of Object.values(ProvinceID)) {
+      const troops = (s.troops.per_province[pid]?.[playerIndex] | 0);
+      if (troops <= 0) continue;
+  
+      const info = lastOccupiedEstateSlot(s, pid);
+      if (!info) continue;
+  
+      // tylko jeśli ostatnia posiadłość należy do przeciwnika
+      if (info.ownerIndex === playerIndex) continue;
+  
+      out.push(pid);
+    }
+    return out;
+  }
+
+  #advanceToNext() {
+    const t = this.ctx.arsonTurn;
+    if (!t) return;
+  
+    const P = t.order.length | 0;
+    if (P === 0) { t.done = true; return; }
+  
+    // 1) wszyscy już PASS → koniec fazy
+    if (t.passed.every(Boolean)) {
+      t.done = true;
+      return;
+    }
+  
+    // 2) znajdź NASTĘPNEGO gracza, który JESZCZE nie zagrał (nie sprawdzamy celów!)
+    //    — dokładnie tak jak w battles: gracz bez celów ma turę i klika PASS ręcznie.
+    for (let step = 1; step <= P; step++) {
+      const nextIdx = (t.idx + step) % P;   // indeks w kolejności tury
+      const pidx    = t.order[nextIdx];     // indeks gracza
+      if (!t.passed[pidx]) {
+        t.idx = nextIdx;                    // przekazujemy turę temu graczowi
+        return;
+      }
+    }
+  
+    // 3) awaryjnie (gdyby pętla nic nie znalazła) – zamknij
+    t.done = true;
+  }
+
+  burn({ playerIndex, provinceId }) {
+    this.#requireActive(playerIndex);
+    const legal = this.#eligibleTargetsFor(playerIndex);
+    if (!legal.includes(provinceId)) throw new Error("Ta prowincja nie jest legalnym celem do spalenia.");
+  
+    const c = this.ctx; ensurePerProvinceArrays(c);
+    const info = lastOccupiedEstateSlot(c, provinceId);
+    if (!info) throw new Error("Brak posiadłości do spalenia.");
+    if (info.ownerIndex === playerIndex) throw new Error("Nie możesz spalić własnej posiadłości.");
+
+    c.provinces[provinceId].estates[info.slotIndex] = -1;
+
+    const beforeWealth = c.provinces[provinceId].wealth;
+    addProvinceWealth(c, provinceId, -1);
+    const afterWealth = c.provinces[provinceId].wealth;
+    
+    const atk = c.settings.players[playerIndex].name;
+    const def = c.settings.players[info.ownerIndex].name;
+
+    this.#resetPasses();
+    this.#advanceToNext();
+    return `[Palenie] ${atk} spalił posiadłość gracza ${def} w ${provinceId}; `
+         + `zamożność ${beforeWealth}→${afterWealth}.`;
+  }
+
+  pass(playerIndex) {
+    this.#requireActive(playerIndex);
+    this.ctx.arsonTurn.passed[playerIndex] = true;
+    this.#advanceToNext();
+    return `PASS (palenie) — ${this.ctx.settings.players[playerIndex].name}`;
+  }
+
+  // alias dla spójności z battles
+  passTurn(playerIndex) { return this.pass(playerIndex); }
+
+  #resetPasses() {
+    const t = this.ctx.arsonTurn;
+    if (!t) return;  
+    t.passed.fill(false);
   }
 }
 
@@ -937,7 +1076,7 @@ class AttackInvadersAPI {
     // ile kości faktycznie używamy w tej akcji
     const requestedDice = Number(dice) > 0 ? Number(dice) | 0
                          : (Array.isArray(rolls) ? rolls.length : maxAvailableDice);
-    const usedDice = Math.max(1, Math.min(requestedDice, maxAvailableDice));
+   const usedDice = Math.max(1, Math.min(requestedDice + (hasArtilleryBonus && requestedDice <= units ? 1 : 0), maxAvailableDice));
 
     // jeśli podano rzuty, upewnij się że mamy ich tyle, ile chcemy użyć
     if (Array.isArray(rolls) && rolls.length < usedDice) {
@@ -1036,69 +1175,112 @@ class DevastationAPI {
   }
 }
 
-function computeFinalScores(ctx) {
+// === NEW: surowa punktacja dla UI i raportu ===
+function computeScoresRaw(ctx){
   const players = ctx.settings.players;
   const pcount = players.length;
-  players.forEach((p) => { p.score = 0; });
 
-  // (1) Posiadłości = 1 pkt za każdą posiadłość (bez zwycięzcy większości)
+  // (0) wyzeruj tymczasowo
+  const tmpScore = Array(pcount).fill(0);
+
+  // (1) Posiadłości → 1 pkt każda
   const estatesTotal = Array(pcount).fill(0);
   for (const prov of Object.values(ctx.provinces)) {
     for (const owner of prov.estates) if (owner >= 0 && owner < pcount) estatesTotal[owner] += 1;
   }
-  // przyznaj punkty: liczba posiadłości = punkty
-  players.forEach((p, i) => { p.score += estatesTotal[i]; });
+  estatesTotal.forEach((v,i)=> tmpScore[i]+=v);
 
-  // (2) Wpływy w prowincjach (po 1 pkt za jednoznaczną kontrolę)
+  // (2) Wpływy (jednoznaczna kontrola) → 1 pkt
+  const provinceWinners = {};
+  for (const pid of Object.values(ProvinceID)) {
+    const winners = influenceWinnersInProvince(ctx, pid);
+    if (winners.length === 1) { tmpScore[winners[0]] += 1; provinceWinners[pid] = winners[0]; }
+    else { provinceWinners[pid] = null; }
+  }
+
+  // (3) Honor → 1:1
+  players.forEach((p,i)=> tmpScore[i] += p.honor|0);
+
+  // (4) Złoto → 1 pkt za każde pełne 5 zł (jak w Twoim computeFinalScores)
+  const goldPts = players.map(p => Math.floor((p.gold|0)/5));
+  goldPts.forEach((v,i)=> tmpScore[i]+=v);
+
+  // Zbuduj tablicę
+  const rows = players.map((p,i)=>({
+    index: i,
+    name: p.name,
+    score: tmpScore[i],
+    breakdown: {
+      estates: estatesTotal[i],
+      control: Object.values(provinceWinners).filter(w=>w===i).length,
+      honor: p.honor|0,
+      goldPts: goldPts[i],
+      gold: p.gold|0
+    }
+  }));
+
+  // Miejsca z remisami
+  const sorted = [...rows].sort((a,b)=> b.score - a.score);
+  const placeByIndex = Array(pcount).fill(0);
+  let curPlace = 1;
+  for (let k=0; k<sorted.length; k++){
+    if (k>0 && sorted[k].score < sorted[k-1].score) curPlace = k+1;
+    placeByIndex[sorted[k].index] = curPlace;
+  }
+
+  return {
+    players: rows,                // w kolejności oryginalnej
+    standings: sorted,            // posortowane malejąco
+    places: placeByIndex          // indeks gracza → miejsce (1..n)
+  };
+}
+
+
+function computeFinalScores(ctx) {
+  const players = ctx.settings.players;
+  // policz surowo
+  const raw = computeScoresRaw(ctx);
+
+  // zapisz score do obiektów graczy (jak wcześniej)
+  raw.players.forEach(r => { players[r.index].score = r.score; });
+
+  // zbuduj linie raportu (to co już miałeś)
+  const estatesLine = "Posiadłości→pkt: " + raw.players.map(r => `${players[r.index].name}=+${r.breakdown.estates}`).join(", ");
+  const honorLine   = "Honor: " + raw.players.map(r => `${players[r.index].name}=+${r.breakdown.honor}`).join(", ");
+  const goldLine    = "Złoto→pkt: " + raw.players.map(r => `${players[r.index].name}=+${r.breakdown.goldPts} (z ${r.breakdown.gold} zł)`).join(", ");
+
+  // wpływy z prowincji (rekonstrukcja jak wcześniej)
   const influenceLines = [];
   for (const pid of Object.values(ProvinceID)) {
     const winners = influenceWinnersInProvince(ctx, pid);
-    if (!winners.length) {
-      influenceLines.push(`${pid}: brak wpływu`);
-    } else if (winners.length === 1) {
-      const w = winners[0];
-      players[w].score += 1;
-      influenceLines.push(`${pid}: ${players[w].name}`);
-    } else {
-      influenceLines.push(`${pid}: remis – nikt`);
-    }
+    if (!winners.length) influenceLines.push(`  • ${pid}: brak wpływu`);
+    else if (winners.length === 1) influenceLines.push(`  • ${pid}: ${players[winners[0]].name}`);
+    else influenceLines.push(`  • ${pid}: remis – nikt`);
   }
-
-  // (3) Honor = punkty
-  players.forEach((p) => p.score += p.honor);
-
-  // (4) Złoto → 1 pkt za każde pełne 3 zł
-  players.forEach((p) => p.score += Math.floor(p.gold / 5));
-
-  // Tabela i zwycięzcy
-  const standings = players
-    .map((p) => ({ name: p.name, score: p.score }))
-    .sort((a, b) => b.score - a.score);
-
-  const topScore = standings.length ? standings[0].score : 0;
-  const winners = standings.filter(s => s.score === topScore).map(s => s.name);
 
   const lines = [];
   lines.push("[Punktacja końcowa]");
-  lines.push("Posiadłości→pkt: " + players.map((p, i) => `${p.name}=+${estatesTotal[i]}`).join(", "));
+  lines.push(estatesLine);
   lines.push("Wpływy z prowincji:");
-  influenceLines.forEach((s) => lines.push("  • " + s));
-  lines.push("Honor: " + players.map((p) => `${p.name}=+${p.honor}`).join(", "));
-  lines.push("Złoto→pkt: " + players.map((p) => `${p.name}=+${Math.floor(p.gold/5)} (z ${p.gold} zł)`).join(", "));
+  influenceLines.forEach(s => lines.push(s));
+  lines.push(honorLine);
+  lines.push(goldLine);
   lines.push("Tabela wyników:");
-  standings.forEach((s, idx) => lines.push(`  ${idx + 1}. ${s.name} — ${s.score} pkt`));
+  raw.standings.forEach((s, idx) => lines.push(`  ${idx + 1}. ${s.name} — ${s.score} pkt`));
+
+  const top = raw.standings[0]?.score ?? 0;
+  const winners = raw.standings.filter(s=>s.score===top).map(s=>s.name);
   lines.push(winners.length === 1
-    ? `Zwycięzca: ${winners[0]} (${topScore} pkt)`
-    : `Zwycięzcy: ${winners.join(", ")} (${topScore} pkt)`);
+    ? `Zwycięzca: ${winners[0]} (${top} pkt)`
+    : `Zwycięzcy: ${winners.join(", ")} (${top} pkt)`);
 
-  return lines; // ← ZWRACAMY TABLICĘ LINII (UI i tak to łyka)
+  return lines;
 }
-
 
 // ---------------- Round + Game orchestration (programmatic) ----------------
 class RoundEngine {
   constructor(ctx) { this.ctx = ctx; this.phaseIndex = 0; this.phases = [
-    "events", "income", "auction", "sejm", "actions", "battles", "reinforcements", "attacks", "devastation"
+    "events", "income", "auction", "sejm", "actions", "battles", "arson", "reinforcements", "attacks", "devastation"
   ]; }
   currentPhaseId() { return this.phases[this.phaseIndex] ?? null; }
   nextPhase() {
@@ -1123,16 +1305,18 @@ export class ConsoleGame {
     this.reinforce = new EnemyReinforcementAPI(this.ctx);
     this.attacks = new AttackInvadersAPI(this.ctx);
     this.devastation = new DevastationAPI(this.ctx);
+    this.arson = new ArsonAPI(this.ctx); 
 
     this.round = null; // RoundEngine
   }
 
   // ------------ Lifecycle ------------
-  startGame({ players = [], startingGold = 6, maxRounds = 3 } = {}) {
+startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = false } = {}) {
     if (!players.length) players = ["Player1"]; // default
     this.ctx.settings.players = players.map((name) => new Player(String(name), startingGold | 0));
     this.ctx.settings.max_rounds = Math.max(1, maxRounds | 0 || 1);
     this.ctx.round_status = new RoundStatus(this.ctx.settings.max_rounds, this.ctx.settings.players.length);
+    this.ctx.settings.reset_gold_each_round = !!resetGoldEachRound;
 
     // init boards
     ensurePerProvinceArrays(this.ctx);
@@ -1143,6 +1327,10 @@ export class ConsoleGame {
   }
 
   _startRound() {
+    if (this.ctx.settings.reset_gold_each_round && this.ctx.round_status.current_round > 1) {
+      this.ctx.settings.players.forEach(p => { p.gold = 0; });
+    }
+    
     const rs = this.ctx.round_status;
     // reset per-round modifiers
     rs.sejm_canceled = false; rs.admin_yield = 2; rs.prusy_estate_income_penalty = 0; rs.discount_litwa_wplyw_pos = 0;
@@ -1186,7 +1374,14 @@ export class ConsoleGame {
     if (next === "attacks") this._initAttacksTurn();
     if (prev === "attacks" && next !== "attacks") this.ctx.attackTurn = null;
 
+    if (next === "arson") this._initArsonTurn();                 
+    if (prev === "arson" && next !== "arson") this.ctx.arsonTurn = null;
+
     return this.round.currentPhaseId();
+  }
+
+  getScoresRaw(){
+    return computeScoresRaw(this.ctx);
   }
 
   _initAttacksTurn() {
@@ -1213,7 +1408,18 @@ export class ConsoleGame {
     };
   }
 
-  // NEW: inicjalizacja tury akcji – kolejność od marszałka, każdy ma wykonać 2 akcje
+  _initArsonTurn(){
+    const P = this.ctx.settings.players.length;
+    const start = this.ctx.round_status.marshal_index;
+    const order = Array.from({length:P}, (_,k)=> (start + k) % P);
+    this.ctx.arsonTurn = {
+      order,
+      idx: 0,
+      passed: Array(P).fill(false),   
+      done: false
+    };
+  }
+
   _initActionsTurn() {
     const pcount = this.ctx.settings.players.length;
     const start = this.ctx.round_status.marshal_index;
@@ -1265,13 +1471,19 @@ export class ConsoleGame {
         ? this.ctx.battlesTurn.order[this.ctx.battlesTurn.idx]
         : null;
 
+    const activeArsonIdx =
+      (phase === "arson" && this.ctx.arsonTurn && !this.ctx.arsonTurn.done)
+        ? this.ctx.arsonTurn.order[this.ctx.arsonTurn.idx]
+        : null;
+    
     return deepClone({
       state: this.state,
       settings: {
         players: this.ctx.settings.players.map((p) => ({
           name: p.name, score: p.score, gold: p.gold, honor: p.honor, majority: p.majority, last_bid: p.last_bid
         })),
-      max_rounds: this.ctx.settings.max_rounds,
+        max_rounds: this.ctx.settings.max_rounds,
+        reset_gold_each_round: this.ctx.settings.reset_gold_each_round, 
       },
       round_status: deepClone(this.ctx.round_status),
       provinces: deepClone(this.ctx.provinces),
@@ -1281,8 +1493,7 @@ export class ConsoleGame {
       nobles: deepClone(this.ctx.nobles.per_province),
       current_phase: this.round?.currentPhaseId() ?? null,
       marshal: this.ctx.settings.players[this.ctx.round_status.marshal_index]?.name ?? null,
-
-      // NEW:
+      
       active_player_index: activeActionIdx,
       active_player: activeActionIdx != null ? this.ctx.settings.players[activeActionIdx].name : null,
       actions_turn: this.ctx.turn ? deepClone(this.ctx.turn) : null,
@@ -1294,6 +1505,11 @@ export class ConsoleGame {
       active_battler_index: activeBattleIdx,
       active_battler: activeBattleIdx != null ? this.ctx.settings.players[activeBattleIdx].name : null,
       battles_turn: this.ctx.battlesTurn ? deepClone(this.ctx.battlesTurn) : null,
+
+      active_arson_index: activeArsonIdx,
+      active_arson: activeArsonIdx != null ? this.ctx.settings.players[activeArsonIdx].name : null,
+      arson_turn: this.ctx.arsonTurn ? deepClone(this.ctx.arsonTurn) : null,
+
       });
   }
 }

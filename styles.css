@@ -730,3 +730,40 @@ svg{
   display:block;
   filter: drop-shadow(0 16px 24px rgba(0,0,0,.35));
 }
+
+.players-list .rankbar{
+  height: 8px;
+  border-radius: 6px;
+  background: currentColor;
+  display: inline-block;
+  min-width: 14px;      /* żeby nigdy nie zniknął */
+  transition: width .18s ease;
+}
+.players-list .player-chip{ gap:8px; }
+
+/* --- usuń znaczniki listy wszędzie w tych blokach --- */
+.players-list,
+.players-list ul,
+.players-list ol,
+.players-list li,
+.nobles-list,
+.nobles-list ul,
+.nobles-list ol,
+.nobles-list li{
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Safari/WebKit – jeszcze potrafi dodać wcięcie */
+.players-list, .nobles-list{
+  -webkit-padding-start: 0 !important;
+  padding-inline-start: 0 !important;
+}
+
+/* zabij marker całkiem */
+.players-list li::marker,
+.nobles-list li::marker{
+  content: '' !important;
+}
+

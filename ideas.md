@@ -1,0 +1,6 @@
+- marsz tylko miedzy graniczacymi
+- 2x marsz jako jedna akcja
+- przy spustoszeniu wrog atakuje armie obroncy - jesli jest kilku to losowo - nie ma wtedy pkt za honor, zasady ataku takie same jak przy najazdach, kawaleria nie jest nic silniejsza niz piechota
+- utrzymanie wojska - zold ??? - jesli nie zaplacimy to rzut kostka czy jednostka dezerteruje, moze byc globalny zold jesli nie oplacony w calosci to wtedy ktoras losowa jednostka dezerteuje (rzut koscia)
+- zold placimy jako ostatnia tura pow szystkich najazdach, spustoszeniach,
+- lepszy system bitw (ala centurion)
