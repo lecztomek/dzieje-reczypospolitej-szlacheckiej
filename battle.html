@@ -361,10 +361,10 @@ class Game{
     if(isCavD){ const p=cavPenalty(this.map[def.row][def.col]); if(p){ defNeed+=p; modD.push(`+${p} kawaleria w ${nameTer(this.map[def.row][def.col])} / pogoda`); } }
 
     // Szarża piech./kaw. na równinie przy pogodnie
-    if(att.order===Orders.SZARZA && tTo==='.' && this.weather==='pogodnie'){ 
-      attNeed--; 
-      modA.push(`−1 szarża na równinie (pogodnie)`); 
-    }
+	if (isCavA && att.order === Orders.SZARZA && tTo === '.' && this.weather === 'pogodnie') {
+	  attNeed--;
+	  modA.push('−1 kawaleria: szarża na równinie (pogodnie)');
+	}
 
     // Flanka/tył
     const flank=ctx.flank || this.isFlank(att,def,ctx);
@@ -377,11 +377,14 @@ class Game{
       modD.push(`−1 obrona na wzgórzu`); 
       modA.push(`+1 atak pod górę`); 
     }
-    if(this.map[def.row][def.col]==='=' && this.isFrontal(att,def)){ 
-      defNeed-=2; attNeed++; 
-      modD.push(`−2 obrona na brodzie`); 
-      modA.push(`+1 atak na brodzie`); 
-    }
+
+	// Bród (ford) — premia TYLKO dla piechoty broniącej się frontalnie
+	if (this.map[def.row][def.col] === '=' && this.isFrontal(att, def) && def.type[0] === 'P') {
+	  defNeed -= 2;
+	  attNeed += 1;
+	  modD.push('−2 piechota: obrona na brodzie');
+	  modA.push('+1 atak na brodzie (przeciw piechocie)');
+	}
 
     // Piechota-szach sprzyja się w lesie
     if(def.type==='P~' && this.map[def.row][def.col]==='L'){ defNeed--; modD.push(`−1 piechota-szach w lesie`); }
@@ -400,17 +403,16 @@ class Game{
 
     /* ==== Formacje: klin + kontra piechota vs linia piechoty ==== */
 
-    // KLIN (tylko gdy to on ATAKUJE)
-    if (att.formation === 'KLIN'){
-      if (!att._wedgeFirstAttackDone){
-        attNeed -= 2; 
-        modA.push('−2 klin: pierwszy atak');
-        att._wedgeFirstAttackDone = true;
-      } else {
-        attNeed += 1; 
-        modA.push('+1 klin: kolejne ataki');
-      }
-    }
+	if (att.formation === 'KLIN') {
+	  if (!att._wedgeFirstAttackDone) {
+		attNeed -= 3;
+		modA.push('−3 klin: pierwszy atak');
+		att._wedgeFirstAttackDone = true;
+	  } else {
+		attNeed += 1;
+		modA.push('+1 klin: kolejne ataki');
+	  }
+	}
 
     // Pomocniki do rozpoznawania piechoty/kawalerii w liniach
     const isInfLine  = u => u.formation === 'LINIA' && u.type[0] === 'P';
@@ -673,6 +675,13 @@ Obrońca (O):
 		if (this.tryMove(u, target.row, target.col, {respectBattleZone})){
 		  log(`ruch ${u.type[0]}${u.num}(${u.side}): ${from} → ${to}`);
 		  didMove = true;
+
+		  // piechota w czworoboku (P□) po ruchu staje się linią (P)
+		  if (u.type[0] === 'P' && u.formation === 'CZWOR') {
+			u.setTypeAndFormation('P'); // ustawi formację = LINIA i typ = 'P'
+			log(`(P${u.num}(${u.side}) przechodzi z czworoboku do linii po ruchu)`);
+		  }
+
 		  return true;
 		}
 		log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): nie można wejść na ${to})`);
