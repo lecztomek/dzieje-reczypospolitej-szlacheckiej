@@ -339,122 +339,154 @@ class Game{
     else { victim.bloodied=true; victim.routed=false; log(`   ✚ ${victim.type[0]}${victim.num}(${victim.side}) POZOSTAJE (krwawi).`); }
   }
 
-  /* ===== Walka z modyfikatorami ===== */
-  combat(att,def,ctx,log){
-    if(att.dead||def.dead||att.escaped||def.escaped) return;
-    if(att.routed||def.routed) return; 
+	/* ===== Walka z modyfikatorami ===== */
+	combat(u1, u2, ctx, log){
+	  if (u1.dead||u2.dead||u1.escaped||u2.escaped) return;
+	  if (u1.routed||u2.routed) return;
 
-    let attNeed=8,defNeed=8;
-    const modA=[], modD=[];
-    const tTo=this.map[ctx.to.row][ctx.to.col];
-    const isCavA=att.type[0]==='K',isCavD=def.type[0]==='K';
+	  // Progi bazowe i „notatniki” modyfikatorów (osobno dla każdej jednostki)
+	  let need1 = 8, need2 = 8;
+	  const m1 = [], m2 = [];
 
-    // Kawaleria: kary za teren/pogodę
-    const cavPenalty=(ter)=>{ 
-      let pen=0; 
-      if(ter==='L'||ter==='B') pen=Math.max(pen,2); 
-      if(this.weather==='bloto') pen=Math.max(pen,2); 
-      else if(this.weather==='deszcz') pen=Math.max(pen,1); 
-      return pen; 
-    };
-    if(isCavA){ const p=cavPenalty(tTo); if(p){ attNeed+=p; modA.push(`+${p} kawaleria w ${nameTer(tTo)} / pogoda`); } }
-    if(isCavD){ const p=cavPenalty(this.map[def.row][def.col]); if(p){ defNeed+=p; modD.push(`+${p} kawaleria w ${nameTer(this.map[def.row][def.col])} / pogoda`); } }
+	  // Skróty
+	  const isCav1 = u1.type[0] === 'K', isCav2 = u2.type[0] === 'K';
+	  const isInf1 = u1.type[0] === 'P', isInf2 = u2.type[0] === 'P';
+	  const ter1 = this.map[u1.row][u1.col];
+	  const ter2 = this.map[u2.row][u2.col];
 
-    // Szarża piech./kaw. na równinie przy pogodnie
-	if (isCavA && att.order === Orders.SZARZA && tTo === '.' && this.weather === 'pogodnie') {
-	  attNeed--;
-	  modA.push('−1 kawaleria: szarża na równinie (pogodnie)');
-	}
+	  const from1 = (ctx && ctx.from1) ? ctx.from1 : { row:u1.row, col:u1.col };
+	  const from2 = (ctx && ctx.from2) ? ctx.from2 : { row:u2.row, col:u2.col };
 
-    // Flanka/tył
-    const flank=ctx.flank || this.isFlank(att,def,ctx);
-    if(flank && !def.flankGuard){ attNeed--; modA.push(`−1 atak z flanki/tyłu`); }
-    if(flank && def.flankGuard){ modD.push(`0 osłona skrzydła`); }
+	  // tylko FRONTALNOŚĆ (na potrzeby szarży/hill/ford)
+	  const frontal12 = isFrontalFrom(u1, u2, from1);
+	  const frontal21 = isFrontalFrom(u2, u1, from2);
 
-    // Wzgórza, bród
-    if(this.map[def.row][def.col]==='W'){ 
-      defNeed--; attNeed++; 
-      modD.push(`−1 obrona na wzgórzu`); 
-      modA.push(`+1 atak pod górę`); 
-    }
+	  const offensive = (u, opp, frontal) =>
+		(u.order === Orders.SZARZA) && frontal; // „ofensywny” = SZARŻA + kontakt frontalny
 
-	// Bród (ford) — premia TYLKO dla piechoty broniącej się frontalnie
-	if (this.map[def.row][def.col] === '=' && this.isFrontal(att, def) && def.type[0] === 'P') {
-	  defNeed -= 2;
-	  attNeed += 1;
-	  modD.push('−2 piechota: obrona na brodzie');
-	  modA.push('+1 atak na brodzie (przeciw piechocie)');
-	}
+	  // Kary kawalerii za teren/pogodę
+	  const cavPenalty = (ter) => {
+		let pen = 0;
+		if (ter === 'L' || ter === 'B') pen = Math.max(pen, 2);
+		if (this.weather === Weather.BLOTO) pen = Math.max(pen, 2);
+		else if (this.weather === Weather.DESZCZ) pen = Math.max(pen, 1);
+		return pen;
+	  };
+	  if (isCav1){ const p = cavPenalty(ter1); if (p){ need1 += p; m1.push(`+${p} kawaleria w ${nameTer(ter1)} / pogoda`); } }
+	  if (isCav2){ const p = cavPenalty(ter2); if (p){ need2 += p; m2.push(`+${p} kawaleria w ${nameTer(ter2)} / pogoda`); } }
 
-    // Piechota-szach sprzyja się w lesie
-    if(def.type==='P~' && this.map[def.row][def.col]==='L'){ defNeed--; modD.push(`−1 piechota-szach w lesie`); }
-    if(att.type==='P~' && tTo==='L'){ attNeed--; modA.push(`−1 piechota-szach idzie w las`); }
-
-    // Czworobok broni się lepiej vs kawaleria
-    if(def.type==='P□' && isCavA){ defNeed--; modD.push(`−1 czworobok vs kawaleria`); }
-
-    // Okrążenie (≥2 wrogów przy obrońcy)
-    const defAdjEnemies = this.adjEnemies(def);
-    if(defAdjEnemies.length>=2){
-      defNeed+=2; attNeed--; 
-      modD.push(`+2 okrążenie`); 
-      modA.push(`−1 okrążenie`);
-    }
-
-    /* ==== Formacje: klin + kontra piechota vs linia piechoty ==== */
-
-	if (att.formation === 'KLIN') {
-	  if (!att._wedgeFirstAttackDone) {
-		attNeed -= 3;
-		modA.push('−3 klin: pierwszy atak');
-		att._wedgeFirstAttackDone = true;
-	  } else {
-		attNeed += 1;
-		modA.push('+1 klin: kolejne ataki');
+	  // Szarża kawalerii (per jednostka; frontalnie; na równinie; pogodnie)
+	  if (isCav1 && offensive(u1, u2, frontal12) && ter2 === '.' && this.weather === Weather.POGODNIE) {
+		need1--; m1.push('−1 kawaleria: szarża na równinie (pogodnie)');
 	  }
+	  if (isCav2 && offensive(u2, u1, frontal21) && ter1 === '.' && this.weather === Weather.POGODNIE) {
+		need2--; m2.push('−1 kawaleria: szarża na równinie (pogodnie)');
+	  }
+
+	// Wzgórze
+	if (ter1 === 'W' && frontal21) { need1--; m1.push('−1 obrona na wzgórzu'); need2++; m2.push('+1 atak pod górę'); }
+	if (ter2 === 'W' && frontal12) { need2--; m2.push('−1 obrona na wzgórzu'); need1++; m1.push('+1 atak pod górę'); }
+
+	// Bród (tylko piechota, i tylko gdy NIE ma SZARŻA)
+	if (ter1 === '=' && isInf1 && frontal21 && u1.order !== Orders.SZARZA) {
+	  need1 -= 2; m1.push('−2 piechota: obrona na brodzie');
+	  need2 += 1; m2.push('+1 atak na brodzie (przeciw piechocie)');
+	}
+	if (ter2 === '=' && isInf2 && frontal12 && u2.order !== Orders.SZARZA) {
+	  need2 -= 2; m2.push('−2 piechota: obrona na brodzie');
+	  need1 += 1; m1.push('+1 atak na brodzie (przeciw piechocie)');
 	}
 
-    // Pomocniki do rozpoznawania piechoty/kawalerii w liniach
-    const isInfLine  = u => u.formation === 'LINIA' && u.type[0] === 'P';
-    const isInfSquare= u => u.formation === 'CZWOR' && u.type[0] === 'P';
-    const isInfSzach = u => u.formation === 'SZACH'  && u.type[0] === 'P';
 
-    // KARA tylko w starciu z LINIĄ PIECHOTY (P w LINIA).
-    // LINIA KAWALERII (K w LINIA) NIE uruchamia kary.
+	  // P~ w lesie: obrońca stojący w lesie −1; atakujący wchodzący w las −1
+	  if (u1.type === 'P~' && ter1 === 'L') { need1--; m1.push('−1 piechota-szach w lesie (obrona)'); }
+	  if (u1.type === 'P~' && this.map[u2.row][u2.col] === 'L' && frontal12) { need1--; m1.push('−1 piechota-szach idzie w las'); }
+	  if (u2.type === 'P~' && ter2 === 'L') { need2--; m2.push('−1 piechota-szach w lesie (obrona)'); }
+	  if (u2.type === 'P~' && this.map[u1.row][u1.col] === 'L' && frontal21) { need2--; m2.push('−1 piechota-szach idzie w las'); }
 
-    // Atakujący: P□ / P~ kontra linia piechoty
-    if ((isInfSquare(att) || isInfSzach(att)) && isInfLine(def)){
-      attNeed += 1;
-      modA.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
-    }
+	  // P□ broni się lepiej vs kawaleria
+	  if (u1.type === 'P□' && isCav2) { need1--; m1.push('−1 czworobok vs kawaleria'); }
+	  if (u2.type === 'P□' && isCav1) { need2--; m2.push('−1 czworobok vs kawaleria'); }
 
-    // Broniący: P□ / P~ kontra linia piechoty
-    if ((isInfSquare(def) || isInfSzach(def)) && isInfLine(att)){
-      defNeed += 1;
-      modD.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
-    }
 
-    // Przytnij do 2..10 (k10)
-    attNeed=clamp(attNeed,2,10); 
-    defNeed=clamp(defNeed,2,10);
+	  const adjFoes1 = this.adjEnemies(u1).filter(x => !x.routed);
+	  const adjFoes2 = this.adjEnemies(u2).filter(x => !x.routed);
+	  if (adjFoes1.length >= 2) { need1 += 2; m1.push('+2 okrążenie'); need2--; m2.push('−1 okrążenie'); }
+	  if (adjFoes2.length >= 2) { need2 += 2; m2.push('+2 okrążenie'); need1--; m1.push('−1 okrążenie'); }
 
-    // Rzuty i wynik
-    const rA=d6(), rD=d6();
-    const aHit=rA>=attNeed && !att.didKill;
-    const dHit=rD>=defNeed && !def.didKill;
 
-    log(`Starcie ${att.type[0]}${att.num}(${att.side}) ▶ ${def.type[0]}${def.num}(${def.side})`);
-    log(`  A: potrzeba ≥${attNeed} [${modA.length?modA.join('; '):'brak modyf.'}] | rzut=${rA}`);
-    log(`  O: potrzeba ≥${defNeed} [${modD.length?modD.join('; '):'brak modyf.'}] | rzut=${rD}`);
+	  // KLIN (u1)
+	  if (u1.formation === 'KLIN') {
+		if (offensive(u1, u2, frontal12)) {
+		  if (!u1._wedgeFirstAttackDone) {
+			need1 -= 3; m1.push('−3 klin: pierwszy atak (tylko przy SZARŻY)');
+			u1._wedgeFirstAttackDone = true; // zużywamy tylko przy realnej szarży
+		  } else {
+			need1 += 1; m1.push('+1 klin: kolejne starcia (ofensywa)');
+		  }
+		} else {
+		  need1 += 1; m1.push('+1 klin: słaba obrona'); // obrona zawsze +1, bez zużycia
+		}
+	  }
 
-    if(aHit && dHit) log(`  → WYNIK: OBIE strony trafione.`);
-    else if(aHit)    log(`  → WYNIK: A trafił | O pudłuje.`);
-    else if(dHit)    log(`  → WYNIK: O trafił | A pudłuje.`);
-    else             log(`  → WYNIK: nikt nie trafił.`);
+	  // KLIN (u2)
+	  if (u2.formation === 'KLIN') {
+		if (offensive(u2, u1, frontal21)) {
+		  if (!u2._wedgeFirstAttackDone) {
+			need2 -= 3; m2.push('−3 klin: pierwszy atak (tylko przy SZARŻY)');
+			u2._wedgeFirstAttackDone = true;
+		  } else {
+			need2 += 1; m2.push('+1 klin: kolejne starcia (ofensywa)');
+		  }
+		} else {
+		  need2 += 1; m2.push('+1 klin: słaba obrona');
+		}
+	  }
 
-    if(aHit){ this.registerHit(def, log); att.didKill=true; }
-    if(dHit){ this.registerHit(att, log); def.didKill=true; }
-  }
+
+	// Pomocniki do rozpoznawania piechoty/kawalerii w liniach
+	const isInfLine   = u => u.formation === 'LINIA' && u.type[0] === 'P';
+	const isInfSquare = u => u.formation === 'CZWOR' && u.type[0] === 'P';
+	const isInfSzach  = u => u.formation === 'SZACH'  && u.type[0] === 'P';
+
+	// KARA tylko w starciu z LINIĄ PIECHOTY (P w LINIA).
+	// LINIA KAWALERII (K w LINIA) NIE uruchamia kary.
+
+	// Strona ①: P□ / P~ kontra linia piechoty (po stronie ②)
+	if ((isInfSquare(u1) || isInfSzach(u1)) && isInfLine(u2)) {
+	  need1 += 1;
+	  m1.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
+	}
+
+	// Strona ②: P□ / P~ kontra linia piechoty (po stronie ①)
+	if ((isInfSquare(u2) || isInfSzach(u2)) && isInfLine(u1)) {
+	  need2 += 1;
+	  m2.push('+1 (czworobok/szachownica piechoty vs linia piechoty)');
+	}
+
+
+	  // Przytnij progi do 2..10
+	  need1 = clamp(need1, 2, 10);
+	  need2 = clamp(need2, 2, 10);
+
+	  // Rzuty (k10) i log
+	  const r1 = d6(), r2 = d6();
+	  const hit1 = r1 >= need1 && !u1.didKill;
+	  const hit2 = r2 >= need2 && !u2.didKill;
+
+	  log(`Starcie ${u1.type[0]}${u1.num}(${u1.side}) ⇄ ${u2.type[0]}${u2.num}(${u2.side})`);
+	  log(`  ①: potrzeba ≥${need1} [${m1.length?m1.join('; '):'brak modyf.'}] | rzut=${r1}`);
+	  log(`  ②: potrzeba ≥${need2} [${m2.length?m2.join('; '):'brak modyf.'}] | rzut=${r2}`);
+
+	  if      (hit1 && hit2) log(`  → WYNIK: OBIE strony trafione.`);
+	  else if (hit1)         log(`  → WYNIK: strona ① trafiła | ② pudłuje.`);
+	  else if (hit2)         log(`  → WYNIK: strona ② trafiła | ① pudłuje.`);
+	  else                   log(`  → WYNIK: nikt nie trafił.`);
+
+	  if (hit1){ this.registerHit(u2, log); u1.didKill=true; }
+	  if (hit2){ this.registerHit(u1, log); u2.didKill=true; }
+	}
+
 
   isFlank(att,def,ctx){ const dr=rIdx(ctx.from.row)-rIdx(def.row), dc=ctx.from.col-def.col; const back=(ORIENT[def.side]===+1? dc<0: dc>0); return dr!==0 || back; }
   isFrontal(att,def){ const dc=att.col-def.col; return (ORIENT[def.side]===+1 ? dc<0 : dc>0); }
@@ -574,7 +606,11 @@ Obrońca (O):
 
 	for (const { a, b } of toResolve) {
 	  log(`(kontakt: ${a.type[0]}${a.num} z ${b.type[0]}${b.num})`);
-	  this.combat(a, b, { from: { row: a.row, col: a.col }, to: { row: b.row, col: b.col } }, log);
+		this.combat(a, b, {
+		  from1: { row: a.row, col: a.col },
+		  from2: { row: b.row, col: b.col }
+		}, log);
+
 	  if (this.finished) { log(this.endMsg); return true; }
 	}
 
@@ -674,6 +710,8 @@ Obrońca (O):
 		const from = cellStr(u.row,u.col), to = cellStr(target.row,target.col);
 		if (this.tryMove(u, target.row, target.col, {respectBattleZone})){
 		  log(`ruch ${u.type[0]}${u.num}(${u.side}): ${from} → ${to}`);
+		  u._lastMovedStep = this.step;
+		  u._lastOrderAtMove = u.order;
 		  didMove = true;
 
 		  // piechota w czworoboku (P□) po ruchu staje się linią (P)
@@ -739,6 +777,18 @@ Obrońca (O):
 }
 
 function nameTer(t){ return t==='.'?'równina': t==='L'?'las': t==='W'?'wzgórze': t==='B'?'bagno': t==='~'?'woda':'bród'; }
+// FRONT od strony `from` względem orientacji przeciwnika
+// FRONT od strony `from` względem orientacji przeciwnika
+// FRONT od strony `from` – zawsze TAK
+function isFrontalFrom(att, def, from){
+  return true;
+}
+
+// FLANK/TYŁ – wyłączamy całkiem
+function isFlankFrom(att, def, from){
+  return false;
+}
+
 
 /* ===== Doktryny ===== */
 const DOCTRINES = [
