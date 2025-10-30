@@ -11,9 +11,26 @@
   .board{display:grid;grid-template-columns:repeat(8,var(--cell));grid-auto-rows:var(--cell);gap:var(--gap);background:var(--grid);padding:var(--gap);border-radius:12px;box-shadow:0 0 0 1px #0008 inset,0 8px 30px #0007}
   .cell{position:relative;border-radius:10px;display:flex;align-items:center;justify-content:center;outline:1px solid #0006;overflow:hidden;cursor:default}
   .coords{position:absolute;top:4px;left:6px;font-size:11px;opacity:.6}
-  .plain{background:#283058} .forest{background:linear-gradient(135deg,#194d2a,#0e2917)}
-  .hill{background:linear-gradient(135deg,#6e5c2f,#493b1f)} .bog{background:linear-gradient(135deg,#3a2e4a,#231a30)}
-  .water{background:linear-gradient(135deg,#0a3a6e,#041e3a)} .ford{background:repeating-linear-gradient(135deg,#0a3a6e 0 14px,#8f7a46 14px 18px)}
+  .plain{background:#283058} 
+  /* LAS – obrazek zamiast gradientów */
+  .forest{
+    background:
+      url('battle_images/forest.png') center / 100% 100% no-repeat;
+    /* subtelny „rant”, jak wcześniej */
+    box-shadow: inset 0 0 0 1px #0004;
+    /* jeśli grafika jest pixel–artem, odkomentuj: */
+    /* image-rendering: pixelated; */
+  }
+
+  /* WZGÓRZE – obrazek zamiast izohips */
+  .hill{
+    background:
+      url('battle_images/hills.png') center / 100% 100% no-repeat;
+    box-shadow: inset 0 0 0 1px #0004;
+    /* image-rendering: pixelated; */ /* opcjonalnie */
+  }
+
+  .water{background:linear-gradient(135deg,#0a3a6e,#041e3a)}
 
   .selected{ outline:3px solid #fff8; box-shadow:0 0 0 2px #fff3 inset,0 8px 16px #000a; }
   .unit .letter{ font-size:16px; text-shadow:0 1px 0 #000a, 0 0 6px #0008; }
@@ -43,6 +60,15 @@
   .unit-sprite .hits{
     position:absolute; bottom:-2px; right:10px; font-size:11px; font-weight:900; opacity:.95;
     color:#fff; text-shadow:0 1px 0 #000;
+  }
+
+  .docdesc{
+    margin:6px 0 0;
+    background:#0e1330;
+    border:1px solid #313867;
+    border-radius:10px;
+    padding:8px 10px;
+    font-size:12px; line-height:1.35; opacity:.95;
   }
 
 
@@ -219,8 +245,15 @@ const COLS=[1,2,3,4,5,6,7,8];
 const BTL_MIN=2, BTL_MAX=7; // strefa bitwy = 2..7
 const ORIENT={A:+1,O:-1};
 
-const Terrain={PLAIN:'.',FOREST:'L',HILL:'W',BOG:'B',WATER:'~',FORD:'='};
-const Orders={UTRZYMAJ:'UTRZYMAJ', NAPRZOD:'NAPRZOD', SZARZA:'SZARZA', SKOS_L:'SKOS_L', SKOS_P:'SKOS_P', PRZES_L:'PRZES_L', PRZES_P:'PRZES_P', PRZECHWYC:'PRZECHWYC', OBRONA_SKRZYDLA:'OBRONA_SKRZYDLA'};
+const Terrain = { PLAIN:'.', FOREST:'L', HILL:'W', WATER:'~' };
+
+const Orders = {
+  UTRZYMAJ: 'UTRZYMAJ',
+  SZARZA: 'SZARZA',
+  SKOS_L: 'SKOS_L',
+  SKOS_P: 'SKOS_P'
+};
+
 const Weather={POGODNIE:'pogodnie',DESZCZ:'deszcz',BLOTO:'bloto'};
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v)), rIdx=r=>ROWS.indexOf(r), stepRow=(r,d)=>ROWS[rIdx(r)+d]||null, d6=()=>1+Math.floor(Math.random()*10);
 
@@ -275,42 +308,43 @@ function whyBlocked(G, u, t, {respectBattleZone=true} = {}){
 
 
 class Game{
-  constructor(){ this.map=this.emptyMap(); this.units=[]; this.weather=Weather.POGODNIE; this.step=0; this.finished=false; this.endMsg=''; }
-  emptyMap(){ const m={}; ROWS.forEach(r=>{ m[r]={}; COLS.forEach(c=> m[r][c]=Terrain.PLAIN ); }); return m; }
-  randomMap(seed=123){
-    const R=()=>Math.random(); 
-    this.map=this.emptyMap();
-
-    // wiersze, na których NIE rozstawiamy graczy
-    const waterRows = ROWS.filter(r => !SETUP_ROWS.includes(r));
-
-    // Woda/ford tylko w strefie bitwy (2–7) i NIGDY na A/B/C
-    if (R()<0.35 && waterRows.length){
-      const rr = waterRows[Math.floor(R()*waterRows.length)];
-      const sc = 4+Math.floor(R()*2); // 4..5 start w środku
-      for(let c=sc;c<=BTL_MAX;c++) this.map[rr][c]=Terrain.WATER;
-      const fordCol = clamp(sc, BTL_MIN, BTL_MAX-1);
-      this.map[rr][fordCol]=Terrain.FORD;
-    }
-
-    // Lasy
-    for(let i=0,n=1+Math.floor(R()*3);i<n;i++){
-      const r=ROWS[Math.floor(R()*ROWS.length)], c=BTL_MIN+Math.floor(R()*(BTL_MAX-BTL_MIN+1));
-      this.map[r][c]=Terrain.FOREST; if (c<BTL_MAX && R()<0.6) this.map[r][c+1]=Terrain.FOREST;
-    }
-    // Bagna (w środku)
-    for(let i=0,n=Math.floor(R()*3);i<n;i++){
-      const r=ROWS[Math.floor(R()*ROWS.length)], c=4+Math.floor(R()*3);
-      const cc=clamp(c, BTL_MIN, BTL_MAX);
-      this.map[r][cc]=Terrain.BOG;
-    }
-    // Wzgórza
-    for(let i=0,n=1+Math.floor(R()*2);i<n;i++){
-      const r=ROWS[Math.floor(R()*ROWS.length)], c=2+Math.floor(R()*5);
-      const cc=clamp(c, BTL_MIN, BTL_MAX);
-      this.map[r][cc]=Terrain.HILL;
-    }
+  constructor(){
+    this.map=this.emptyMap(); this.units=[];
+    this.weather=Weather.POGODNIE; this.step=0;
+    this.finished=false; this.endMsg='';
+    this.firstContactStep = null;   // ← NOWE
   }
+  emptyMap(){ const m={}; ROWS.forEach(r=>{ m[r]={}; COLS.forEach(c=> m[r][c]=Terrain.PLAIN ); }); return m; }
+randomMap(seed=123){
+  const R=()=>Math.random();
+  this.map=this.emptyMap();
+
+  // Woda tylko poza rzędami rozstawienia (A/B/C), w strefie bitwy 2–7
+  const waterRows = ROWS.filter(r => !SETUP_ROWS.includes(r));
+  if (R()<0.35 && waterRows.length){
+    const rr = waterRows[Math.floor(R()*waterRows.length)];
+    const sc = 4 + Math.floor(R()*2); // 4..5 — start mniej więcej w środku
+    for(let c=sc;c<=BTL_MAX;c++) this.map[rr][c]=Terrain.WATER;
+    // (brak brodu)
+  }
+
+  // Lasy
+  for(let i=0,n=1+Math.floor(R()*3); i<n; i++){
+    const r=ROWS[Math.floor(R()*ROWS.length)];
+    const c=BTL_MIN+Math.floor(R()*(BTL_MAX-BTL_MIN+1));
+    this.map[r][c]=Terrain.FOREST;
+    if (c<BTL_MAX && R()<0.6) this.map[r][c+1]=Terrain.FOREST;
+  }
+
+  // Wzgórza
+  for(let i=0,n=1+Math.floor(R()*2); i<n; i++){
+    const r=ROWS[Math.floor(R()*ROWS.length)];
+    const c=2+Math.floor(R()*5);
+    const cc=clamp(c, BTL_MIN, BTL_MAX);
+    this.map[r][cc]=Terrain.HILL;
+  }
+}
+
   
 	advanceDir(u){
 	  // Domyślny kierunek (A: +1, O: -1)
@@ -339,6 +373,7 @@ class Game{
     this.weather=weather; this.step=0; this.finished=false; this.endMsg=''; this.units=[]; this.randomMap(seed);
     const addSide=(s,arr)=>{ let p=0,k=0; arr.forEach(t=>{ let type=(t==='P~'||t==='P□')?t:t.toUpperCase(); if (type==='P[]'||type==='P#') type='P□'; const n=type[0]==='K'? ++k : ++p; this.units.push(new Unit(s,type,n)); }); };
     addSide('A',attacker); addSide('O',defender); this.autoPlaceAll();
+    this.firstContactStep = null;   // ← RESET
   }
   clearPositions(){ this.units.forEach(u=>{ if(!u.dead && !u.escaped){ u.row=null; u.col=null; } }); }
   autoPlace(side){
@@ -352,7 +387,13 @@ class Game{
   autoPlaceAll(){ this.clearPositions(); this.autoPlace('A'); this.autoPlace('O'); }
   unitAt(r,c){ return this.units.find(u=>!u.dead && !u.escaped && u.row===r && u.col===c); }
   enemyAt(r,c,side){ return this.units.find(u=>!u.dead && !u.escaped && u.row===r && u.col===c && u.side!==side); }
-  setOrder(u,ord){ if(u.routed||u.dead||u.escaped) return; u.order=ord; u.flankGuard=(ord===Orders.OBRONA_SKRZYDLA); }
+
+  setOrder(u, ord){
+    if (u.routed || u.dead || u.escaped) return;
+    u.order = ord;
+    u.flankGuard = false; // już nie używamy specjalnej flagi
+  }
+
 
   adjEnemies(u){
     if (u.routed) return []; // jednostka w ucieczce nie walczy
@@ -404,14 +445,14 @@ class Game{
 	  const offensive = (u, opp, frontal) =>
 		(u.order === Orders.SZARZA) && frontal; // „ofensywny” = SZARŻA + kontakt frontalny
 
-	  // Kary kawalerii za teren/pogodę
-	  const cavPenalty = (ter) => {
-		let pen = 0;
-		if (ter === 'L' || ter === 'B') pen = Math.max(pen, 2);
-		if (this.weather === Weather.BLOTO) pen = Math.max(pen, 2);
-		else if (this.weather === Weather.DESZCZ) pen = Math.max(pen, 1);
-		return pen;
-	  };
+    const cavPenalty = (ter) => {
+      let pen = 0;
+      if (ter === 'L') pen = Math.max(pen, 2); // las spowalnia K
+      if (this.weather === Weather.BLOTO) pen = Math.max(pen, 2);
+      else if (this.weather === Weather.DESZCZ) pen = Math.max(pen, 1);
+      return pen;
+    };
+
 	  if (isCav1){ const p = cavPenalty(ter1); if (p){ need1 += p; m1.push(`+${p} kawaleria w ${nameTer(ter1)} / pogoda`); } }
 	  if (isCav2){ const p = cavPenalty(ter2); if (p){ need2 += p; m2.push(`+${p} kawaleria w ${nameTer(ter2)} / pogoda`); } }
 
@@ -650,6 +691,10 @@ Obrońca (O):
 	// jeśli są frontalne – rozgrywamy tylko je; w przeciwnym razie rozgrywamy flankowe
 	const toResolve = frontalPairs.length > 0 ? frontalPairs : nonFrontalPairs;
 
+  if (this.firstContactStep == null && toResolve.length > 0){
+    this.firstContactStep = this.step;   
+  }
+
 	if (frontalPairs.length > 0 && nonFrontalPairs.length > 0) {
 	  log(`(priorytet: ${frontalPairs.length} starć FRONTALNYCH; pozostałe w kontakcie czekają)`);
 	}
@@ -685,7 +730,8 @@ Obrońca (O):
 	  });
 
 
-	const prio = [Orders.SZARZA, Orders.NAPRZOD, Orders.SKOS_L, Orders.SKOS_P, Orders.PRZES_L, Orders.PRZES_P, Orders.PRZECHWYC];
+  // kolejność fal ruchu
+  const prio = [Orders.SZARZA, Orders.SKOS_L, Orders.SKOS_P];
 
 	const canTryMove = (u) =>
 	  !u.dead && !u.escaped && !u.routed && !engaged.has(unitKey(u));
@@ -741,7 +787,17 @@ Obrońca (O):
 	applyMove(u, log){
 	  const dir = this.advanceDir(u);
 	  let didMove = false;
-
+	  
+    // gdzie próbujemy wejść dla danego rozkazu
+    const targetFor = (ord) => {
+      switch (ord) {
+        case Orders.SZARZA:  return { row: u.row,               col: u.col + dir };
+        case Orders.SKOS_L:  return { row: stepRow(u.row, -1),  col: u.col + dir };
+        case Orders.SKOS_P:  return { row: stepRow(u.row, +1),  col: u.col + dir };
+        default:              return { row: u.row,               col: u.col };
+      }
+    };
+	  
 	  const tryGo = (r,c,opts)=> this.tryMove(u,r,c,opts);
 
 	  const canEnter = (t) => {
@@ -776,22 +832,6 @@ Obrońca (O):
 		return false;
 	  };
 
-	  const targetFor = (ord)=>{
-		switch(ord){
-		  case Orders.NAPRZOD: return {row:u.row, col:u.col+dir};
-		  case Orders.SZARZA:  return {row:u.row, col:u.col+dir};
-		  case Orders.SKOS_L:  return {row:stepRow(u.row,-1), col:u.col+dir};
-		  case Orders.SKOS_P:  return {row:stepRow(u.row,+1), col:u.col+dir};
-		  case Orders.PRZES_L: return {row:u.row, col:u.col-1};
-		  case Orders.PRZES_P: return {row:u.row, col:u.col+1};
-		  case Orders.PRZECHWYC:{
-			const fwd=this.unitAt(u.row,u.col+dir);
-			return fwd ? {row:u.row, col:u.col} : {row:u.row, col:u.col+dir};
-		  }
-		  default: return {row:u.row, col:u.col};
-		}
-	  };
-
 	  const isDiagonal = (u.order===Orders.SKOS_L || u.order===Orders.SKOS_P);
 	  let tgt = targetFor(u.order);
 
@@ -817,7 +857,6 @@ Obrońca (O):
 		return false;
 	  }
 
-	  // Ruch prosty / przechwyty
 	  tryMoveWithWhy(tgt);
 
 	  return didMove;
@@ -826,7 +865,12 @@ Obrońca (O):
 
 }
 
-function nameTer(t){ return t==='.'?'równina': t==='L'?'las': t==='W'?'wzgórze': t==='B'?'bagno': t==='~'?'woda':'bród'; }
+function nameTer(t){
+  return t==='.' ? 'równina'
+       : t==='L' ? 'las'
+       : t==='W' ? 'wzgórze'
+       :           'woda';
+}
 // FRONT od strony `from` względem orientacji przeciwnika
 // FRONT od strony `from` względem orientacji przeciwnika
 // FRONT od strony `from` – zawsze TAK
@@ -840,21 +884,175 @@ function isFlankFrom(att, def, from){
 }
 
 
-/* ===== Doktryny ===== */
+/* ===== DOKTRYNY (zaktualizowane opisy; tylko 3 rozkazy) ===== */
 const DOCTRINES = [
-  { id:'D1',  name:'P utrzymuj, K okrążaj' },
-  { id:'D2',  name:'P utrzymuj, K szarża' },
-  { id:'D3',  name:'P szarża, K utrzymuj' },
-  { id:'D4',  name:'P szarża, K okrążaj' },
-  { id:'D5',  name:'Wszystkie szarża' },
-  { id:'D6',  name:'Wszystkie utrzymuj' },
-  { id:'D7',  name:'P okrążaj, K szarża' },
-  { id:'D8',  name:'P okrążaj, K utrzymuj' },
-  { id:'D9',  name:'Centrum szarża, flanki okrążaj' },
-  { id:'D10', name:'Centrum utrzymuj, flanki szarża' },
-  { id:'D11', name:'Centrum szarża, flanki utrzymuj' },
-  { id:'D12', name:'Centrum szarża, flanki okrążaj' },
+  // OFENSYWNE
+  { id:'D1', name:'Przebicie Centrum (ofensywna)',
+    desc:'Faza 1: wszyscy idą linią i atakują. Po pierwszym kontakcie cała armia zbiega do dynamicznie wyliczonego rzędu centrum; jednostki w centrum szarżują, reszta skosem dąży dołączać do centrum.' },
+
+  { id:'D2', name:'Sierp na Skrzydłach (ofensywna)',
+    desc:'Najpierw wszyscy atakują frontalnie (SZARŻA). Tuż przed kontaktem jednostki skrzydłowe przechodzą na SKOS i próbują obejść, dążąc do lokalnych starć 2-na-1.' },
+
+  { id:'D3', name:'Frontalny atak',
+    desc:'Każda jednostka wybiera najbliższego wroga i atakuje go bezpośrednio. Jeśli diagonalny krok skraca dystans lepiej niż frontalny – używa SKOS, w przeciwnym razie SZARŻA.' },
+
+  // DEFENSYWNE
+  { id:'D4', name:'Forteca Liniowa (defensywna)',
+    desc:'Domyślnie UTRZYMAJ. Gdy zdobywasz przewagę: flanki przechodzą na SKOS (obejście); kawaleria także SKOSEM. Bez zmiany formacji.' },
+
+  { id:'D5', name:'Elastyczna Obrona (defensywna)',
+    desc:'Domyślnie UTRZYMAJ. Kawaleria SZARŻA, jeżeli wróg stoi 1 pole przed frontem. Piechota w promieniu ≤2 pól wykonuje SKOS (krótki wypad). Bez zmiany formacji.' },
+
+  { id:'D6', name:'Jeż i Zęby (defensywna)',
+    desc:'Bez automatycznych czworoboków. Domyślnie UTRZYMAJ. Przy przewadze: centrum wyprowadza SZARŻĘ, flanki idą SKOSEM. Kawaleria wspiera SKOSEM. Bez zmiany formacji.' },
 ];
+ 
+function distCells(r1,c1,r2,c2){ return Math.abs(rIdx(r1)-rIdx(r2)) + Math.abs(c1-c2); }
+function nearestEnemyOf(G, u){
+  const foes = G.units.filter(e => e.side!==u.side && !e.dead && !e.escaped && !e.routed);
+  if (!foes.length) return null;
+  foes.sort((a,b)=> distCells(u.row,u.col,a.row,a.col) - distCells(u.row,u.col,b.row,b.col));
+  return foes[0];
+}
+function preferOrderTowardTarget(u, target){
+  if (!target) return Orders.SZARZA;
+  if (u.row === target.row) return Orders.SZARZA;
+  // jeśli trzeba iść „w górę” wiersza → SKOS_L, „w dół” → SKOS_P (z zachowaniem kierunku strony)
+  return (rIdx(target.row) < rIdx(u.row)) ? Orders.SKOS_L : Orders.SKOS_P;
+}
+
+
+function nonHoldCount(G, side){
+  return G.units.filter(u=>u.side===side && !u.dead && !u.escaped && !u.routed && u.order!==Orders.UTRZYMAJ).length;
+}
+function everyoneHold(G){
+  return nonHoldCount(G,'A')===0 && nonHoldCount(G,'O')===0;
+}
+function nearestEnemyUnit(G, side){
+  const me  = G.units.filter(u=>u.side===side && !u.dead && !u.escaped && !u.routed);
+  const foe = G.units.filter(u=>u.side!=='A'&&u.side!=='O'?false: u.side!==side && !u.dead && !u.escaped && !u.routed);
+  if (!me.length || !foe.length) return null;
+  let best=null, bd=1e9;
+  for (const u of me){
+    for (const e of foe){
+      const d = Math.abs(ROWS.indexOf(u.row)-ROWS.indexOf(e.row)) + Math.abs(u.col-e.col);
+      if (d<bd){ bd=d; best=u; }
+    }
+  }
+  return best;
+}
+
+function ensureProgress(G, side){
+  const cand = G.units.find(u => u.side===side && !u.dead && !u.escaped && !u.routed && u.type[0]==='K')
+           || nearestEnemyUnit(G, side);
+  if (!cand) return;
+
+  if (cand.row==='A' || cand.row==='C') setOrderSkosEncircle(G, cand);
+  else                                   setOrderCharge(G, cand); // zamiast „NAPRZÓD”
+}
+
+function ensureProgressPair(G){
+  if (everyoneHold(G)){
+    // NAJPIERW GRACZ (A)
+    ensureProgress(G, 'A');
+    // O może nadal stać — o to chodzi w Twojej zasadzie
+  }
+}
+
+
+/* ===== Ocena sytuacji + presety rozkazów ===== */
+function losses(G, side){
+  const dead = G.units.filter(u=>u.side===side && u.dead).length;
+  const esc  = G.units.filter(u=>u.side===side && u.escaped).length;
+  return dead + esc;
+}
+function actives(G, side){
+  return G.units.filter(u=>u.side===side && !u.dead && !u.escaped && !u.routed).length;
+}
+function isWinning(G, side){
+  const foe = (side==='A'?'O':'A');
+  const score = (actives(G,side) - actives(G,foe)) - (losses(G,side) - losses(G,foe));
+  return score > 0;
+}
+function hasCav(G, side){
+  return G.units.some(u=>u.side===side && !u.dead && !u.escaped && u.type[0]==='K' && !u.routed);
+}
+
+function activeUnitsOnField(G){
+  return G.units.filter(u => !u.dead && !u.escaped && u.row && u.col);
+}
+function currentCenterRowIdx(G){
+  const on = activeUnitsOnField(G);
+  if (!on.length) return rIdx('B');              // sensowny fallback
+  const idxs = on.map(u => rIdx(u.row)).filter(i => i >= 0);
+  const minI = Math.min(...idxs), maxI = Math.max(...idxs);
+  return Math.round((minI + maxI) / 2);          // „środek” pomiędzy najbardziej skrajnymi
+}
+
+function unitsSide(G, side){ return G.units.filter(u=>u.side===side && !u.dead && !u.escaped && !u.routed); }
+
+function unitsCenter(G, side){
+  const ci = currentCenterRowIdx(G);
+  return unitsSide(G, side).filter(u => rIdx(u.row) === ci);
+}
+function unitsFlanks(G, side){
+  const ci = currentCenterRowIdx(G);
+  return unitsSide(G, side).filter(u => rIdx(u.row) !== ci);
+}
+function isUpperFlank(G, u){ return rIdx(u.row) < currentCenterRowIdx(G); }  // „wyżej” niż centrum
+function isLowerFlank(G, u){ return rIdx(u.row) > currentCenterRowIdx(G); }  // „niżej” niż centrum
+
+
+function unitsCav(G, side){ return unitsSide(G,side).filter(u=>u.type[0]==='K'); }
+function unitsInf(G, side){ return unitsSide(G,side).filter(u=>u.type[0]==='P'); }
+
+function setOrderHold(G,u){ G.setOrder(u, Orders.UTRZYMAJ); }
+function setOrderCharge(G,u){ G.setOrder(u, Orders.SZARZA); }
+
+function setOrderSkosTowardRow(G, u, targetRowIdx){
+  const ui = rIdx(u.row);
+  if (ui < targetRowIdx)      G.setOrder(u, Orders.SKOS_P); // w dół, w stronę centrum
+  else if (ui > targetRowIdx) G.setOrder(u, Orders.SKOS_L); // w górę, w stronę centrum
+  else                        G.setOrder(u, Orders.SZARZA); // już w rzędzie centrum
+}
+
+function setOrderSkosTowardRow(G, u, targetRowIdx){
+  const ui = rIdx(u.row);
+  if (ui < targetRowIdx)      G.setOrder(u, Orders.SKOS_P); // w dół ku centrum
+  else if (ui > targetRowIdx) G.setOrder(u, Orders.SKOS_L); // w górę ku centrum
+  else                        G.setOrder(u, Orders.SZARZA); // już w rzędzie centrum
+}
+
+
+// „okrążaj” = od centrum NA ZEWNĄTRZ (ułatwia zamknięcie skrzydeł)
+function setOrderSkosEncircle(G, u){
+  const ci = currentCenterRowIdx(G);
+  const ui = rIdx(u.row);
+  if (ui <= ci) G.setOrder(u, Orders.SKOS_L);  // powyżej/na centrum: idź jeszcze wyżej
+  else          G.setOrder(u, Orders.SKOS_P);  // poniżej centrum: idź jeszcze niżej
+}
+
+
+function maybeSquareVsCav(G, side){
+  const foe = side==='A'?'O':'A';
+  const foeK = unitsCav(G,foe);
+  if (foeK.length < 2) return;
+  for (const p of unitsInf(G,side)){
+    const d = Math.min(...foeK.map(k=> Math.abs(rIdx(p.row)-rIdx(k.row)) + Math.abs(p.col-k.col) ), 99);
+    if (d <= 2) p.setTypeAndFormation('P□');
+  }
+}
+
+function activeUnitsOnField(G){
+  return G.units.filter(u => !u.dead && !u.escaped && u.row && u.col);
+}
+function currentCenterRowIdx(G){
+  const on = activeUnitsOnField(G);
+  if (!on.length) return rIdx('B');
+  const idxs = on.map(u => rIdx(u.row)).filter(i => i >= 0);
+  const minI = Math.min(...idxs), maxI = Math.max(...idxs);
+  return Math.round((minI + maxI) / 2);
+}
 
 function setOrderOkrążaj(G,u){
   if (u.row === 'A') { G.setOrder(u, Orders.SKOS_P); return; }
@@ -865,27 +1063,145 @@ function setOrderSzarza(G,u){ G.setOrder(u, Orders.SZARZA); }
 function setOrderUtrzymuj(G,u){ G.setOrder(u, Orders.UTRZYMAJ); }
 
 function applyDoctrineOrders(G, side, doctrineId){
-  const us=G.units.filter(u=>u.side===side&&!u.dead&&!u.escaped&&!u.routed);
-  const P=us.filter(u=>u.type[0]==='P'), K=us.filter(u=>u.type[0]==='K');
-  const center=us.filter(u=>u.row==='B'), flanks=us.filter(u=>u.row!=='B');
-  us.forEach(u=>G.setOrder(u,Orders.UTRZYMAJ));
-  switch(doctrineId){
-    case 'D1': P.forEach(setOrderUtrzymuj.bind(null,G)); K.forEach(setOrderOkrążaj.bind(null,G)); break;
-    case 'D2': P.forEach(setOrderUtrzymuj.bind(null,G)); K.forEach(setOrderSzarza.bind(null,G)); break;
-    case 'D3': P.forEach(setOrderSzarza.bind(null,G));  K.forEach(setOrderUtrzymuj.bind(null,G)); break;
-    case 'D4': P.forEach(setOrderSzarza.bind(null,G));  K.forEach(setOrderOkrążaj.bind(null,G)); break;
-    case 'D5': us.forEach(setOrderSzarza.bind(null,G)); break;
-    case 'D6': us.forEach(setOrderUtrzymuj.bind(null,G)); break;
-    case 'D7': P.forEach(setOrderOkrążaj.bind(null,G)); K.forEach(setOrderSzarza.bind(null,G)); break;
-    case 'D8': P.forEach(setOrderOkrążaj.bind(null,G)); K.forEach(setOrderUtrzymuj.bind(null,G)); break;
-    case 'D9': center.forEach(setOrderSzarza.bind(null,G)); flanks.forEach(setOrderOkrążaj.bind(null,G)); break;
-    case 'D10':center.forEach(setOrderUtrzymuj.bind(null,G)); flanks.forEach(setOrderSzarza.bind(null,G)); break;
-    case 'D11':center.forEach(setOrderSzarza.bind(null,G)); flanks.forEach(setOrderUtrzymuj.bind(null,G)); break;
-    case 'D12':center.forEach(setOrderSzarza.bind(null,G)); flanks.forEach(setOrderOkrążaj.bind(null,G)); break;
+  const me  = side;
+  const foe = (side==='A'?'O':'A');
+
+  // reset: nic nie atakuje, nic nie zmienia formacji
+  for (const u of unitsSide(G, me)) setOrderHold(G,u);
+
+  switch (doctrineId){
+
+    case 'D1': { // PRZEBICIE CENTRUM: linia → po 1. kontakcie zbieganie do centrum
+      const ci = currentCenterRowIdx(G);
+
+      // Faza 1: do pierwszego kontaktu – wszyscy SZARŻA (idziemy linią i bijemy się)
+      if (G.firstContactStep == null){
+        for (const u of unitsSide(G, me)) setOrderCharge(G, u);
+        break;
+      }
+
+      // Faza 2: po pierwszym kontakcie – każdy zbija się do rzędu centrum
+      for (const u of unitsSide(G, me)){
+        const ui = rIdx(u.row);
+        if (ui === ci) setOrderCharge(G, u);        // już w centrum? atakuj frontalnie
+        else           setOrderSkosTowardRow(G, u, ci); // nie w centrum? skosem do centrum
+      }
+      break;
+    }
+
+
+    case 'D2': {
+      // 1) Plan bazowy: każdy idzie do najbliższego wroga
+      for (const u of unitsSide(G, me)){
+        const t = nearestEnemyOf(G, u);
+        const pref = preferOrderTowardTarget(u, t);
+        if (pref === Orders.SZARZA) setOrderCharge(G,u);
+        else                        G.setOrder(u, pref); // SKOS w dół/górę jeśli to skraca dystans
+      }
+
+      // 2) Tuż przed starciem: flanki przełącz na „okrążanie”
+      for (const f of unitsFlanks(G, me)){
+        const e = nearestEnemyOf(G, f);
+        const d = e ? distCells(f.row,f.col,e.row,e.col) : 99;
+        if (d <= 2) setOrderSkosEncircle(G, f);
+      }
+
+      // 3) Heurystyka 2-na-1: znajdź wroga z jednym napastnikiem i dociągnij flankę skosem
+      const foes = G.units.filter(x => x.side!==me && !x.dead && !x.escaped && !x.routed);
+      for (const foe of foes){
+        const friendsNear = unitsSide(G, me).filter(u => distCells(u.row,u.col,foe.row,foe.col) <= 2);
+        if (friendsNear.length === 1){
+          const cand = unitsFlanks(G, me)
+            .filter(u => distCells(u.row,u.col,foe.row,foe.col) <= 3)
+            .sort((a,b)=> distCells(a.row,a.col,foe.row,foe.col) - distCells(b.row,b.col))[0];
+          if (cand) setOrderSkosEncircle(G, cand);
+        }
+      }
+      break;
+    }
+
+    case 'D3': {
+      for (const u of unitsSide(G, me)){
+        const t = nearestEnemyOf(G, u);
+        const pref = preferOrderTowardTarget(u, t);
+        if (pref === Orders.SZARZA) setOrderCharge(G,u);
+        else                        G.setOrder(u, pref);
+      }
+      break;
+    }
+
+    // D4: FORTECA LINIOWA
+    case 'D4': {
+      const win = isWinning(G, me);
+      if (win){
+        for (const f of unitsFlanks(G,me)) setOrderSkosEncircle(G,f);
+        for (const k of unitsCav(G,me))    setOrderSkosEncircle(G,k);
+      }
+      break;
+    }
+
+    // D5: ELASTYCZNA OBRONA
+    case 'D5': {
+      for (const k of unitsCav(G,me)){
+        const ahead = G.unitAt(k.row, k.col + ORIENT[me]);
+        if (ahead && ahead.side===foe && !ahead.routed) setOrderCharge(G,k); // kontrszarża
+      }
+      for (const p of unitsInf(G,me)){
+        const near = G.units.some(e =>
+          e.side===foe && !e.dead && !e.escaped &&
+          (Math.abs(rIdx(p.row)-rIdx(e.row)) + Math.abs(p.col - e.col) <= 2)
+        );
+        if (near) setOrderSkosEncircle(G,p); // krótki wypad SKOSEM (zamiast naprzód)
+      }
+      break;
+    }
+
+    // D6: JEŻ I ZĘBY (bez czworoboków)
+    case 'D6': {
+      const win = isWinning(G, me);
+      if (win){
+        for (const b of unitsCenter(G,me)) setOrderCharge(G,b);        // centrum SZARŻA
+        for (const f of unitsFlanks(G,me)) setOrderSkosEncircle(G,f);  // flanki SKOS
+      }
+      for (const k of unitsCav(G,me)) setOrderSkosEncircle(G,k);       // osłona SKOSEM
+      break;
+    }
   }
 }
 
 /* ===== UI ===== */
+function docById(id){ return DOCTRINES.find(d=>d.id===id); }
+
+function ensureDescBoxes(){
+  // wstawi dwa opisy pod toolbar z doktrynami (raz)
+  let host = document.querySelectorAll('.toolbar')[1]; // ta z doktrynami
+  if (!host) return;
+  if (!document.getElementById('docADesc')){
+    const a = document.createElement('div');
+    a.id = 'docADesc';
+    a.className = 'docdesc';
+    host.insertAdjacentElement('afterend', a);
+  }
+  if (!document.getElementById('docODesc')){
+    const o = document.createElement('div');
+    o.id = 'docODesc';
+    o.className = 'docdesc';
+    document.getElementById('docADesc').insertAdjacentElement('afterend', o);
+  }
+}
+
+function updateDoctrineDescs(){
+  ensureDescBoxes();
+  const aId = (typeof G?.selDocA === 'string') ? G.selDocA : elDocA.value;
+  const oId = (typeof G?.selDocO === 'string') ? G.selDocO : elDocO.value;
+  const a = docById(aId), o = docById(oId);
+  const aBox = document.getElementById('docADesc');
+  const oBox = document.getElementById('docODesc');
+  if (a && aBox) aBox.innerHTML = `<strong>Doktryna A:</strong> ${a.name}<br>${a.desc}`;
+  if (o && oBox) oBox.innerHTML = `<strong>Doktryna O:</strong> ${o.name}<br>${o.desc}`;
+}
+
+
 const elBoard=document.getElementById('board'),
       elStep=document.getElementById('step'),
       elWeather=document.getElementById('weather'),
@@ -901,9 +1217,17 @@ const elBoard=document.getElementById('board'),
       elSelFormation=document.getElementById('selFormation');
 
 let G=null, selectedKey=null;
-const DOCTRINES_OPTS = DOCTRINES.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+const DOCTRINES_OPTS = DOCTRINES
+  .map(d => `<option value="${d.id}" title="${d.desc.replace(/"/g,'&quot;')}">${d.name}</option>`)
+  .join('');
 
-function terrainCls(t){ return t==='.'?'plain': t==='L'?'forest': t==='W'?'hill': t==='B'?'bog': t==='~'?'water':'ford'; }
+function terrainCls(t){
+  return t==='.' ? 'plain'
+       : t==='L' ? 'forest'
+       : t==='W' ? 'hill'
+       :           'water';
+}
+
 function parseArmy(s){ return s.split(',').map(x=>x.trim()).filter(Boolean); }
 function logMsg(m){ elLog.textContent+=(elLog.textContent?'\n':'')+m; elLog.scrollTop=elLog.scrollHeight; }
 function flash(n){ n.classList.add('selected'); setTimeout(()=>n.classList.remove('selected'),250); }
@@ -1008,7 +1332,7 @@ function buildSpriteSrcs(u){
   const base = `battle_images/${playerId(u.side)}_${typeId(u)}_${formationId(u)}`;
   const withOrient = `${base}_${orientationId(u)}.png`;
   const noOrient   = `${base}.png`;
-  const typeOnly   = `battle_images/${playerId(u)}_${typeId(u)}.png`;
+  const typeOnly = `battle_images/${playerId(u.side)}_${typeId(u)}.png`;
   return [withOrient, noOrient, typeOnly];
 }
 
@@ -1124,6 +1448,11 @@ window.addEventListener('DOMContentLoaded', ()=>{
   elDocA.innerHTML=DOCTRINES_OPTS; elDocO.innerHTML=DOCTRINES_OPTS; elDocA.value='D1'; elDocO.value='D2';
   G=new Game(); startGame();
 
+  // po elDocA/elDocO istnieją:
+  elDocA.addEventListener('change', updateDoctrineDescs);
+  elDocO.addEventListener('change', updateDoctrineDescs);
+  updateDoctrineDescs(); // pierwszy render
+
   document.getElementById('btnStart').addEventListener('click', startGame);
   document.getElementById('btnReset').addEventListener('click', ()=>{ G=new Game(); elDocA.innerHTML=DOCTRINES_OPTS; elDocO.innerHTML=DOCTRINES_OPTS; elDocA.value='D1'; elDocO.value='D2'; startGame(); });
   document.getElementById('btnRandomMap').addEventListener('click', ()=>{ const s=Math.floor(Math.random()*1e9); document.getElementById('seed').value=String(s); G.randomMap(s); renderBoard(); });
@@ -1134,6 +1463,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
     selectedKey=null; renderBoard();
     applyDoctrineOrders(G,'A',elDocA.value);
     applyDoctrineOrders(G,'O',elDocO.value);
+    ensureProgressPair(G);
     const ended=G.doOneMicroStep(logMsg); renderBoard();
     if(ended){ logMsg(G.endMsg || 'Koniec.'); }
   });
@@ -1144,6 +1474,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
     let guard=0; while(!G.finished && guard++<160){
       applyDoctrineOrders(G,'A',elDocA.value);
       applyDoctrineOrders(G,'O',elDocO.value);
+      ensureProgressPair(G);
       const ended=G.doOneMicroStep(logMsg); renderBoard(); if(ended) break;
     }
     if(G.finished){ logMsg(G.endMsg); }
