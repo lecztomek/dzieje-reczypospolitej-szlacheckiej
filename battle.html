@@ -251,8 +251,11 @@ const Orders = {
   UTRZYMAJ: 'UTRZYMAJ',
   SZARZA: 'SZARZA',
   SKOS_L: 'SKOS_L',
-  SKOS_P: 'SKOS_P'
+  SKOS_P: 'SKOS_P',
+  PION_GORA: 'PION_GORA',   // NOWE
+  PION_DOL:  'PION_DOL'     // NOWE
 };
+
 
 const Weather={POGODNIE:'pogodnie',DESZCZ:'deszcz',BLOTO:'bloto'};
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v)), rIdx=r=>ROWS.indexOf(r), stepRow=(r,d)=>ROWS[rIdx(r)+d]||null, d6=()=>1+Math.floor(Math.random()*10);
@@ -592,21 +595,31 @@ randomMap(seed=123){
     return true;
   }
 
+  /* ===== UCIECZKA: A zawsze LEWO, O zawsze PRAWO ===== */
   retreatStep(u){
-    const dir = ORIENT[u.side];
-    const candidates = [
-      {r:u.row, c: u.col - dir},
-      {r: stepRow(u.row,-1), c: u.col - dir},
-      {r: stepRow(u.row,+1), c: u.col - dir},
-    ];
-    for (const t of candidates){
-      if (!t.r) continue;
-      // jeśli wyszło poza 1/8 => uciekł
-      if (t.c < COLS[0] || t.c > COLS[COLS.length-1]) { u.escaped=true; return; }
-      // w bufory 1/8 można wejść (respectBattleZone=false)
+    // docelowa krawędź: A -> kol. 1 (lewo), O -> kol. 8 (prawo)
+    const edgeCol = (u.side === 'A') ? COLS[0] : COLS[COLS.length-1];
+    const stepH   = (edgeCol < u.col) ? -1 : +1; // kierunek poziomy w stronę krawędzi
+
+    // kandydaci ruchu w jednej mikro–ucieczce (priorytet: bok -> skosy -> piony)
+    const primary   = { r: u.row,                 c: u.col + stepH };              // w bok do krawędzi
+    const diagUp    = { r: stepRow(u.row, -1),    c: u.col + stepH };              // skos (góra) w stronę krawędzi
+    const diagDown  = { r: stepRow(u.row, +1),    c: u.col + stepH };              // skos (dół)  w stronę krawędzi
+    const upOnly    = { r: stepRow(u.row, -1),    c: u.col };                      // pion w górę (gdy poziom zablok.)
+    const downOnly  = { r: stepRow(u.row, +1),    c: u.col };                      // pion w dół  (gdy poziom zablok.)
+
+    const tries = [primary, diagUp, diagDown, upOnly, downOnly].filter(t => t.r);
+
+    for (const t of tries){
+      // zejście poza planszę w kierunku krawędzi = sukces ucieczki
+      if (t.c < COLS[0] || t.c > COLS[COLS.length-1]) { u.escaped = true; return; }
+      // podczas ucieczki ignorujemy strefę bitwy (respectBattleZone:false)
       if (this.tryMove(u, t.r, t.c, {respectBattleZone:false})) return;
     }
+    // jeśli wszystko zablokowane – jednostka zostaje (spanikowana) na miejscu w tej mikro–turze
   }
+
+
 
   /* ===== Koniec + podsumowanie ===== */
   computeSummary(reason=''){
@@ -730,8 +743,7 @@ Obrońca (O):
 	  });
 
 
-  // kolejność fal ruchu
-  const prio = [Orders.SZARZA, Orders.SKOS_L, Orders.SKOS_P];
+  const prio = [Orders.SZARZA, Orders.SKOS_L, Orders.SKOS_P, Orders.PION_GORA, Orders.PION_DOL];
 
 	const canTryMove = (u) =>
 	  !u.dead && !u.escaped && !u.routed && !engaged.has(unitKey(u));
@@ -784,85 +796,43 @@ Obrońca (O):
   distToEnemy(u){ const foes=this.units.filter(x=>!x.dead && !x.escaped && x.side!==u.side); if(!foes.length) return 999;
     return foes.map(f=>Math.abs(rIdx(u.row)-rIdx(f.row))+Math.abs(u.col-f.col)).sort((a,b)=>a-b)[0]; }
 
-	applyMove(u, log){
-	  const dir = this.advanceDir(u);
-	  let didMove = false;
-	  
-    // gdzie próbujemy wejść dla danego rozkazu
-    const targetFor = (ord) => {
-      switch (ord) {
-        case Orders.SZARZA:  return { row: u.row,               col: u.col + dir };
-        case Orders.SKOS_L:  return { row: stepRow(u.row, -1),  col: u.col + dir };
-        case Orders.SKOS_P:  return { row: stepRow(u.row, +1),  col: u.col + dir };
-        default:              return { row: u.row,               col: u.col };
+  /* ===== RUCH: „głupie” applyMove ===== */
+  applyMove(u, log){
+    const dir = this.advanceDir(u);
+
+    const tryMoveWithWhy = (target, {respectBattleZone=true}={})=>{
+      const info = whyBlocked(this, u, target, {respectBattleZone});
+      const from = cellStr(u.row,u.col);
+      const to   = target ? cellStr(target.row,target.col) : '—';
+      if (info.blocked){
+        log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): ${info.reason})`);
+        return false;
       }
+      if (this.tryMove(u, target.row, target.col, {respectBattleZone})){
+        log(`ruch ${u.type[0]}${u.num}(${u.side}): ${from} → ${to}`);
+        // piechota w czworoboku po ruchu staje się linią
+        if (u.type[0]==='P' && u.formation==='CZWOR'){ u.setTypeAndFormation('P'); log(`(P${u.num}(${u.side}) z CZWOR do LINIA po ruchu)`); }
+        return true;
+      }
+      log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): nie można wejść na ${to})`);
+      return false;
     };
-	  
-	  const tryGo = (r,c,opts)=> this.tryMove(u,r,c,opts);
 
-	  const canEnter = (t) => {
-		if (!t || !t.row) return false;
-		if (t.col < COLS[0] || t.col > COLS[COLS.length-1]) return false;
-		if (this.map[t.row][t.col] === Terrain.WATER) return false;
-		return true;
-	  };
-
-	  const tryMoveWithWhy = (target, {respectBattleZone=true}={})=>{
-		const info = whyBlocked(this, u, target, {respectBattleZone});
-		if (info.blocked){
-		  log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): ${info.reason})`);
-		  return false;
-		}
-		const from = cellStr(u.row,u.col), to = cellStr(target.row,target.col);
-		if (this.tryMove(u, target.row, target.col, {respectBattleZone})){
-		  log(`ruch ${u.type[0]}${u.num}(${u.side}): ${from} → ${to}`);
-		  u._lastMovedStep = this.step;
-		  u._lastOrderAtMove = u.order;
-		  didMove = true;
-
-		  // piechota w czworoboku (P□) po ruchu staje się linią (P)
-		  if (u.type[0] === 'P' && u.formation === 'CZWOR') {
-			u.setTypeAndFormation('P'); // ustawi formację = LINIA i typ = 'P'
-			log(`(P${u.num}(${u.side}) przechodzi z czworoboku do linii po ruchu)`);
-		  }
-
-		  return true;
-		}
-		log(`(brak ruchu ${u.type[0]}${u.num}(${u.side}): nie można wejść na ${to})`);
-		return false;
-	  };
-
-	  const isDiagonal = (u.order===Orders.SKOS_L || u.order===Orders.SKOS_P);
-	  let tgt = targetFor(u.order);
-
-	  if (isDiagonal){
-		const dCol = dir;
-		const dRowPref = (u.order===Orders.SKOS_L ? -1 : +1);
-		const rowPref = stepRow(u.row, dRowPref);
-		const rowAlt  = stepRow(u.row, -dRowPref);
-		const primary = rowPref ? {row: rowPref, col: u.col + dCol} : null;
-		const alt     = rowAlt  ? {row: rowAlt,  col: u.col + dCol} : null;
-		const forward = {row: u.row, col: u.col + dCol};
-
-		if (primary && tryMoveWithWhy(primary)) return true;
-		if (alt     && tryMoveWithWhy(alt))     return true;
-		if (tryMoveWithWhy(forward))            return true;
-
-		const upDown1 = rowPref ? {row: rowPref, col: u.col} : null;
-		const upDown2 = rowAlt  ? {row: rowAlt,  col: u.col} : null;
-
-		if (upDown1 && tryMoveWithWhy(upDown1)) return true;
-		if (upDown2 && tryMoveWithWhy(upDown2)) return true;
-
-		return false;
-	  }
-
-	  tryMoveWithWhy(tgt);
-
-	  return didMove;
-	}
+    const target = (() => {
+      switch (u.order){
+        case Orders.SZARZA:    return { row: u.row,              col: u.col + dir };
+        case Orders.SKOS_L:    return { row: stepRow(u.row, -1), col: u.col + dir };
+        case Orders.SKOS_P:    return { row: stepRow(u.row, +1), col: u.col + dir };
+        case Orders.PION_GORA: return { row: stepRow(u.row, -1), col: u.col };     // NOWE
+        case Orders.PION_DOL:  return { row: stepRow(u.row, +1), col: u.col };     // NOWE
+        default:               return null;
+      }
+    })();
 
 
+    if (!target || !target.row) { log(`(stoi ${u.type[0]}${u.num}(${u.side}): brak legalnego celu)`); return false; }
+    return tryMoveWithWhy(target);
+  }
 }
 
 function nameTer(t){
@@ -896,31 +866,114 @@ const DOCTRINES = [
   { id:'D3', name:'Frontalny atak',
     desc:'Każda jednostka wybiera najbliższego wroga i atakuje go bezpośrednio. Jeśli diagonalny krok skraca dystans lepiej niż frontalny – używa SKOS, w przeciwnym razie SZARŻA.' },
 
-  // DEFENSYWNE
-  { id:'D4', name:'Forteca Liniowa (defensywna)',
-    desc:'Domyślnie UTRZYMAJ. Gdy zdobywasz przewagę: flanki przechodzą na SKOS (obejście); kawaleria także SKOSEM. Bez zmiany formacji.' },
+  { id:'D4', name:'Forteca Liniowa (statyczna)',
+    desc:'Obrona pozycyjna: wszystkie jednostki utrzymują pozycje (UTRZYMAJ). Brak manewrów, brak kontrataków.' },
 
-  { id:'D5', name:'Elastyczna Obrona (defensywna)',
-    desc:'Domyślnie UTRZYMAJ. Kawaleria SZARŻA, jeżeli wróg stoi 1 pole przed frontem. Piechota w promieniu ≤2 pól wykonuje SKOS (krótki wypad). Bez zmiany formacji.' },
+  { id:'D5', name:'Elastyczna Obrona (2-na-1 po kontakcie)',
+    desc:'Czeka do pierwszego kontaktu (wszyscy UTRZYMAJ). Po pierwszym kontakcie jednostki niezaangażowane dążą do wsparcia trwających starć (atak 2-na-1); walczący stoją.' },
 
-  { id:'D6', name:'Jeż i Zęby (defensywna)',
-    desc:'Bez automatycznych czworoboków. Domyślnie UTRZYMAJ. Przy przewadze: centrum wyprowadza SZARŻĘ, flanki idą SKOSEM. Kawaleria wspiera SKOSEM. Bez zmiany formacji.' },
-];
+  { id:'D6', name:'Jeż i Kolce (zwarta po kontakcie)',
+    desc:'Do pierwszego kontaktu wszyscy UTRZYMAJ. Po pierwszym kontakcie: kawaleria atakuje najbliższą jednostkę, piechota stara się trzymać jak najbliżej siebie (zacieśnianie szyku) i tylko dostraja rząd skosem.' },
+
+
+ ];
  
 function distCells(r1,c1,r2,c2){ return Math.abs(rIdx(r1)-rIdx(r2)) + Math.abs(c1-c2); }
 function nearestEnemyOf(G, u){
   const foes = G.units.filter(e => e.side!==u.side && !e.dead && !e.escaped && !e.routed);
   if (!foes.length) return null;
-  foes.sort((a,b)=> distCells(u.row,u.col,a.row,a.col) - distCells(u.row,u.col,b.row,b.col));
+  foes.sort((a,b)=> distCells(u.row,u.col,a.row,a.col) - distCells(b.row,b.col, u.row,u.col));
   return foes[0];
 }
+
+function legalOrdersToward(G, u, target){
+  if (!target) return [];
+  const dir = ORIENT[u.side];
+  const cand = [
+    { ord: Orders.SZARZA,    r: u.row,              c: u.col + dir },
+    { ord: Orders.SKOS_L,    r: stepRow(u.row,-1),  c: u.col + dir },
+    { ord: Orders.SKOS_P,    r: stepRow(u.row,+1),  c: u.col + dir },
+    { ord: Orders.PION_GORA, r: stepRow(u.row,-1),  c: u.col        },
+    { ord: Orders.PION_DOL,  r: stepRow(u.row,+1),  c: u.col        }
+  ].filter(x => x.r);
+
+  const playable = cand.filter(x => {
+    // strefa bitwy dla ruchów z kolumną
+    if ((x.ord===Orders.SZARZA || x.ord===Orders.SKOS_L || x.ord===Orders.SKOS_P) &&
+        (x.c < BTL_MIN || x.c > BTL_MAX)) return false;
+    const info = whyBlocked(G, u, {row:x.r, col:x.c}, {respectBattleZone:true});
+    return !info.blocked;
+  });
+
+  const hereD = distCells(u.row,u.col, target.row,target.col);
+  const better = playable.filter(x => distCells(x.r,x.c,target.row,target.col) < hereD);
+  return { playable, better };
+}
+
+
+function wouldLeaveBattleZone(u, ord){
+  const dir = ORIENT[u.side];
+  if (ord===Orders.SZARZA || ord===Orders.SKOS_L || ord===Orders.SKOS_P){
+    const nextCol = u.col + dir;
+    return (nextCol < BTL_MIN || nextCol > BTL_MAX);
+  }
+  return false; // pion nie zmienia kolumny
+}
+
+function nextOrderToward(G, u, target){
+  if (!target) return Orders.UTRZYMAJ;
+
+  const hereD = distCells(u.row,u.col, target.row,target.col);
+  const dir   = ORIENT[u.side];
+
+  const cand = [
+    { ord: Orders.SZARZA,    r: u.row,              c: u.col + dir },
+    { ord: Orders.SKOS_L,    r: stepRow(u.row,-1),  c: u.col + dir },
+    { ord: Orders.SKOS_P,    r: stepRow(u.row,+1),  c: u.col + dir },
+    { ord: Orders.PION_GORA, r: stepRow(u.row,-1),  c: u.col        }, // NOWE
+    { ord: Orders.PION_DOL,  r: stepRow(u.row,+1),  c: u.col        }  // NOWE
+  ].filter(x => x.r); // tylko legalne rzędy
+
+  // Odfiltruj te, które wyjechałyby poza 2–7 albo są zablokowane
+  const playable = cand.filter(x => {
+    if (wouldLeaveBattleZone(u, x.ord)) return false;
+    const info = whyBlocked(G, u, {row:x.r, col:x.c}, {respectBattleZone:true});
+    return !info.blocked;
+  });
+
+  if (!playable.length) return Orders.UTRZYMAJ;
+
+  // 1) Najpierw te, które ZMNIEJSZAJĄ dystans do celu
+  const better = playable.filter(x => distCells(x.r, x.c, target.row, target.col) < hereD);
+  if (better.length) return better[0].ord;
+
+  // 2) W przeciwnym razie cokolwiek legalnego (np. „dostrojenie” rzędu pionem)
+  return playable[0].ord;
+}
+
+
+
+function preferOrderTowardRow(u, targetRow){
+  if (!targetRow) return Orders.SZARZA;
+  if (u.row === targetRow) return Orders.SZARZA;
+  return (rIdx(targetRow) < rIdx(u.row)) ? Orders.SKOS_L : Orders.SKOS_P;
+}
+function globalMinOpposingDistance(G){
+  let best = Infinity;
+  const A = G.units.filter(u=>u.side==='A' && !u.dead && !u.escaped && !u.routed);
+  const O = G.units.filter(u=>u.side==='O' && !u.dead && !u.escaped && !u.routed);
+  for (const a of A) for (const o of O){
+    best = Math.min(best, distCells(a.row,a.col,o.row,o.col));
+  }
+  return (best===Infinity?99:best);
+}
+
 function preferOrderTowardTarget(u, target){
   if (!target) return Orders.SZARZA;
   if (u.row === target.row) return Orders.SZARZA;
   // jeśli trzeba iść „w górę” wiersza → SKOS_L, „w dół” → SKOS_P (z zachowaniem kierunku strony)
   return (rIdx(target.row) < rIdx(u.row)) ? Orders.SKOS_L : Orders.SKOS_P;
 }
-
 
 function nonHoldCount(G, side){
   return G.units.filter(u=>u.side===side && !u.dead && !u.escaped && !u.routed && u.order!==Orders.UTRZYMAJ).length;
@@ -978,17 +1031,6 @@ function hasCav(G, side){
   return G.units.some(u=>u.side===side && !u.dead && !u.escaped && u.type[0]==='K' && !u.routed);
 }
 
-function activeUnitsOnField(G){
-  return G.units.filter(u => !u.dead && !u.escaped && u.row && u.col);
-}
-function currentCenterRowIdx(G){
-  const on = activeUnitsOnField(G);
-  if (!on.length) return rIdx('B');              // sensowny fallback
-  const idxs = on.map(u => rIdx(u.row)).filter(i => i >= 0);
-  const minI = Math.min(...idxs), maxI = Math.max(...idxs);
-  return Math.round((minI + maxI) / 2);          // „środek” pomiędzy najbardziej skrajnymi
-}
-
 function unitsSide(G, side){ return G.units.filter(u=>u.side===side && !u.dead && !u.escaped && !u.routed); }
 
 function unitsCenter(G, side){
@@ -1016,14 +1058,6 @@ function setOrderSkosTowardRow(G, u, targetRowIdx){
   else                        G.setOrder(u, Orders.SZARZA); // już w rzędzie centrum
 }
 
-function setOrderSkosTowardRow(G, u, targetRowIdx){
-  const ui = rIdx(u.row);
-  if (ui < targetRowIdx)      G.setOrder(u, Orders.SKOS_P); // w dół ku centrum
-  else if (ui > targetRowIdx) G.setOrder(u, Orders.SKOS_L); // w górę ku centrum
-  else                        G.setOrder(u, Orders.SZARZA); // już w rzędzie centrum
-}
-
-
 // „okrążaj” = od centrum NA ZEWNĄTRZ (ułatwia zamknięcie skrzydeł)
 function setOrderSkosEncircle(G, u){
   const ci = currentCenterRowIdx(G);
@@ -1032,6 +1066,171 @@ function setOrderSkosEncircle(G, u){
   else          G.setOrder(u, Orders.SKOS_P);  // poniżej centrum: idź jeszcze niżej
 }
 
+// Pomocnik: wybierz wroga „najbliżej centrum” (po rzędzie), a przy remisie — najbliższego względem tej jednostki
+function targetNearestToCenter(G, u){
+  const foes = G.units.filter(x => x.side !== u.side && !x.dead && !x.escaped && !x.routed);
+  if (!foes.length) return null;
+  const ci = currentCenterRowIdx(G);
+  // 1) minimalizujemy |rIdx(f.row) - ci|
+  // 2) tie-break: mniejsza odległość do u (Manhattan)
+  // 3) tie-break: mniejsza kolumna (stabilność), potem rząd
+  foes.sort((f1, f2) => {
+    const dRow1 = Math.abs(rIdx(f1.row) - ci);
+    const dRow2 = Math.abs(rIdx(f2.row) - ci);
+    if (dRow1 !== dRow2) return dRow1 - dRow2;
+
+    const du1 = distCells(u.row, u.col, f1.row, f1.col);
+    const du2 = distCells(u.row, u.col, f2.row, f2.col);
+    if (du1 !== du2) return du1 - du2;
+
+    if (f1.col !== f2.col) return f1.col - f2.col;
+    return rIdx(f1.row) - rIdx(f2.row);
+  });
+  return foes[0];
+}
+
+
+function isActiveAndFree(G, u){
+  return !u.dead && !u.escaped && !u.routed && G.adjEnemies(u).length === 0;
+}
+function myUnitsActive(G, side){
+  return G.units.filter(u => u.side===side && !u.dead && !u.escaped && !u.routed);
+}
+function edgeUnits(G, side){
+  const us = myUnitsActive(G, side);
+  if (!us.length) return { top:null, bottom:null };
+  let top = us[0], bottom = us[0];
+  for (const u of us){
+    if (rIdx(u.row) < rIdx(top.row)) top = u;
+    if (rIdx(u.row) > rIdx(bottom.row)) bottom = u;
+  }
+  return { top, bottom };
+}
+function chargeCreatesContact(G, u){
+  if (u.routed || u.dead || u.escaped) return false;
+  const dir = ORIENT[u.side];
+  const target = { row: u.row, col: u.col + dir };
+
+  // czy w ogóle mogę wejść na pole „naprzód”?
+  const info = whyBlocked(G, u, target, {respectBattleZone:true});
+  if (info.blocked) return false;
+
+  // czy po wejściu na target będę w kontakcie (N/S/E/W) z kimś z wrogów?
+  const neigh = [
+    {row: target.row,         col: target.col + 1},
+    {row: target.row,         col: target.col - 1},
+    {row: stepRow(target.row,-1), col: target.col},
+    {row: stepRow(target.row,+1), col: target.col}
+  ].filter(p => p.row);
+
+  return neigh.some(p => {
+    const foe = G.enemyAt(p.row, p.col, u.side);
+    return foe && !foe.routed && !foe.dead && !foe.escaped;
+  });
+}
+
+function oneGapEnemyAhead(G, u){
+  const dir = ORIENT[u.side];
+  const mid = { row: u.row, col: u.col + dir };
+  const dst = { row: u.row, col: u.col + 2*dir };
+  if (!mid.row) return false;
+  // w strefie bitwy (dla „przodu”), środkowe pole wolne, a na dst stoi wróg
+  if (mid.col < BTL_MIN || mid.col > BTL_MAX) return false;
+  if (G.map[mid.row][mid.col] === Terrain.WATER) return false;
+  if (G.unitAt(mid.row, mid.col)) return false;
+  const e = G.enemyAt(dst.row, dst.col, u.side);
+  return !!e;
+}
+function engagedEnemiesAgainstMySide(G, side){
+  const out = new Set();
+  for (const u of myUnitsActive(G, side)){
+    for (const e of G.adjEnemies(u)) if (!e.routed) out.add(e);
+  }
+  return Array.from(out);
+}
+function chooseOrderToward(G, u, target){
+  // twarde „no-touch” dla routed/dead/escaped
+  if (u.routed || u.dead || u.escaped) return Orders.UTRZYMAJ;
+  // preferujemy ruch, który skraca dystans; jeśli żaden nie skraca — cokolwiek legalnego
+  const { better, playable } = legalOrdersToward(G, u, target);
+  if (better.length) return better[0].ord;
+  if (playable.length) {
+    // wybierz ten, który MINIMALIZUJE dystans po ruchu
+    const best = playable
+      .map(x => ({ord:x.ord, d: distCells(x.r, x.c, target.row, target.col)}))
+      .sort((a,b)=>a.d-b.d)[0];
+    return best ? best.ord : Orders.UTRZYMAJ;
+  }
+  return Orders.UTRZYMAJ;
+}
+
+// Najbliższy mój piechur (inny niż u)
+function nearestMyInfantry(G, u){
+  const mine = G.units.filter(v =>
+    v !== u && v.side === u.side && !v.dead && !v.escaped && !v.routed && v.type[0]==='P'
+  );
+  if (!mine.length) return null;
+  mine.sort((a,b)=> distCells(u.row,u.col,a.row,a.col) - distCells(u.row,u.col,b.row,b.col));
+  return mine[0];
+}
+
+// Wirtualna pozycja po danym rozkazie (jeśli legalny)
+function nextPosForOrder(G, u, ord){
+  const dir = ORIENT[u.side];
+  const cand =
+    ord===Orders.SZARZA    ? { row:u.row,             col:u.col + dir } :
+    ord===Orders.SKOS_L    ? { row:stepRow(u.row,-1), col:u.col + dir } :
+    ord===Orders.SKOS_P    ? { row:stepRow(u.row,+1), col:u.col + dir } :
+    ord===Orders.PION_GORA ? { row:stepRow(u.row,-1), col:u.col } :
+    ord===Orders.PION_DOL  ? { row:stepRow(u.row,+1), col:u.col } :
+                             null;
+
+  if (!cand || !cand.row) return null;
+
+  // SKOS/SZARŻA muszą respektować strefę bitwy; PION – nie zmienia kolumny
+  const respectBattleZone = (ord===Orders.SZARZA || ord===Orders.SKOS_L || ord===Orders.SKOS_P);
+  const info = whyBlocked(G, u, cand, { respectBattleZone });
+  return info.blocked ? null : cand;
+}
+
+// Ocena „jak bardzo zacieśniam szyk” (mniejsze = lepiej)
+// 1) absolutna różnica od mediany rzędu, 2) dystans do najbliższego piechura
+function cohesionScore(G, pos, u){
+  const medianIdx = (function(){
+    const ps = G.units.filter(x => x.side===u.side && !x.dead && !x.escaped && !x.routed && x.type[0]==='P');
+    if (!ps.length) return rIdx(u.row);
+    const idxs = ps.map(p => rIdx(p.row)).sort((a,b)=>a-b);
+    return idxs[Math.floor(idxs.length/2)];
+  })();
+
+  const rowDelta = Math.abs(rIdx(pos.row) - medianIdx);
+
+  const buddy = nearestMyInfantry(G, {...u, row:pos.row, col:pos.col});
+  const buddyDist = buddy ? (Math.abs(rIdx(pos.row)-rIdx(buddy.row)) + Math.abs(pos.col - buddy.col)) : 3;
+
+  // MOCNY priorytet na pionowe „zjechanie” do mediany; potem sklejanie z kolegą
+  return rowDelta * 10 + buddyDist;
+}
+
+// Wybór najlepszego rozkazu do zacieśniania (dopuszcza PION!)
+function bestCohesionOrder(G, u){
+  const candidates = [
+    Orders.PION_GORA, Orders.PION_DOL,
+    Orders.SKOS_L, Orders.SKOS_P,
+    Orders.SZARŻA   // na końcu: by nie stać, jeśli pion/skosy zablokowane
+  ];
+
+  const playable = candidates
+    .map(ord => ({ ord, pos: nextPosForOrder(G, u, ord) }))
+    .filter(x => x.pos);
+
+  if (!playable.length) return Orders.UTRZYMAJ;
+
+  playable.forEach(x => x.score = cohesionScore(G, x.pos, u));
+  playable.sort((a,b)=> a.score - b.score);
+
+  return playable[0].ord;
+}
 
 function maybeSquareVsCav(G, side){
   const foe = side==='A'?'O':'A';
@@ -1044,12 +1243,12 @@ function maybeSquareVsCav(G, side){
 }
 
 function activeUnitsOnField(G){
-  return G.units.filter(u => !u.dead && !u.escaped && u.row && u.col);
+  return G.units.filter(u => !u.dead && !u.escaped && !u.routed && u.row && u.col);
 }
 function currentCenterRowIdx(G){
   const on = activeUnitsOnField(G);
   if (!on.length) return rIdx('B');
-  const idxs = on.map(u => rIdx(u.row)).filter(i => i >= 0);
+  const idxs = on.map(u => rIdx(u.row));
   const minI = Math.min(...idxs), maxI = Math.max(...idxs);
   return Math.round((minI + maxI) / 2);
 }
@@ -1062,110 +1261,252 @@ function setOrderOkrążaj(G,u){
 function setOrderSzarza(G,u){ G.setOrder(u, Orders.SZARZA); }
 function setOrderUtrzymuj(G,u){ G.setOrder(u, Orders.UTRZYMAJ); }
 
+function isAhead(u, t){
+  if (!t) return false;
+  const dir = ORIENT[u.side];
+  // „przede mną” = w stronę mojego domyślnego kierunku
+  return dir === +1 ? (t.col >= u.col) : (t.col <= u.col);
+}
+
+// Ustaw rozkaz + zaloguj powód (ALE nie dla routed/dead/escaped)
+function setOrderWithLog(G, side, docId, u, ord, why){
+  if (u.routed || u.dead || u.escaped) return; // ← nic nie rób, nawet bez loga
+  const prev = u.order;
+  G.setOrder(u, ord); // G.setOrder i tak ma guard, ale tu tniemy też log
+  const tag = `[${docId}|${side}]`;
+  logMsg(`${tag} ${u.type[0]}${u.num} @ ${u.row}${u.col}: ${prev} → ${ord} — ${why}`);
+}
+
+
+// Krótki alias tworzony per-wołanie doktryny (żeby nie wołać side/docId ciągle)
+function makeDoctrineSetter(G, side, docId){
+  return (u, ord, why) => setOrderWithLog(G, side, docId, u, ord, why);
+}
+
+
 function applyDoctrineOrders(G, side, doctrineId){
   const me  = side;
   const foe = (side==='A'?'O':'A');
 
-  // reset: nic nie atakuje, nic nie zmienia formacji
-  for (const u of unitsSide(G, me)) setOrderHold(G,u);
+  const set = makeDoctrineSetter(G, me, doctrineId);
+  for (const u of unitsSide(G, me)){
+    set(u, Orders.UTRZYMAJ, 'reset rozkazów przed oceną doktryny');
+  }
 
   switch (doctrineId){
 
-    case 'D1': { // PRZEBICIE CENTRUM: linia → po 1. kontakcie zbieganie do centrum
-      const ci = currentCenterRowIdx(G);
-
-      // Faza 1: do pierwszego kontaktu – wszyscy SZARŻA (idziemy linią i bijemy się)
+    // (Przebicie Centrum) ===
+    case 'D1': {
+      // Faza 1: do pierwszego kontaktu — wszyscy SZARŻA
       if (G.firstContactStep == null){
-        for (const u of unitsSide(G, me)) setOrderCharge(G, u);
+        for (const u of unitsSide(G, me)) G.setOrder(u, Orders.SZARZA);
         break;
       }
 
-      // Faza 2: po pierwszym kontakcie – każdy zbija się do rzędu centrum
+      // Faza 2: wybieraj cel „najbliżej centrum” i idź najkrótszą drogą
       for (const u of unitsSide(G, me)){
-        const ui = rIdx(u.row);
-        if (ui === ci) setOrderCharge(G, u);        // już w centrum? atakuj frontalnie
-        else           setOrderSkosTowardRow(G, u, ci); // nie w centrum? skosem do centrum
+        // walczący stoją (i tak nie ruszą w fazie ruchu)
+        if (G.adjEnemies(u).length > 0){ G.setOrder(u, Orders.UTRZYMAJ); continue; }
+
+        const t = targetNearestToCenter(G, u);
+        if (!t){ G.setOrder(u, Orders.UTRZYMAJ); continue; }
+
+        // „Najkrótsza droga” = legalny ruch, który najbardziej skraca dystans (używamy Twojej istniejącej logiki)
+        // chooseOrderToward: najpierw „better” (skraca dystans), a gdy jest kilka — wybiera minimalizujący dystans po ruchu.
+        const ord = chooseOrderToward(G, u, t);
+        G.setOrder(u, ord);
       }
       break;
     }
-
 
     case 'D2': {
-      // 1) Plan bazowy: każdy idzie do najbliższego wroga
-      for (const u of unitsSide(G, me)){
-        const t = nearestEnemyOf(G, u);
-        const pref = preferOrderTowardTarget(u, t);
-        if (pref === Orders.SZARZA) setOrderCharge(G,u);
-        else                        G.setOrder(u, pref); // SKOS w dół/górę jeśli to skraca dystans
-      }
+      const me = side;
+      const units = myUnitsActive(G, me);
 
-      // 2) Tuż przed starciem: flanki przełącz na „okrążanie”
-      for (const f of unitsFlanks(G, me)){
-        const e = nearestEnemyOf(G, f);
-        const d = e ? distCells(f.row,f.col,e.row,e.col) : 99;
-        if (d <= 2) setOrderSkosEncircle(G, f);
-      }
-
-      // 3) Heurystyka 2-na-1: znajdź wroga z jednym napastnikiem i dociągnij flankę skosem
-      const foes = G.units.filter(x => x.side!==me && !x.dead && !x.escaped && !x.routed);
-      for (const foe of foes){
-        const friendsNear = unitsSide(G, me).filter(u => distCells(u.row,u.col,foe.row,foe.col) <= 2);
-        if (friendsNear.length === 1){
-          const cand = unitsFlanks(G, me)
-            .filter(u => distCells(u.row,u.col,foe.row,foe.col) <= 3)
-            .sort((a,b)=> distCells(a.row,a.col,foe.row,foe.col) - distCells(b.row,b.col))[0];
-          if (cand) setOrderSkosEncircle(G, cand);
+      // ==============================
+      // FAZA 1 — do pierwszego kontaktu
+      // ==============================
+      if (G.firstContactStep == null){
+        // Domyślnie: wszystkim wolnym daj SZARŻA
+        for (const u of units){
+          if (G.adjEnemies(u).length > 0) continue;   // walczący stoją
+          G.setOrder(u, Orders.SZARZA);
         }
+
+        // Skrajne jednostki: „one-gap” => skos (góra: SKOS_L, dół: SKOS_P)
+        const { top, bottom } = edgeUnits(G, me);
+
+        if (top && isActiveAndFree(G, top) && oneGapEnemyAhead(G, top)){
+          const dir = ORIENT[top.side];
+          const tgt = { row: stepRow(top.row, -1), col: top.col + dir };
+          const ok = !whyBlocked(G, top, tgt, {respectBattleZone:true}).blocked;
+          if (ok) G.setOrder(top, Orders.SKOS_L); // w górę + przód
+        }
+
+        if (bottom && isActiveAndFree(G, bottom) && oneGapEnemyAhead(G, bottom)){
+          const dir = ORIENT[bottom.side];
+          const tgt = { row: stepRow(bottom.row, +1), col: bottom.col + dir };
+          const ok = !whyBlocked(G, bottom, tgt, {respectBattleZone:true}).blocked;
+          if (ok) G.setOrder(bottom, Orders.SKOS_P); // w dół + przód
+        }
+
+        break;
+      }
+
+      // ==============================
+      // FAZA 2 — po pierwszym kontakcie
+      // ==============================
+
+      // Lista wrogów już związanych walką (cele priorytetowe do wsparcia 2-na-1)
+      const engagedFoEs = engagedEnemiesAgainstMySide(G, me);
+
+      for (const u of units){
+        // Walczący nic nie zmieniają (i tak nie ruszą się w fazie ruchu)
+        if (G.adjEnemies(u).length > 0){ 
+          G.setOrder(u, Orders.UTRZYMAJ);
+          continue;
+        }
+
+        // (1) Jeśli SZARŻA spowoduje kontakt po wykonaniu ruchu — wybierz SZARŻĘ
+        if (chargeCreatesContact(G, u)){
+          G.setOrder(u, Orders.SZARZA);
+          continue;
+        }
+
+        // (2) Wspieraj walkę: najkrótsza droga do wroga, który już walczy z moimi
+        if (engagedFoEs.length){
+          let best=null, bd=1e9;
+          for (const e of engagedFoEs){
+            const d = distCells(u.row, u.col, e.row, e.col);
+            if (d < bd){ bd=d; best=e; }
+          }
+          if (best){
+            G.setOrder(u, chooseOrderToward(G, u, best));
+            continue;
+          }
+        }
+
+        // (3) Fallback: najkrótsza droga do najbliższego wroga
+        const nearest = nearestEnemyOf(G, u);
+        G.setOrder(u, chooseOrderToward(G, u, nearest));
       }
       break;
     }
+
 
     case 'D3': {
       for (const u of unitsSide(G, me)){
         const t = nearestEnemyOf(G, u);
-        const pref = preferOrderTowardTarget(u, t);
-        if (pref === Orders.SZARZA) setOrderCharge(G,u);
-        else                        G.setOrder(u, pref);
+        const ord = nextOrderToward(G, u, t);
+        G.setOrder(u, ord);
       }
       break;
     }
 
-    // D4: FORTECA LINIOWA
+    // D4: FORTECA LINIOWA (statyczna: nic nie robi, tylko trzyma)
     case 'D4': {
-      const win = isWinning(G, me);
-      if (win){
-        for (const f of unitsFlanks(G,me)) setOrderSkosEncircle(G,f);
-        for (const k of unitsCav(G,me))    setOrderSkosEncircle(G,k);
+      for (const u of unitsSide(G, me)) {
+        set(u, Orders.UTRZYMAJ, 'forteca: utrzymaj pozycję');
       }
       break;
     }
 
-    // D5: ELASTYCZNA OBRONA
+
+    // D5: ELASTYCZNA OBRONA — czekaj do 1. kontaktu; potem wolne jednostki wspierają 2-na-1
     case 'D5': {
-      for (const k of unitsCav(G,me)){
-        const ahead = G.unitAt(k.row, k.col + ORIENT[me]);
-        if (ahead && ahead.side===foe && !ahead.routed) setOrderCharge(G,k); // kontrszarża
+      const myUnits = unitsSide(G, me);
+
+      // RESET: domyślnie wszyscy trzymają (żeby walczący nie ruszali)
+      for (const u of myUnits) set(u, Orders.UTRZYMAJ, 'elastyczna: domyślnie trzymaj');
+
+      // Do pierwszego kontaktu — absolutnie nic nie rób
+      if (G.firstContactStep == null) break;
+
+      // Zbierz wrogów, którzy JUŻ są w zwarciu z moimi (cele do 2-na-1)
+      const engagedEnemies = new Set();
+      for (const u of myUnits) {
+        const adj = G.adjEnemies(u);
+        for (const e of adj) engagedEnemies.add(e);
       }
-      for (const p of unitsInf(G,me)){
-        const near = G.units.some(e =>
-          e.side===foe && !e.dead && !e.escaped &&
-          (Math.abs(rIdx(p.row)-rIdx(e.row)) + Math.abs(p.col - e.col) <= 2)
-        );
-        if (near) setOrderSkosEncircle(G,p); // krótki wypad SKOSEM (zamiast naprzód)
+      const engagedList = Array.from(engagedEnemies);
+
+      // Dla każdej MOJEJ jednostki, która NIE jest w kontakcie — prowadź do najbliższego takiego celu
+      for (const u of myUnits) {
+        if (G.adjEnemies(u).length > 0) continue; // ci, co już walczą, stoją
+
+        if (engagedList.length) {
+          let best = null, bd = 1e9, bestOrd = null;
+          for (const e of engagedList) {
+            const { better, playable } = legalOrdersToward(G, u, e);
+            const ok = (better.length || playable.length);
+            if (!ok) continue; // odpuść nieosiągalnych w tej turze
+            const d = distCells(u.row,u.col,e.row,e.col);
+            if (d < bd){ 
+              bd = d; best = e; 
+              bestOrd = (better[0]?.ord) || playable[0].ord;
+            }
+          }
+          if (best){
+            set(u, bestOrd, `wspieraj 2-na-1 vs ${best.type[0]}${best.num} @ ${best.row}${best.col}`);
+            continue;
+          }
+          // jeśli nie znaleziono osiągalnego celu – zostaje UTRZYMAJ (defensywna)
+        }
+
+        // (opcjonalny fallback — gdyby wyjątkowo nie było żadnego starcia,
+        // zostawiamy UTRZYMAJ, bo doktryna jest defensywna)
       }
       break;
     }
 
-    // D6: JEŻ I ZĘBY (bez czworoboków)
+    // D6: JEŻ I KOLCE — czekaj; po kontakcie: K atakuje, P zacieśnia szyk
     case 'D6': {
-      const win = isWinning(G, me);
-      if (win){
-        for (const b of unitsCenter(G,me)) setOrderCharge(G,b);        // centrum SZARŻA
-        for (const f of unitsFlanks(G,me)) setOrderSkosEncircle(G,f);  // flanki SKOS
+      const myUnits = unitsSide(G, me);
+
+      // Domyślnie: wszyscy trzymają pozycje
+      for (const u of myUnits) set(u, Orders.UTRZYMAJ, 'jeż: trzymaj pozycję');
+
+      // Do pierwszego kontaktu nie robimy NIC
+      if (G.firstContactStep == null) break;
+
+      // Helpery
+      const myInfAll = unitsInf(G, me);
+      const myInfFree = myInfAll.filter(u => G.adjEnemies(u).length === 0);
+      const myCavFree = unitsCav(G, me).filter(u => G.adjEnemies(u).length === 0);
+
+      // --- Kawaleria: atakuj najbliższy cel (tylko wolne oddziały K)
+      for (const k of myCavFree) {
+        const t = nearestEnemyOf(G, k);
+        const ord = nextOrderToward(G, k, t);
+        set(k, ord, t ? `K: atak najbliższego (${t.type[0]}${t.num}@${t.row}${t.col})` : 'K: brak celu');
       }
-      for (const k of unitsCav(G,me)) setOrderSkosEncircle(G,k);       // osłona SKOSEM
+
+      // --- Piechota: „stay cohesive” — dostrajanie do mediany rzędu; jeśli już blisko kogoś, stój
+      if (myInfAll.length) {
+        // mediana rzędu mojej piechoty
+        const idxs = myInfAll.map(p => rIdx(p.row)).sort((a,b)=>a-b);
+        const medianIdx = idxs[Math.floor(idxs.length/2)];
+
+        const hasBuddy1 = (u)=>{
+          return myInfAll.some(v => v!==u &&
+            (Math.abs(rIdx(u.row)-rIdx(v.row)) + Math.abs(u.col - v.col) <= 1));
+        };
+
+        for (const p of myInfFree) {
+          if (hasBuddy1(p)) {
+            set(p, Orders.UTRZYMAJ, 'P: blisko sojusznika, utrzymaj');
+          } else {
+            // ZAMIANA: wybór najlepszego ruchu kohezji (pozwala na PION)
+            const ord = bestCohesionOrder(G, p);
+            set(p, ord, 'P: zacieśnianie szyku (kohezja)');
+          }
+        }
+      }
+
       break;
     }
+
+
   }
 }
 
@@ -1445,7 +1786,7 @@ function startGame(){
 
 /* ===== init + kontrolki ===== */
 window.addEventListener('DOMContentLoaded', ()=>{
-  elDocA.innerHTML=DOCTRINES_OPTS; elDocO.innerHTML=DOCTRINES_OPTS; elDocA.value='D1'; elDocO.value='D2';
+  elDocA.innerHTML=DOCTRINES_OPTS; elDocO.innerHTML=DOCTRINES_OPTS; elDocA.value='D1'; elDocO.value='D4';
   G=new Game(); startGame();
 
   // po elDocA/elDocO istnieją:
