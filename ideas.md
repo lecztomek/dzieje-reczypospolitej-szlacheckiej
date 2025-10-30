@@ -4,3 +4,4 @@
 - utrzymanie wojska - zold ??? - jesli nie zaplacimy to rzut kostka czy jednostka dezerteruje, moze byc globalny zold jesli nie oplacony w calosci to wtedy ktoras losowa jednostka dezerteuje (rzut koscia)
 - zold placimy jako ostatnia tura pow szystkich najazdach, spustoszeniach,
 - lepszy system bitw (ala centurion)
+- mozna miec rozny typ jednostek na jednej prowincji - przy najazd wybieramy kto atakuje kawaleria czy piechota
