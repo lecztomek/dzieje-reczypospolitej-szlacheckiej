@@ -1379,6 +1379,10 @@ class DefenseAPI {
     this.#advance(false);
     return `PASS (obrona) — ${this.ctx.settings.players[playerIndex].name}`;
   }
+
+  passTurn(playerIndex) {
+    return this.pass(playerIndex);
+  }
 }
 
 
