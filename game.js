@@ -1592,7 +1592,23 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
     if (next === "arson") this._initArsonTurn();                 
     if (prev === "arson" && next !== "arson") this.ctx.arsonTurn = null;
 
-    if (next === "defense") this._initDefenseTurn();
+    if (next === "defense") {
+      this._initDefenseTurn();
+    
+      // ⬇️ AUTO-CHOOSE TARGETS: żeby UI nie musiało wywoływać chooseTargets ręcznie
+      const needTargets =
+        (this.ctx.raid_tracks.N.value | 0) >= 3 ||
+        (this.ctx.raid_tracks.S.value | 0) >= 3 ||
+        (this.ctx.raid_tracks.E.value | 0) >= 3;
+    
+      if (needTargets) {
+        const d6 = () => 1 + Math.floor(Math.random() * 6);
+        try {
+          this.defense.chooseTargets({ N: d6(), S: d6(), E: d6() });
+        } catch (_) {
+        }
+      }
+    }
     if (prev === "defense" && next !== "defense") this.ctx.defenseTurn = null;
 
     return this.round.currentPhaseId();
