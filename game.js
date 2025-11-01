@@ -87,6 +87,14 @@ class GameContext {
     this.attackTurn = null; 
     this.battlesTurn = null; 
     this.arsonTurn = null;
+
+    // Defense phase state
+    this.defense = {
+      targetsByTrack: { N: null, S: null, E: null },  
+      enemyByProvince: {},                             
+      successByProvince: {},                           
+    };
+
     
     this.provinces = {
       [ProvinceID.PRUSY]: new Province(ProvinceID.PRUSY),
@@ -110,6 +118,9 @@ class GameContext {
 }
 
 // ---------------- Small mechanics helpers ----------------
+
+function tracksMapKey(rid) { return rid === RaidTrackID.N ? 'N' : rid === RaidTrackID.S ? 'S' : 'E'; }
+
 function influenceWinnersInProvince(ctx, provinceId) {
   const players = ctx.settings.players;
   const pcount = players.length;
@@ -1155,14 +1166,44 @@ class AttackInvadersAPI {
 
 class DevastationAPI {
   constructor(ctx) { this.ctx = ctx; }
-  // Provide dice to choose the target province when a track >=3 triggers devastation.
-  // dice: { N?:1..6, S?:1..6, E?:1..6 }
+
   resolve(dice = {}) {
     const c = this.ctx; const log = [];
+    const useDefenseTargets = !!c.defenseTurn || !!c.defense.targetsByTrack;
+
+    if (useDefenseTargets && (c.defense.targetsByTrack.N !== undefined)) {
+      const order = [RaidTrackID.N, RaidTrackID.S, RaidTrackID.E];
+      for (const rid of order) {
+        const k = tracksMapKey(rid);
+        const track = c.raid_tracks[k];
+        if (track.value >= 3) {
+          const pid = c.defense.targetsByTrack[k];
+          if (!pid) continue; // nic nie było wybrane
+
+          const enemyLeft = (c.defense.enemyByProvince[pid] | 0) > 0;
+          const defended  = !!c.defense.successByProvince[pid];
+
+          if (!enemyLeft || defended) {
+            log.push(`[Spustoszenia] ${track.id} → ${pid}: obrona skuteczna — brak spustoszenia (tor ustawiony na 1).`);
+            track.value = 1;
+            continue;
+          }
+
+          // obrona się nie powiodła ⇒ normalne spustoszenie
+          const msg = plunderProvince(c, pid);
+          track.value = 1;
+          log.push(`${msg} Tor ${track.id} ustawiony na 1.`);
+        }
+      }
+      if (!log.length) log.push("[Spustoszenia] Brak torów ≥ 3 — nic się nie dzieje.");
+      return log;
+    }
+
+    // Stary tryb (fallback): jeśli z jakiegoś powodu nie było obrony
     const pairs = { [RaidTrackID.N]: [ProvinceID.PRUSY, ProvinceID.LITWA], [RaidTrackID.E]: [ProvinceID.LITWA, ProvinceID.UKRAINA], [RaidTrackID.S]: [ProvinceID.UKRAINA, ProvinceID.MALOPOLSKA] };
     const order = [RaidTrackID.N, RaidTrackID.S, RaidTrackID.E];
     for (const rid of order) {
-      const key = rid === RaidTrackID.N ? 'N' : rid === RaidTrackID.S ? 'S' : 'E'; const track = c.raid_tracks[key];
+      const key = tracksMapKey(rid); const track = c.raid_tracks[key];
       if (track.value >= 3) {
         const [first, second] = pairs[rid];
         const r = Number(dice?.[key]); if (!(r >= 1 && r <= 6)) throw new Error(`Missing/invalid die for ${key}`);
@@ -1174,6 +1215,172 @@ class DevastationAPI {
     return log;
   }
 }
+
+
+class DefenseAPI {
+  constructor(ctx) { this.ctx = ctx; }
+
+  #ensurePhase() {
+    if (!this.ctx.defenseTurn) throw new Error("To nie jest faza obrony kraju.");
+    if (this.ctx.defenseTurn.done) throw new Error("Faza obrony kraju już zakończona.");
+  }
+  #requireActive(playerIndex) {
+    this.#ensurePhase();
+    const t = this.ctx.defenseTurn;
+    const expected = t.order[t.idx];
+    if (playerIndex !== expected) {
+      const want = this.ctx.settings.players[expected]?.name ?? `#${expected}`;
+      throw new Error(`Teraz ruch ma ${want}.`);
+    }
+  }
+  #advance(turnWasDefense) {
+    const t = this.ctx.defenseTurn;
+    if (!t) return;
+
+    if (turnWasDefense) {
+      t.passed = t.passed.map(() => false);
+    }
+
+    // koniec gdy wszyscy PASS albo nie ma już żadnych wrogich jednostek
+    const anyEnemyLeft = Object.values(this.ctx.defense.enemyByProvince)
+      .some(v => (v | 0) > 0);
+    if (t.passed.every(Boolean) || !anyEnemyLeft) {
+      t.done = true;
+      return;
+    }
+
+    // do kolejnego bez PASS
+    const n = t.order.length;
+    for (let step = 1; step <= n; step++) {
+      const nextIdx = (t.idx + step) % n;
+      const pidx = t.order[nextIdx];
+      if (!t.passed[pidx]) {
+        t.idx = nextIdx;
+        break;
+      }
+    }
+  }
+
+  // 3.1. Wylosuj cele i ustaw wrogie „armie” = wartość toru (gwiazdki)
+  // dice: { N?:1..6, S?:1..6, E?:1..6 } — jak dawniej w DevastationAPI.resolve
+  chooseTargets(dice = {}) {
+    this.#ensurePhase();
+    const t = this.ctx.defenseTurn;
+    const c = this.ctx;
+    const log = [];
+
+    if (t.prepared) return ["[Obrona] Cele już wylosowane."];
+
+    const pairs = {
+      [RaidTrackID.N]: [ProvinceID.PRUSY, ProvinceID.LITWA],
+      [RaidTrackID.E]: [ProvinceID.LITWA, ProvinceID.UKRAINA],
+      [RaidTrackID.S]: [ProvinceID.UKRAINA, ProvinceID.MALOPOLSKA],
+    };
+
+    for (const rid of [RaidTrackID.N, RaidTrackID.S, RaidTrackID.E]) {
+      const k = tracksMapKey(rid);
+      const track = c.raid_tracks[k];
+      if (track.value >= 3) {
+        const [first, second] = pairs[rid];
+        const r = Number(dice?.[k]); 
+        if (!(r >= 1 && r <= 6)) throw new Error(`Missing/invalid die for ${k}`);
+        const target = (r <= 3) ? first : second;
+
+        c.defense.targetsByTrack[k] = target;
+        c.defense.enemyByProvince[target] = (track.value | 0); // 1 jednostka za każdą „gwiazdkę”
+        c.defense.successByProvince[target] = false;
+
+        log.push(`[Obrona] ${track.id}: cel ${target} (tor=${track.value}, wróg=${track.value} j.).`);
+      } else {
+        c.defense.targetsByTrack[k] = null;
+      }
+    }
+
+    t.prepared = true;
+    if (!Object.keys(c.defense.enemyByProvince).length) {
+      log.push("[Obrona] Brak torów ≥3 — nie ma najazdów do obrony.");
+      // nic nie ma do roboty — kończymy od razu
+      t.done = true;
+    }
+    return log;
+  }
+
+  // 3.2. Akcja obrony jednego gracza w jednej prowincji
+  // rolls: number[] — możesz podać sekwencję rzutów, każdy rozstrzyga 1 starcie
+  defend({ playerIndex, provinceId, rolls }) {
+    this.#requireActive(playerIndex);
+    const c = this.ctx; const t = this.ctx.defenseTurn;
+    if (!t.prepared) throw new Error("Najpierw wylosuj cele: defense.chooseTargets({ N:..., S:..., E:... }).");
+
+    ensurePerProvinceArrays(c);
+
+    // prowincja musi być jednym z wylosowanych celów
+    if (!(provinceId in c.defense.enemyByProvince)) throw new Error("Ta prowincja nie jest celem obrony.");
+
+    const enemy = c.defense.enemyByProvince[provinceId] | 0;
+    if (enemy <= 0) return ["[Obrona] Wróg w tej prowincji już rozbity."];
+
+    const pidx = playerIndex | 0;
+    const myUnits = c.troops.per_province[provinceId]?.[pidx] | 0;
+    if (myUnits <= 0) throw new Error("Nie masz jednostek w tej prowincji.");
+
+    const kinds = c.troops_kind.per_province[provinceId];
+    const out = [];
+    const seq = Array.isArray(rolls) && rolls.length
+      ? rolls.slice()
+      : [1 + Math.floor(Math.random() * 6)]; // domyślnie 1 rzut
+
+    for (const r0 of seq) {
+      let e = c.defense.enemyByProvince[provinceId] | 0;
+      let u = c.troops.per_province[provinceId][pidx] | 0;
+      if (e <= 0 || u <= 0) break;
+
+      const r = r0 | 0;
+      if (!(r >= 1 && r <= 6)) throw new Error("Rzut musi być 1..6.");
+
+      if (r === 1) {
+        // ginie tylko jednostka gracza
+        u = Math.max(0, u - 1);
+        out.push("1 → ginie tylko jednostka obrońcy.");
+      } else if (r <= 5) {
+        // ginie i wróg, i obrońca
+        e = Math.max(0, e - 1);
+        u = Math.max(0, u - 1);
+        out.push("2–5 → giną obie strony (wróg −1, obrońca −1).");
+      } else {
+        // 6: ginie tylko jednostka wroga
+        e = Math.max(0, e - 1);
+        out.push("6 → ginie tylko jednostka wroga (wróg −1).");
+      }
+
+      // zapisz stan po starciu
+      c.defense.enemyByProvince[provinceId] = e;
+      c.troops.per_province[provinceId][pidx] = u;
+      if (u === 0) kinds[pidx] = UnitKind.NONE;
+
+      if (e === 0) {
+        c.defense.successByProvince[provinceId] = true; // obrona skuteczna
+        out.push(`[Obrona] Wróg rozbity w ${provinceId} — spustoszenia nie będzie.`);
+        break;
+      }
+    }
+
+    out.push(`Po obronie: wróg=${c.defense.enemyByProvince[provinceId]}, ${c.settings.players[pidx].name}=${c.troops.per_province[provinceId][pidx]}.`);
+
+    // po akcji obrony resetujemy PASS-y i przesuwamy turę
+    t.passed = t.passed.map(() => false);
+    this.#advance(true);
+    return out;
+  }
+
+  pass(playerIndex) {
+    this.#requireActive(playerIndex);
+    this.ctx.defenseTurn.passed[playerIndex] = true;
+    this.#advance(false);
+    return `PASS (obrona) — ${this.ctx.settings.players[playerIndex].name}`;
+  }
+}
+
 
 // === NEW: surowa punktacja dla UI i raportu ===
 function computeScoresRaw(ctx){
@@ -1280,8 +1487,11 @@ function computeFinalScores(ctx) {
 // ---------------- Round + Game orchestration (programmatic) ----------------
 class RoundEngine {
   constructor(ctx) { this.ctx = ctx; this.phaseIndex = 0; this.phases = [
-    "events", "income", "auction", "sejm", "actions", "battles", "arson", "reinforcements", "attacks", "devastation"
-  ]; }
+  "events", "income", "auction", "sejm", "actions",
+  "battles", "arson", "reinforcements", "attacks",
+  "defense",            
+  "devastation"
+];}
   currentPhaseId() { return this.phases[this.phaseIndex] ?? null; }
   nextPhase() {
     this.phaseIndex += 1;              // po ostatniej fazie currentPhaseId() zwróci null
@@ -1306,6 +1516,7 @@ export class ConsoleGame {
     this.attacks = new AttackInvadersAPI(this.ctx);
     this.devastation = new DevastationAPI(this.ctx);
     this.arson = new ArsonAPI(this.ctx); 
+    this.defense = new DefenseAPI(this.ctx);
 
     this.round = null; // RoundEngine
   }
@@ -1377,6 +1588,9 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
     if (next === "arson") this._initArsonTurn();                 
     if (prev === "arson" && next !== "arson") this.ctx.arsonTurn = null;
 
+    if (next === "defense") this._initDefenseTurn();
+    if (prev === "defense" && next !== "defense") this.ctx.defenseTurn = null;
+
     return this.round.currentPhaseId();
   }
 
@@ -1395,6 +1609,25 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
       done: false,
     };
   }
+
+  _initDefenseTurn() {
+    const pcount = this.ctx.settings.players.length;
+    const start = this.ctx.round_status.marshal_index;
+    const order = Array.from({ length: pcount }, (_, k) => (start + k) % pcount);
+
+    this.ctx.defense.targetsByTrack = { N: null, S: null, E: null };
+    this.ctx.defense.enemyByProvince = {};
+    this.ctx.defense.successByProvince = {};
+
+    this.ctx.defenseTurn = {
+      order,
+      idx: 0,
+      passed: Array(pcount).fill(false),
+      done: false,
+      prepared: false,
+    };
+  }
+
 
   _initBattlesTurn() {
     const pcount = this.ctx.settings.players.length;
@@ -1475,6 +1708,11 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
       (phase === "arson" && this.ctx.arsonTurn && !this.ctx.arsonTurn.done)
         ? this.ctx.arsonTurn.order[this.ctx.arsonTurn.idx]
         : null;
+
+    const activeDefenseIdx =
+      (phase === "defense" && this.ctx.defenseTurn && !this.ctx.defenseTurn.done)
+        ? this.ctx.defenseTurn.order[this.ctx.defenseTurn.idx]
+        : null;
     
     return deepClone({
       state: this.state,
@@ -1505,6 +1743,11 @@ startGame({ players = [], startingGold = 6, maxRounds = 3, resetGoldEachRound = 
       active_battler_index: activeBattleIdx,
       active_battler: activeBattleIdx != null ? this.ctx.settings.players[activeBattleIdx].name : null,
       battles_turn: this.ctx.battlesTurn ? deepClone(this.ctx.battlesTurn) : null,
+
+      active_defender_index: activeDefenseIdx,
+      active_defender: activeDefenseIdx != null ? this.ctx.settings.players[activeDefenseIdx].name : null,
+      defense_turn: this.ctx.defenseTurn ? deepClone(this.ctx.defenseTurn) : null,
+      defense_state: deepClone(this.ctx.defense),
 
       active_arson_index: activeArsonIdx,
       active_arson: activeArsonIdx != null ? this.ctx.settings.players[activeArsonIdx].name : null,
