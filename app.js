@@ -184,6 +184,16 @@ function maybeAutoAdvanceAfterArson(){
   }
 }
 
+function maybeAutoAdvanceAfterDefense(){
+  const s = game.getPublicState?.() || {};
+  if ((s.current_phase || game.round?.currentPhaseId?.()) !== 'defense') return;
+  if (s.defense_turn?.done) {
+    const nxt = game.finishPhaseAndAdvance();
+    ok(`Auto-next z Obrony -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+    syncUIFromGame();
+  }
+}
+
 function maybeAutoAdvanceAfterBattles(){
   const s = game.getPublicState?.() || {};
   if ((s.current_phase || game.round?.currentPhaseId?.()) !== 'battles') return;
@@ -782,11 +792,13 @@ const PHASE_LABELS = {
   sejm:   'Sejm',
   actions:'Akcje',
   battles:'Starcia',
+  defense:'Obrona',                
   arson:  'Palenie posiadłości',
   reinforcements:'Wzmacnianie',
   attacks:'Wyprawy',
   devastation:'Spustoszenia'
 };
+
 
 function updateRoundUI(){
   const curEl = document.getElementById('roundCur');
@@ -796,6 +808,7 @@ function updateRoundUI(){
   if (maxEl) maxEl.textContent = String(roundMax);
 }
 
+// [DROBNA AKTUALIZACJA — applyCurrentTurnFromState: dodaj obronę]
 function applyCurrentTurnFromState(s){
   const phase = s.current_phase || game.round?.currentPhaseId?.();
   let idx = -1;
@@ -803,9 +816,11 @@ function applyCurrentTurnFromState(s){
   if (phase === 'actions' && Number.isInteger(s.active_player_index)) {
     idx = s.active_player_index;
   } else if (phase === 'attacks' && Number.isInteger(s.active_attacker_index)) {
-    idx = s.active_attacker_index;
+    idx = s.active_attacker_index;          
   } else if (phase === 'battles' && Number.isInteger(s.active_battler_index)) {
     idx = s.active_battler_index;          
+  } else if (phase === 'defense' && Number.isInteger(s.active_defender_index)) { // [DODAJ]
+    idx = s.active_defender_index;
   } else if (phase === 'arson' && Number.isInteger(s.active_arson_index)) {
     idx = s.active_arson_index;
   } else {
@@ -817,7 +832,6 @@ function applyCurrentTurnFromState(s){
     updateTurnUI();
   }
 }
-
 
 function updateTurnUI(){
   if (PLAYERS.length === 0 || curPlayerIdx < 0 || curPlayerIdx >= PLAYERS.length){
@@ -984,7 +998,14 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-const PHASES = ['Wydarzenia','Dochód', 'Sejm','Akcje','Starcia', 'Palenie', 'Wzmacnianie', 'Wyprawy','Spustoszenia'];
+// [ZMIANA — pasek faz: wstaw „Obrona” PRZED „Wyprawy”]
+const PHASES = [
+  'Wydarzenia','Dochód','Sejm','Akcje','Starcia',
+  'Palenie','Wzmacnianie',
+  'Obrona',             
+  'Wyprawy','Spustoszenia'
+];
+
 let phaseCur = 1; // 1..PHASES.length
 const phaseBarEl = document.getElementById('phaseBar');
 
@@ -1385,6 +1406,7 @@ function setEnemyCount(which, n, color = ENEMY_DEFAULT_COLOR){
   return true;
 }
 
+
 const ENGINE_TO_UI_PHASE = {
   events: 1,
   income: 2,
@@ -1392,11 +1414,13 @@ const ENGINE_TO_UI_PHASE = {
   sejm: 3,
   actions: 4,
   battles: 5,
-  arson: 6,            
+  arson: 6,
   reinforcements: 7,
-  attacks: 8,
-  devastation: 9,
+  defense: 8,     
+  attacks: 9,
+  devastation: 10,
 };
+
 
 function applyPhaseFromEngineState(s){
   const id = s.current_phase || game.round?.currentPhaseId?.();
@@ -2073,6 +2097,99 @@ if (phase === 'auction' || phase === 'sejm'){
       return;
     }
 
+// [DODAJ — w buildPhaseActionsSmart(s), analogiczny blok do 'attacks'; wstaw PRZED blokiem 'attacks']
+if (phase === 'defense'){
+  const box = section('Obrona', 'Wybierz skąd bronisz (tylko prowincje, gdzie masz jednostki) albo PASS.');
+  const pidx = Number.isInteger(s.active_defender_index) ? s.active_defender_index : curPlayerIdx;
+  const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
+  box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } },
+    `Aktywny gracz: ${activePlayerName}`
+  ));
+
+  const playerProvinces = [];
+  for (const [pid, arr] of Object.entries(s.troops || {})) {
+    const key = provKeyFromId(pid); if (!key) continue;
+    const units = (arr?.[pidx] || 0) | 0;
+    if (units > 0) playerProvinces.push({ key, units });
+  }
+
+  if (playerProvinces.length === 0){
+    box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } },
+      'Brak jednostek — możesz tylko PASS.'
+    ));
+  } else {
+    playerProvinces.forEach(({ key, units }) => {
+      const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
+      row.append(el('span', { style:{ minWidth:'150px', fontWeight:'800' } }, `${key} (jednostek: ${units})`));
+
+      const targets = ATTACK_TARGETS[key] || [];
+      targets.forEach(enemyKey => {
+        row.append(chip(`bronię ${key} ⇄ ${enemyKey}`, () => {
+          try {
+            const roll = roll1d6();
+            const rolls = [roll];
+            ok(`(UI) Obrona ${key} ⇄ ${enemyKey}, rzut: ${roll}`);
+
+            // Silnik: game.defense.defend({...})
+            const lines = game.defense.defend({
+              playerIndex: pidx,
+              enemy: toEnemyEnum(enemyKey),
+              from:  toProvEnum(key),
+              rolls,
+              dice: 1
+            });
+
+            logEngine(lines);
+            syncUIFromGame();
+            maybeAutoAdvanceAfterDefense();
+
+            popupFromEngine(`Obrona — ${key} ⇄ ${enemyKey}`, [
+              `Rzut: ${roll}.`,
+              ...(Array.isArray(lines) ? lines : [lines]),
+            ], {
+              imageUrl: attackImageForRoll(roll),
+              buttonText: 'OK',
+              onClose: () => {
+                maybeAutoAdvanceAfterDefense();
+                buildPhaseActionsSmart(game.getPublicState());
+              }
+            });
+          } catch (e) {
+            err('Błąd obrony: ' + e.message);
+          }
+        }, `gdefend ${enemyKey} ${key} <auto 1k6>`));
+      });
+
+      box.append(row);
+    });
+  }
+
+  box.append(el('div', { style:{ height:'6px' } }));
+  box.append(chip('PASS (obrona)', ()=> {
+    try{
+      const st = game.getPublicState?.() || {};
+      if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'defense') {
+        ok('Faza Obrony już zakończona — odświeżam UI.');
+        syncUIFromGame();
+        return;
+      }
+      const p = Number.isInteger(st.active_defender_index) ? st.active_defender_index : curPlayerIdx;
+      const msg = game.defense.passTurn(p);
+      ok(String(msg || 'PASS (obrona).'));
+      syncUIFromGame();
+      maybeAutoAdvanceAfterDefense();
+      buildPhaseActionsSmart(game.getPublicState());
+    } catch(ex){
+      err('PASS (obrona) nieudany: ' + ex.message);
+    }
+  }));
+
+  phaseActionsEl.appendChild(box);
+  tintByActive();
+  return;
+}
+
+
   // ====== SPUSTOSZENIA ======
   if (phase === 'devastation'){
     const box = section('Spustoszenia', 'Wylosuj N, S, E (1–6) i zastosuj spustoszenia, potem przejdź do następnej rundy.');
@@ -2546,7 +2663,31 @@ function execCommand(raw){
     }
     return err('Użycie: garson burn <prowincja> | garson pass');
   }
+
+  if (cmd === 'gdefend'){
+    if (curPlayerIdx < 0) return err('Ustaw aktywnego gracza: turn <...>.');
+    const enemy = toEnemyEnum(tokens[1]); const src = toProvEnum(tokens[2]);
+    const rolls = tokens.slice(3).map(x => parseInt(x,10)).filter(Number.isFinite);
+    if (!enemy || !src || rolls.length === 0) return err('Użycie: gdefend <szwecja|moskwa|tatarzy> <prowincja> <r1> [r2]…');
+    const lines = game.defense.defend({ playerIndex: curPlayerIdx, enemy, from: src, rolls });
+    ok('Obrona rozpatrzona.');
+    logEngine(lines);
+    syncUIFromGame();
+    return;
+  }
   
+  if (cmd === 'gdpass'){
+    if (curPlayerIdx < 0) return err('Brak aktywnego gracza.');
+    try {
+      const msg = game.defense.passTurn(curPlayerIdx);
+      ok(String(msg || 'PASS (obrona).'));
+      syncUIFromGame();
+    } catch (ex) {
+      err('PASS (obrona) nieudany: ' + ex.message);
+    }
+    return;
+  }
+
   if (cmd === 'gburn'){
     if (curPlayerIdx < 0) return err('Ustaw aktywnego gracza: turn <...>.');
     const prov = toProvEnum(tokens[1]);
@@ -2603,6 +2744,8 @@ function showHelp(){
   print('• gduelauto <prow> <A> <B> — szybka potyczka (losowe rzuty w liczbie = jednostkom)');
   print('• garson burn <prow> — spal jedyną posiadłość w prowincji (jeśli legalne) • garson pass — PASS w fazie palenia');
   print('• gburn <prow> — skrót do garson burn');
+  print('• gdefend <wróg> <z_prowincji> <r1> [r2]… — obrona (jak atak w najazdach)');
+  print('• gdpass — PASS w fazie obrony');
 }
 
 // ===================== Obsługa konsoli =====================
