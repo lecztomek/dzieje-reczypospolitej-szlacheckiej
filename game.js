@@ -1239,13 +1239,19 @@ class DefenseAPI {
     const c = this.ctx;
     ensurePerProvinceArrays(c);
   
-    // zbierz prowincje z aktywnym wrogiem na DOWOLNYM torze
-    const targets = Object.entries(c.defense.enemyByProvince)
-      .filter(([, perTrack]) => perTrack && Object.values(perTrack).some(v => (v|0) > 0))
+    // prowincje, w których na DOWOLNYM torze wróg > 0
+    const targets = Object.entries(c.defense.enemyByProvince || {})
+      .filter(([, perTrack]) => {
+        if (typeof perTrack === 'number') return (perTrack | 0) > 0;             // stary format (awaryjnie)
+        if (perTrack && typeof perTrack === 'object')
+          return Object.values(perTrack).some(v => (v | 0) > 0);                 // nowy format
+        return false;
+      })
       .map(([pid]) => pid);
   
     if (!targets.length) return false;
   
+    // czy JAKIKOLWIEK gracz ma jednostki w którejś z tych prowincji?
     const pcount = c.settings.players.length;
     for (const pid of targets) {
       const arr = c.troops.per_province[pid] || [];
@@ -1255,6 +1261,7 @@ class DefenseAPI {
     }
     return false;
   }
+
 
 
   #advance(turnWasDefense) {
