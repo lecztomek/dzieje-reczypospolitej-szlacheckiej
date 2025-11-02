@@ -651,21 +651,47 @@ function ensureDefensePopup(state){
   if (phase !== 'defense') return;
 
   const r = s.round_status?.current_round | 0;
-  if (r === _defensePopupRound) return; // już pokazywaliśmy w tej rundzie
+  if (r === _defensePopupRound) return; // pokazujemy raz na rundę
 
+  // Zbierz cele (jeśli silnik je już wystawił, zobaczymy je tutaj)
   const underAttack = getUnderAttackSet(s);
   const nice = Array.from(underAttack);
-  const lines = nice.length
+  const noAttacks = nice.length === 0;
+
+  const lines = noAttacks
     ? [
+        'Brak wykrytych najazdów w tej fazie.',
+        'W tej rundzie nie ma nic do obrony — przejdźmy do Spustoszeń.'
+      ]
+    : [
         'Te prowincje są właśnie napadane — tylko w nich możesz się bronić:',
         '',
         ...nice.map(k => `• ${PROV_DISPLAY[k] || k}`)
-      ]
-    : ['Brak wykrytych najazdów w tej fazie (silnik nie zgłosił celów).'];
+      ];
 
   popupFromEngine('Najazdy — cele obrony', lines, {
     imageUrl: ATTACK_IMG_MID,
-    buttonText: 'Do obrony'
+    buttonText: noAttacks ? 'Dalej (Spustoszenia)' : 'Do obrony',
+    onAction: () => {
+      if (noAttacks) {
+        // (bezpieczeństwo) jeśli cele nie były przygotowane, przygotuj — chooseTargets ustawi done=true przy braku torów ≥3
+        try {
+          const sNow = game.getPublicState?.() || {};
+          if (!sNow.defense_turn?.prepared) {
+            const dice = {};
+            if ((sNow.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
+            if ((sNow.raid_tracks?.E|0) >= 3) dice.E = roll1d6();
+            if ((sNow.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
+            const out = game.defense.chooseTargets(dice);
+            logEngine(out);
+          }
+        } catch (_) { /* ignorujemy ewentualny brak/wyjątek */ }
+
+        const nxt = game.finishPhaseAndAdvance();
+        ok(`Auto-next z Obrony -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
+        syncUIFromGame();
+      }
+    }
   });
 
   _defensePopupRound = r;
