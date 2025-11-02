@@ -69,6 +69,7 @@ const ATTACK_IMG_HIGH = './images/attack_1.png';  // miażdżący atak
 let _lastPhaseId = null;
 let _lastRoundNo = null;
 let _actionWizard = null; 
+let _defensePopupRound = -1; 
 
 // ==== Sejm: stan + opisy ustaw ====
 let _sejmLawRound = -1;                // runda, w której wylosowaliśmy ustawę
@@ -587,6 +588,64 @@ const REV_PROV_MAP = {
   [ProvinceID.WIELKOPOLSKA]: 'wielkopolska',
   [ProvinceID.MALOPOLSKA]: 'malopolska',
 };
+
+function getUnderAttackSet(state){
+  // szukamy kilku popularnych kształtów stanu – zwracamy Set kluczy UI: 'prusy','litwa',...
+  const s = state || game.getPublicState?.() || {};
+  const out = new Set();
+
+  // 1) najbardziej oczywiste: defense_turn.targets: [provinceId,...]
+  const arr1 = s.defense_turn?.targets;
+  if (Array.isArray(arr1)) {
+    arr1.forEach(pid => { const k = provKeyFromId(pid); if (k) out.add(k); });
+  }
+
+  // 2) czasem engine podaje mapę: { [provinceId]: true|1|... }
+  const obj1 = s.defense_turn?.under_attack || s.under_attack || s.attacked_provinces;
+  if (obj1 && typeof obj1 === 'object') {
+    for (const [pid, val] of Object.entries(obj1)) {
+      if (!val) continue;
+      const k = provKeyFromId(pid); if (k) out.add(k);
+    }
+  }
+
+  // 3) alternatywne: lista obiektów { provinceId / province_id / province / id }
+  const arr2 = s.defense_turn?.attacks || s.defense_turn?.events || s.attacks_on_provinces;
+  if (Array.isArray(arr2)) {
+    arr2.forEach(x => {
+      const pid = x?.provinceId ?? x?.province_id ?? x?.province ?? x?.id;
+      const k = provKeyFromId(pid); if (k) out.add(k);
+    });
+  }
+
+  return out;
+}
+
+function ensureDefensePopup(state){
+  const s = state || game.getPublicState?.(); if (!s) return;
+  const phase = s.current_phase || game.round?.currentPhaseId?.();
+  if (phase !== 'defense') return;
+
+  const r = s.round_status?.current_round | 0;
+  if (r === _defensePopupRound) return; // już pokazywaliśmy w tej rundzie
+
+  const underAttack = getUnderAttackSet(s);
+  const nice = Array.from(underAttack);
+  const lines = nice.length
+    ? [
+        'Te prowincje są właśnie napadane — tylko w nich możesz się bronić:',
+        '',
+        ...nice.map(k => `• ${PROV_DISPLAY[k] || k}`)
+      ]
+    : ['Brak wykrytych najazdów w tej fazie (silnik nie zgłosił celów).'];
+
+  popupFromEngine('Najazdy — cele obrony', lines, {
+    imageUrl: ATTACK_IMG_MID,
+    buttonText: 'Do obrony'
+  });
+
+  _defensePopupRound = r;
+}
 
 // === [DODAJ] Bezpieczna normalizacja identyfikatora prowincji ===
 function provKeyFromId(id){
@@ -1428,7 +1487,11 @@ function applyPhaseFromEngineState(s){
   if (Number.isInteger(idx) && idx !== phaseCur){
     phaseCur = idx;
   }
-  setPhaseNow(id);       // <<< USTAW TEKST BADGE
+  setPhaseNow(id);     
+
+  if (id === 'defense') {
+    ensureDefensePopup(s);
+  }
 }
 
 
@@ -2097,97 +2160,95 @@ if (phase === 'auction' || phase === 'sejm'){
       return;
     }
 
-// [DODAJ — w buildPhaseActionsSmart(s), analogiczny blok do 'attacks'; wstaw PRZED blokiem 'attacks']
-if (phase === 'defense'){
-  const box = section('Obrona', 'Wybierz skąd bronisz (tylko prowincje, gdzie masz jednostki) albo PASS.');
-  const pidx = Number.isInteger(s.active_defender_index) ? s.active_defender_index : curPlayerIdx;
-  const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
-  box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } },
-    `Aktywny gracz: ${activePlayerName}`
-  ));
-
-  const playerProvinces = [];
-  for (const [pid, arr] of Object.entries(s.troops || {})) {
-    const key = provKeyFromId(pid); if (!key) continue;
-    const units = (arr?.[pidx] || 0) | 0;
-    if (units > 0) playerProvinces.push({ key, units });
-  }
-
-  if (playerProvinces.length === 0){
-    box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } },
-      'Brak jednostek — możesz tylko PASS.'
-    ));
-  } else {
-    playerProvinces.forEach(({ key, units }) => {
-      const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
-      row.append(el('span', { style:{ minWidth:'150px', fontWeight:'800' } }, `${key} (jednostek: ${units})`));
-
-      const targets = ATTACK_TARGETS[key] || [];
-      targets.forEach(enemyKey => {
-        row.append(chip(`bronię ${key} ⇄ ${enemyKey}`, () => {
-          try {
-            const roll = roll1d6();
-            const rolls = [roll];
-            ok(`(UI) Obrona ${key} ⇄ ${enemyKey}, rzut: ${roll}`);
-
-            // Silnik: game.defense.defend({...})
-            const lines = game.defense.defend({
-              playerIndex: pidx,
-              enemy: toEnemyEnum(enemyKey),
-              from:  toProvEnum(key),
-              rolls,
-              dice: 1
-            });
-
-            logEngine(lines);
-            syncUIFromGame();
-            maybeAutoAdvanceAfterDefense();
-
-            popupFromEngine(`Obrona — ${key} ⇄ ${enemyKey}`, [
-              `Rzut: ${roll}.`,
-              ...(Array.isArray(lines) ? lines : [lines]),
-            ], {
-              imageUrl: attackImageForRoll(roll),
-              buttonText: 'OK',
-              onClose: () => {
-                maybeAutoAdvanceAfterDefense();
-                buildPhaseActionsSmart(game.getPublicState());
-              }
-            });
-          } catch (e) {
-            err('Błąd obrony: ' + e.message);
-          }
-        }, `gdefend ${enemyKey} ${key} <auto 1k6>`));
-      });
-
-      box.append(row);
-    });
-  }
-
-  box.append(el('div', { style:{ height:'6px' } }));
-  box.append(chip('PASS (obrona)', ()=> {
-    try{
-      const st = game.getPublicState?.() || {};
-      if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'defense') {
-        ok('Faza Obrony już zakończona — odświeżam UI.');
-        syncUIFromGame();
-        return;
+    if (phase === 'defense'){
+      const box = section('Obrona', 'Wybierz prowincję będącą pod najazdem, w której masz swoje wojsko — albo PASS.');
+    
+      const pidx = Number.isInteger(s.active_defender_index) ? s.active_defender_index : curPlayerIdx;
+      const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
+      box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } },
+        `Aktywny gracz: ${activePlayerName}`
+      ));
+    
+      // NOWE: zestaw prowincji pod atakiem
+      const underAttack = getUnderAttackSet(s); // Set('prusy', 'litwa', ...)
+    
+      // Twoje prowincje z jednostkami, ale tylko takie, które są pod najazdem
+      const playerProvinces = [];
+      for (const [pid, arr] of Object.entries(s.troops || {})) {
+        const key = provKeyFromId(pid); if (!key) continue;
+        if (!underAttack.has(key)) continue;           // <<< filtr 1: musi być atakowana
+        const units = (arr?.[pidx] || 0) | 0;
+        if (units > 0) playerProvinces.push({ key, units }); // <<< filtr 2: musisz mieć tam wojsko
       }
-      const p = Number.isInteger(st.active_defender_index) ? st.active_defender_index : curPlayerIdx;
-      const msg = game.defense.passTurn(p);
-      ok(String(msg || 'PASS (obrona).'));
-      syncUIFromGame();
-      maybeAutoAdvanceAfterDefense();
-      buildPhaseActionsSmart(game.getPublicState());
-    } catch(ex){
-      err('PASS (obrona) nieudany: ' + ex.message);
+    
+      if (playerProvinces.length === 0){
+        const why = (underAttack.size === 0)
+          ? 'Silnik nie zgłosił żadnych atakowanych prowincji.'
+          : 'Nie masz jednostek w atakowanych prowincjach.';
+        box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } }, `Brak możliwych obron — ${why}`));
+      } else {
+        playerProvinces.forEach(({ key, units }) => {
+          const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
+          row.append(el('span', { style:{ minWidth:'220px', fontWeight:'800' } }, `${key} (jednostek: ${units})`));
+    
+          // jak wcześniej – korzystamy z ATTACK_TARGETS, ale renderujemy TYLKO, gdy prowincja jest pod atakiem
+          const targets = ATTACK_TARGETS[key] || [];
+          targets.forEach(enemyKey => {
+            row.append(chip(`bronię ${key} ⇄ ${enemyKey}`, () => {
+              try {
+                const roll = roll1d6();
+                ok(`(UI) Obrona ${key} ⇄ ${enemyKey}, rzut: ${roll}`);
+                const lines = game.defense.defend({
+                  playerIndex: pidx,
+                  enemy: toEnemyEnum(enemyKey),
+                  from:  toProvEnum(key),
+                  rolls: [roll],
+                  dice: 1
+                });
+                logEngine(lines);
+                syncUIFromGame();
+                maybeAutoAdvanceAfterDefense();
+                popupFromEngine(`Obrona — ${key} ⇄ ${enemyKey}`, [
+                  `Rzut: ${roll}.`,
+                  ...(Array.isArray(lines) ? lines : [lines]),
+                ], {
+                  imageUrl: attackImageForRoll(roll),
+                  buttonText: 'OK',
+                  onClose: () => {
+                    maybeAutoAdvanceAfterDefense();
+                    buildPhaseActionsSmart(game.getPublicState());
+                  }
+                });
+              } catch (e) { err('Błąd obrony: ' + e.message); }
+            }, `gdefend ${enemyKey} ${key} <auto 1k6>`));
+          });
+    
+          box.append(row);
+        });
+      }
+    
+      box.append(el('div', { style:{ height:'6px' } }));
+      box.append(chip('PASS (obrona)', ()=> {
+        try{
+          const st = game.getPublicState?.() || {};
+          if ((st.current_phase || game.round?.currentPhaseId?.()) !== 'defense') {
+            ok('Faza Obrony już zakończona — odświeżam UI.');
+            syncUIFromGame();
+            return;
+          }
+          const p = Number.isInteger(st.active_defender_index) ? st.active_defender_index : curPlayerIdx;
+          const msg = game.defense.passTurn(p);
+          ok(String(msg || 'PASS (obrona).'));
+          syncUIFromGame();
+          maybeAutoAdvanceAfterDefense();
+          buildPhaseActionsSmart(game.getPublicState());
+        } catch(ex){ err('PASS (obrona) nieudany: ' + ex.message); }
+      }));
+    
+      phaseActionsEl.appendChild(box);
+      tintByActive();
+      return;
     }
-  }));
-
-  phaseActionsEl.appendChild(box);
-  tintByActive();
-  return;
-}
 
 
   // ====== SPUSTOSZENIA ======
