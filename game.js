@@ -1284,8 +1284,57 @@ class DefenseAPI {
     }
   }
 
-  // --- bez zmian ---
-  chooseTargets(dice = {}) { /* ... jak u Ciebie ... */ }
+  chooseTargets(dice = {}) {
+    this.#ensurePhase();
+    const t = this.ctx.defenseTurn;
+    const c = this.ctx;
+    const log = [];
+    const events = []; // ⬅️ nowe
+  
+    if (t.prepared) return ["[Obrona] Cele już wylosowane."];
+  
+    const pairs = {
+      [RaidTrackID.N]: [ProvinceID.PRUSY, ProvinceID.LITWA],
+      [RaidTrackID.E]: [ProvinceID.LITWA, ProvinceID.UKRAINA],
+      [RaidTrackID.S]: [ProvinceID.UKRAINA, ProvinceID.MALOPOLSKA],
+    };
+  
+    const order = [RaidTrackID.N, RaidTrackID.S, RaidTrackID.E];
+    for (const rid of order) {
+      const k = tracksMapKey(rid);
+      const track = c.raid_tracks[k];
+      if ((track.value | 0) >= 3) {
+        const [first, second] = pairs[rid];
+        const r = Number(dice?.[k]);
+        if (!(r >= 1 && r <= 6)) throw new Error(`Missing/invalid die for ${k}`);
+        const target = (r <= 3) ? first : second;
+  
+        c.defense.targetsByTrack[k] = target;
+        c.defense.enemyByProvince[target] = (track.value | 0);
+        c.defense.successByProvince[target] = false;
+  
+        log.push(`[Obrona] ${track.id}: cel ${target} (tor=${track.value}, wróg=${track.value} j.).`);
+        events.push({ trackKey: k, trackId: track.id, target, strength: track.value }); // ⬅️ nowe
+      } else {
+        c.defense.targetsByTrack[k] = null;
+      }
+    }
+  
+    t.prepared = true;
+  
+    let anyAttacks = events.length > 0;
+    if (!anyAttacks) {
+      log.push("[Obrona] Brak torów ≥3 — nie ma najazdów do obrony.");
+      t.done = true;
+    }
+  
+    // ⬇️ zapisz raport do kontekstu, żeby engine mógł go zwrócić przy wejściu w fazę defense
+    c.defense.prepReport = { anyAttacks, events, log: [...log] };
+  
+    // zgodność wstecz: nadal zwracamy samą listę logów
+    return log;
+  }
+
 
   // drobna zmiana: USUWAMY reset PASS-ów stąd (robi to #advance(true))
   defend({ playerIndex, provinceId, rolls }) {
