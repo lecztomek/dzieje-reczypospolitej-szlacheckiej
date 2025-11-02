@@ -1192,6 +1192,109 @@ function popupFromEngine(title, engineOut, opts={}){
 
 
 // ===================== Utilsy =====================
+
+// --- [MAPA] ID silnika -> ID ścieżki w SVG:
+const PID_TO_ELEMID = {
+  'Prusy':        'r-prusy',
+  'Litwa':        'r-litwa',
+  'Ukraina':      'r-ukraina',
+  'Wielkopolska': 'r-wielkopolska',
+  'Małopolska':   'r-malopolska',
+};
+
+// pobierz środek elementu SVG (bbox w przestrzeni viewBox)
+function svgCenterOf(el){
+  const b = el.getBBox();
+  return { x: b.x + b.width/2, y: b.y + b.height/2 };
+}
+function getTrackAnchor(trackKey){
+  const svg = document.getElementById('mapSvg');
+  return svg?.querySelector(`#trackAnchors [data-track="${trackKey}"]`) || null;
+}
+function getProvinceCenter(pid){
+  const svg = document.getElementById('mapSvg');
+  const elId = PID_TO_ELEMID[pid];
+  const el = elId ? svg?.getElementById(elId) : null;
+  return el ? svgCenterOf(el) : null;
+}
+function drawArrow(svg, from, to, { stroke, markerId }, label, offsetIdx = 0){
+  // lekkie rozchylenie przy wielu strzałkach na 1 prowincję
+  const dx = to.x - from.x, dy = to.y - from.y, L = Math.hypot(dx,dy) || 1;
+  const nx = -dy/L, ny = dx/L, spread = 18; // px w układzie viewBox
+  const ox = nx * spread * offsetIdx, oy = ny * spread * offsetIdx;
+
+  const x1 = from.x + ox, y1 = from.y + oy;
+  const x2 = to.x   + ox, y2 = to.y   + oy;
+
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+  line.setAttribute('class', 'arrow');
+  line.setAttribute('stroke', stroke);
+  line.setAttribute('marker-end', `url(#${markerId})`);
+  svg.appendChild(line);
+
+  // etykieta ~10% przed końcem
+  const tx = x2 - dx * 0.10, ty = y2 - dy * 0.10;
+  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  text.setAttribute('x', tx); text.setAttribute('y', ty);
+  text.setAttribute('class', 'arrow-label');
+  text.textContent = String(label);
+  svg.appendChild(text);
+}
+
+// główna aktualizacja — wołaj w syncUIFromGame() w fazie 'defense'
+export function updateDefenseArrowsLayer(state){
+  const s = state || (window.game?.getPublicState?.() || {});
+  const svg = document.getElementById('mapSvg');
+  const layer = svg?.getElementById?.('defenseArrows') || document.getElementById('defenseArrows');
+  if (!svg || !layer) return;
+
+  // wipe
+  while (layer.firstChild) layer.removeChild(layer.firstChild);
+
+  // rysujemy tylko w fazie obrony
+  const phase = s.current_phase || window.game?.round?.currentPhaseId?.();
+  if (phase !== 'defense') return;
+
+  const def = s.defense_state || s.defense || {};
+  const perProv = def.enemyByProvince || {};
+
+  // style per tor
+  const STYLE = {
+    N: { stroke:'#2563eb', markerId:'arrowN' }, // Szwecja
+    E: { stroke:'#dc2626', markerId:'arrowE' }, // Moskwa
+    S: { stroke:'#16a34a', markerId:'arrowS' }, // Tatarzy
+  };
+
+  // cache kotwic torów
+  const anchors = {
+    N: getTrackAnchor('N'),
+    E: getTrackAnchor('E'),
+    S: getTrackAnchor('S'),
+  };
+  const fromPt = (k)=> anchors[k] ? { x:+anchors[k].getAttribute('cx'), y:+anchors[k].getAttribute('cy') } : null;
+
+  for (const [pid, val] of Object.entries(perProv)){
+    // nowy format: { N:3, E:0, S:2 } — wyciągamy tylko >0
+    if (!val || typeof val !== 'object') continue;
+
+    const to = getProvinceCenter(pid);
+    if (!to) continue;
+
+    const active = Object.entries(val)
+      .filter(([,v]) => (v|0) > 0)
+      .map(([k,v]) => ({ k, v: v|0 }));
+
+    active.forEach(({k, v}, idx) => {
+      const src = fromPt(k); if (!src) return;
+      const sty = STYLE[k] || { stroke:'#64748b', markerId:'arrowN' };
+      drawArrow(layer, src, to, sty, v, idx);
+    });
+  }
+}
+
+
 const diac = { "ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z" };
 function norm(s){
   return (s||"").toString().trim().toLowerCase().replace(/[ąćęłńóśźż]/g, m => diac[m] || m);
@@ -2518,6 +2621,7 @@ function syncUIFromGame(){
   applyRankingBarsFromEngine(s);
   applyCurrentTurnFromState(s);
   applyPhaseFromEngineState(s);
+  updateDefenseArrowsLayer(game.getPublicState());
   buildPhaseActionsSmart(game.getPublicState());
 
   const midx = s.round_status?.marshal_index ?? -1;
