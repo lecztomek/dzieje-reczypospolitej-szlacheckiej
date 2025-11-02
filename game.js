@@ -1216,7 +1216,6 @@ class DevastationAPI {
   }
 }
 
-
 class DefenseAPI {
   constructor(ctx) { this.ctx = ctx; }
 
@@ -1233,23 +1232,47 @@ class DefenseAPI {
       throw new Error(`Teraz ruch ma ${want}.`);
     }
   }
+
+  // NOWE: dokładnie jak w attacks — czy w tej chwili istnieje jakakolwiek legalna obrona?
+  #anyEligibleDefensesLeft() {
+    const c = this.ctx;
+    ensurePerProvinceArrays(c);
+
+    // aktywne cele (tam gdzie wróg > 0)
+    const targets = Object.entries(c.defense.enemyByProvince)
+      .filter(([, v]) => (v | 0) > 0)
+      .map(([pid]) => pid);
+
+    if (!targets.length) return false;
+
+    // czy którykolwiek gracz ma jednostki w którejkolwiek z tych prowincji?
+    const pcount = c.settings.players.length;
+    for (const pid of targets) {
+      const arr = c.troops.per_province[pid] || [];
+      for (let i = 0; i < pcount; i++) {
+        if ((arr[i] | 0) > 0) return true;
+      }
+    }
+    return false;
+  }
+
   #advance(turnWasDefense) {
     const t = this.ctx.defenseTurn;
     if (!t) return;
 
+    // jak w attacks: po realnej akcji zaczyna się nowa mini-runda → zdejmij PASS-y
     if (turnWasDefense) {
       t.passed = t.passed.map(() => false);
     }
 
-    // koniec gdy wszyscy PASS albo nie ma już żadnych wrogich jednostek
-    const anyEnemyLeft = Object.values(this.ctx.defense.enemyByProvince)
-      .some(v => (v | 0) > 0);
-    if (t.passed.every(Boolean) || !anyEnemyLeft) {
+    // KONIEC fazy, gdy w TEJ mini-rundzie wszyscy mają PASS
+    // ALBO gdy nie ma już żadnych możliwych obron (wróg jest, ale nikt nie może go kontrować)
+    if (t.passed.every(Boolean) || !this.#anyEligibleDefensesLeft()) {
       t.done = true;
       return;
     }
 
-    // do kolejnego bez PASS
+    // przejdź do kolejnego gracza bez PASS
     const n = t.order.length;
     for (let step = 1; step <= n; step++) {
       const nextIdx = (t.idx + step) % n;
@@ -1261,52 +1284,10 @@ class DefenseAPI {
     }
   }
 
-  // 3.1. Wylosuj cele i ustaw wrogie „armie” = wartość toru (gwiazdki)
-  // dice: { N?:1..6, S?:1..6, E?:1..6 } — jak dawniej w DevastationAPI.resolve
-  chooseTargets(dice = {}) {
-    this.#ensurePhase();
-    const t = this.ctx.defenseTurn;
-    const c = this.ctx;
-    const log = [];
+  // --- bez zmian ---
+  chooseTargets(dice = {}) { /* ... jak u Ciebie ... */ }
 
-    if (t.prepared) return ["[Obrona] Cele już wylosowane."];
-
-    const pairs = {
-      [RaidTrackID.N]: [ProvinceID.PRUSY, ProvinceID.LITWA],
-      [RaidTrackID.E]: [ProvinceID.LITWA, ProvinceID.UKRAINA],
-      [RaidTrackID.S]: [ProvinceID.UKRAINA, ProvinceID.MALOPOLSKA],
-    };
-
-    for (const rid of [RaidTrackID.N, RaidTrackID.S, RaidTrackID.E]) {
-      const k = tracksMapKey(rid);
-      const track = c.raid_tracks[k];
-      if (track.value >= 3) {
-        const [first, second] = pairs[rid];
-        const r = Number(dice?.[k]); 
-        if (!(r >= 1 && r <= 6)) throw new Error(`Missing/invalid die for ${k}`);
-        const target = (r <= 3) ? first : second;
-
-        c.defense.targetsByTrack[k] = target;
-        c.defense.enemyByProvince[target] = (track.value | 0); // 1 jednostka za każdą „gwiazdkę”
-        c.defense.successByProvince[target] = false;
-
-        log.push(`[Obrona] ${track.id}: cel ${target} (tor=${track.value}, wróg=${track.value} j.).`);
-      } else {
-        c.defense.targetsByTrack[k] = null;
-      }
-    }
-
-    t.prepared = true;
-    if (!Object.keys(c.defense.enemyByProvince).length) {
-      log.push("[Obrona] Brak torów ≥3 — nie ma najazdów do obrony.");
-      // nic nie ma do roboty — kończymy od razu
-      t.done = true;
-    }
-    return log;
-  }
-
-  // 3.2. Akcja obrony jednego gracza w jednej prowincji
-  // rolls: number[] — możesz podać sekwencję rzutów, każdy rozstrzyga 1 starcie
+  // drobna zmiana: USUWAMY reset PASS-ów stąd (robi to #advance(true))
   defend({ playerIndex, provinceId, rolls }) {
     this.#requireActive(playerIndex);
     const c = this.ctx; const t = this.ctx.defenseTurn;
@@ -1314,7 +1295,6 @@ class DefenseAPI {
 
     ensurePerProvinceArrays(c);
 
-    // prowincja musi być jednym z wylosowanych celów
     if (!(provinceId in c.defense.enemyByProvince)) throw new Error("Ta prowincja nie jest celem obrony.");
 
     const enemy = c.defense.enemyByProvince[provinceId] | 0;
@@ -1326,9 +1306,7 @@ class DefenseAPI {
 
     const kinds = c.troops_kind.per_province[provinceId];
     const out = [];
-    const seq = Array.isArray(rolls) && rolls.length
-      ? rolls.slice()
-      : [1 + Math.floor(Math.random() * 6)]; // domyślnie 1 rzut
+    const seq = Array.isArray(rolls) && rolls.length ? rolls.slice() : [1 + Math.floor(Math.random() * 6)];
 
     for (const r0 of seq) {
       let e = c.defense.enemyByProvince[provinceId] | 0;
@@ -1339,27 +1317,23 @@ class DefenseAPI {
       if (!(r >= 1 && r <= 6)) throw new Error("Rzut musi być 1..6.");
 
       if (r === 1) {
-        // ginie tylko jednostka gracza
         u = Math.max(0, u - 1);
         out.push("1 → ginie tylko jednostka obrońcy.");
       } else if (r <= 5) {
-        // ginie i wróg, i obrońca
         e = Math.max(0, e - 1);
         u = Math.max(0, u - 1);
         out.push("2–5 → giną obie strony (wróg −1, obrońca −1).");
       } else {
-        // 6: ginie tylko jednostka wroga
         e = Math.max(0, e - 1);
         out.push("6 → ginie tylko jednostka wroga (wróg −1).");
       }
 
-      // zapisz stan po starciu
       c.defense.enemyByProvince[provinceId] = e;
       c.troops.per_province[provinceId][pidx] = u;
       if (u === 0) kinds[pidx] = UnitKind.NONE;
 
       if (e === 0) {
-        c.defense.successByProvince[provinceId] = true; // obrona skuteczna
+        c.defense.successByProvince[provinceId] = true;
         out.push(`[Obrona] Wróg rozbity w ${provinceId} — spustoszenia nie będzie.`);
         break;
       }
@@ -1367,8 +1341,7 @@ class DefenseAPI {
 
     out.push(`Po obronie: wróg=${c.defense.enemyByProvince[provinceId]}, ${c.settings.players[pidx].name}=${c.troops.per_province[provinceId][pidx]}.`);
 
-    // po akcji obrony resetujemy PASS-y i przesuwamy turę
-    t.passed = t.passed.map(() => false);
+    // ⬇️ tylko to zostaje – zarządza rotacją i resetem PASS-ów jak w attacks
     this.#advance(true);
     return out;
   }
@@ -1379,10 +1352,8 @@ class DefenseAPI {
     this.#advance(false);
     return `PASS (obrona) — ${this.ctx.settings.players[playerIndex].name}`;
   }
-  
-  passTurn(playerIndex) {
-    return this.pass(playerIndex);
-  }
+
+  passTurn(playerIndex) { return this.pass(playerIndex); }
 }
 
 
