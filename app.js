@@ -719,69 +719,6 @@ function enginePidFromUiKey(state, uiKey){
   return null;
 }
 
-
-function ensureDefensePopup(state){
-  const s0 = state || game.getPublicState?.(); if (!s0) return;
-  const phase = s0.current_phase || game.round?.currentPhaseId?.();
-  if (phase !== 'defense') return;
-
-  const r = s0.round_status?.current_round | 0;
-  if (r === _defensePopupRound) return; // tylko raz na rundę
-
-  // (opcjonalnie) przygotowanie celów, jeżeli nie były
-  if (!(s0.defense_turn?.prepared)) {
-    try {
-      const dice = {};
-      if ((s0.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
-      if ((s0.raid_tracks?.E|0) >= 3) dice.E = roll1d6();
-      if ((s0.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
-      const out = game.defense.chooseTargets(dice);
-      logEngine(out);
-    } catch {} // brak torów ≥3 jest OK
-  }
-
-  const s = game.getPublicState?.() || {};
-  const threats = collectDefenseThreats(s); 
-  
-  const pidx = Number.isInteger(s.active_defender_index) ? s.active_defender_index : curPlayerIdx;
-  let youCanDefend = false;
-  for (const t of threats) {
-    const pidStr = enginePidFromUiKey(s, t.key);        // np. 'litwa' -> 'Litwa'
-    const units  = (pidStr && s.troops?.[pidStr]?.[pidx]) | 0;
-    if (units > 0) { youCanDefend = true; break; }
-  }
-
-  const hasAttacks = threats.length > 0;
-
-  const lines = hasAttacks
-    ? [
-        'Te prowincje są napadane w tej fazie:',
-        '',
-        ...threats.map(t => `• ${t.label} — atakuje ${t.enemy}${t.strength!=null ? ` (siła: ${t.strength})` : ''}`),
-        '',
-        youCanDefend
-          ? 'Możesz bronić tylko tam, gdzie masz własne jednostki.'
-          : 'Nie masz jednostek w napadanych prowincjach — nie możesz się bronić.'
-      ]
-    : ['W tej rundzie brak najazdów (żaden tor nie osiągnął wartości 3).'];
-
-  popupFromEngine('Najazdy — cele obrony', lines, {
-    imageUrl: ATTACK_IMG_MID,
-    buttonText: youCanDefend ? 'Do obrony' : 'Dalej (Spustoszenia)',
-    onAction: () => {
-      if (!youCanDefend || !hasAttacks) {
-        const nxt = game.finishPhaseAndAdvance();
-        ok(`Auto-next z Obrony -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
-        syncUIFromGame();
-      }
-    }
-  });
-
-  _defensePopupRound = r;
-}
-
-
-
 function ensureDefensePopup(state){
   const s0 = state || game.getPublicState?.(); if (!s0) return;
   const phase = s0.current_phase || game.round?.currentPhaseId?.();
