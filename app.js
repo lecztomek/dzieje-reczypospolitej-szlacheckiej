@@ -1290,7 +1290,7 @@ export function updateDefenseArrowsLayer(state){
 
   // rysujemy tylko w fazie obrony
   const phase = s.current_phase || window.game?.round?.currentPhaseId?.();
-  if (phase !== 'defense') return;
+  if (phase !== 'defense' && phase !== 'devastation') return;
 
   const def = s.defense_state || s.defense || {};
   const perProv = def.enemyByProvince || {};
