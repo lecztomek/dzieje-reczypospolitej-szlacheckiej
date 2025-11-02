@@ -617,55 +617,107 @@ const REV_PROV_MAP = {
   [ProvinceID.MALOPOLSKA]: 'malopolska',
 };
 
-function getUnderAttackSet(state){
+// mapy pomocnicze
+const TRACK_NAME = { N: 'Szwecja', E: 'Moskwa', S: 'Tatarzy' };
+
+function getUnderAttackDetails(state){
   const s = state || game.getPublicState?.() || {};
-  const out = new Set();
+  const perProv = new Map(); // key -> { key, label, threats: [{enemy,trackKey,strength}] }
 
-  // 1) klasyczne kształty z UI
-  const arr1 = s.defense_turn?.targets;
-  if (Array.isArray(arr1)) arr1.forEach(pid => { const k = provKeyFromId(pid); if (k) out.add(k); });
+  function ensureProv(key){
+    if (!perProv.has(key)) {
+      perProv.set(key, { key, label: PROV_DISPLAY[key] || key, threats: [] });
+    }
+    return perProv.get(key);
+  }
 
-  const obj1 = s.defense_turn?.under_attack || s.under_attack || s.attacked_provinces;
-  if (obj1 && typeof obj1 === 'object') {
-    for (const [pid, val] of Object.entries(obj1)) {
-      if (!val) continue;
-      const k = provKeyFromId(pid); if (k) out.add(k);
+  // 1) Najlepsze źródło: prepReport.events
+  const evs = s.defense_state?.prepReport?.events;
+  if (Array.isArray(evs)) {
+    for (const e of evs) {
+      const key = provKeyFromId(e.target); if (!key) continue;
+      const bucket = ensureProv(key);
+      bucket.threats.push({
+        enemy: e.trackId || TRACK_NAME[e.trackKey] || 'wróg',
+        trackKey: e.trackKey || null,
+        strength: (e.strength|0) || null
+      });
     }
   }
 
-  const arr2 = s.defense_turn?.attacks || s.defense_turn?.events || s.attacks_on_provinces;
-  if (Array.isArray(arr2)) {
-    arr2.forEach(x => {
-      const pid = x?.provinceId ?? x?.province_id ?? x?.province ?? x?.id;
-      const k = provKeyFromId(pid); if (k) out.add(k);
-    });
-  }
+  // 2) enemyByProvince: liczba albo mapa per tor (np. {N:4, E:3})
+  const ebp = s.defense_state?.enemyByProvince;
+  if (ebp && typeof ebp === 'object') {
+    for (const [pid, val] of Object.entries(ebp)) {
+      const key = provKeyFromId(pid); if (!key) continue;
+      const bucket = ensureProv(key);
 
-  const d = s.defense_state || s.defense || {};
-  if (d.enemyByProvince && typeof d.enemyByProvince === 'object') {
-    for (const [pid, enemy] of Object.entries(d.enemyByProvince)) {
-      // obsłuż stary (number) i nowy (object) format
-      const threatened = (typeof enemy === 'number')
-        ? ((enemy|0) > 0)
-        : (enemy && Object.values(enemy).some(v => (v|0) > 0));
-      if (threatened) {
-        const k = provKeyFromId(pid); if (k) out.add(k);
+      if (typeof val === 'number') {
+        // nie wiemy „kto”, ale znamy siłę
+        // jeżeli już istnieje taki wpis z prepReport — nie dubluj
+        const hasAny = bucket.threats.length > 0;
+        if (!hasAny) {
+          bucket.threats.push({ enemy: 'wróg', trackKey: null, strength: (val|0) > 0 ? (val|0) : null });
+        }
+      } else if (val && typeof val === 'object') {
+        for (const [trk, n] of Object.entries(val)) {
+          const nn = n|0;
+          if (nn <= 0) continue;
+          // spróbuj znaleźć istniejącego agresora z tego samego toru, żeby nie dublować
+          const existing = bucket.threats.find(t => t.trackKey === trk);
+          if (existing) {
+            existing.strength = existing.strength != null ? existing.strength : nn;
+          } else {
+            bucket.threats.push({ enemy: TRACK_NAME[trk] || 'wróg', trackKey: trk, strength: nn });
+          }
+        }
       }
     }
   }
-  if (d.targetsByTrack && typeof d.targetsByTrack === 'object') {
-    for (const pid of Object.values(d.targetsByTrack)) {
-      const k = provKeyFromId(pid); if (k) out.add(k);
+
+  // 3) targetsByTrack — jeśli nic nie mamy, a wiemy tylko cel
+  const tbt = s.defense_state?.targetsByTrack;
+  if (tbt && typeof tbt === 'object') {
+    for (const [trk, pid] of Object.entries(tbt)) {
+      if (!pid) continue;
+      const key = provKeyFromId(pid); if (!key) continue;
+      const bucket = ensureProv(key);
+
+      // jeżeli nie mamy jeszcze wpisu dla danego toru — dodaj placeholder
+      const hasTrack = bucket.threats.some(t => t.trackKey === trk);
+      if (!hasTrack) {
+        bucket.threats.push({ enemy: TRACK_NAME[trk] || 'wróg', trackKey: trk, strength: null });
+      }
     }
   }
-  if (d.prepReport && Array.isArray(d.prepReport.events)) {
-    d.prepReport.events.forEach(ev => {
-      const k = provKeyFromId(ev?.target); if (k) out.add(k);
-    });
+
+  // 4) ostatecznie — jeżeli nadal pusto, próbujemy starsze kształty (defense_turn)
+  if (perProv.size === 0) {
+    const addByPid = (pid) => { const key = provKeyFromId(pid); if (key) ensureProv(key); };
+
+    const arrTargets = s.defense_turn?.targets;
+    if (Array.isArray(arrTargets)) arrTargets.forEach(addByPid);
+
+    const underObj = s.defense_turn?.under_attack || s.under_attack || s.attacked_provinces;
+    if (underObj && typeof underObj === 'object') {
+      for (const [pid, val] of Object.entries(underObj)) { if (val) addByPid(pid); }
+    }
+
+    const arrEvents = s.defense_turn?.events || s.attacks_on_provinces;
+    if (Array.isArray(arrEvents)) {
+      arrEvents.forEach(x => {
+        const pid = x?.provinceId ?? x?.province_id ?? x?.province ?? x?.id;
+        if (pid) addByPid(pid);
+      });
+    }
   }
 
-  return out;
+  // 5) posprzątaj: usuń prowincje bez żadnych realnych „śladów” (opcjonalnie)
+  // (jeśli chcesz zawsze pokazać listę, nawet bez sił — zostaw)
+  return Array.from(perProv.values())
+    .filter(p => p.threats.length > 0 || p.key); // minimalny filtr
 }
+
 
 function collectDefenseThreats(state){
   const s = state || game.getPublicState?.() || {};
@@ -747,82 +799,61 @@ function collectDefenseThreats(state){
 }
 
 function ensureDefensePopup(state){
-  const s0 = state || game.getPublicState?.(); if (!s0) return;
-  const phase = s0.current_phase || game.round?.currentPhaseId?.();
+  const s = state || game.getPublicState?.(); if (!s) return;
+  const phase = s.current_phase || game.round?.currentPhaseId?.();
   if (phase !== 'defense') return;
 
-  const r = s0.round_status?.current_round | 0;
-  if (r === _defensePopupRound) return; // tylko raz na rundę
+  const r = s.round_status?.current_round | 0;
+  if (r === _defensePopupRound) return;
 
-  // Upewnij się, że cele są wyznaczone (żeby mieć co pokazać)
-  if (!(s0.defense_turn?.prepared)) {
+  // Jeżeli trzeba: przygotuj cele (dice N/E/S tylko dla torów ≥3)
+  if (!(s.defense_turn?.prepared)) {
     try {
       const dice = {};
-      if ((s0.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
-      if ((s0.raid_tracks?.E|0) >= 3) dice.E = roll1d6();
-      if ((s0.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
+      if ((s.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
+      if ((s.raid_tracks?.E|0) >= 3) dice.E = roll1d6();
+      if ((s.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
       const out = game.defense.chooseTargets(dice);
       logEngine(out);
-    } catch(_) { /* brak torów ≥3 → OK */ }
+    } catch(_) {}
   }
 
-  // świeży stan po ewentualnym chooseTargets
-  const s = game.getPublicState?.() || {};
+  const s2 = game.getPublicState?.() || {};
+  const details = getUnderAttackDetails(s2); // ← NOWE
 
-  // Zadbaj o pełną listę (per prowincja → threats[])
-  const perProvince = collectDefenseThreats(s); // [{key,label,threats:[{enemy,strength,trackKey}], ...}]
-  const hasAttacks = perProvince.some(p => Array.isArray(p.threats) && p.threats.length > 0);
+  const hasAttacks = details.length > 0;
 
-  // Kto jest aktywnym obrońcą (gdy brak indeksu w stanie — użyj aktualnego UI)
-  const pidx = Number.isInteger(s.active_defender_index)
-    ? s.active_defender_index
-    : (curPlayerIdx >= 0 ? curPlayerIdx : 0);
-
-  // >>> Kluczowe: sprawdzamy MOŻLIWOŚĆ OBRONY wprost po prowincjach z perProvince, po kluczach STRING z silnika.
-  let youCanDefend = false;
+  // Czy ktokolwiek posiada jednostki w atakowanych prowincjach?
+  let canAnyoneDefend = false;
   if (hasAttacks) {
-    for (const p of perProvince) {
-      if (!p.threats || p.threats.length === 0) continue;
-      // znajdź dokładny klucz silnika (np. 'Litwa') dla uiKey ('litwa')
-      const enginePid = (() => {
-        const target = p.key; // 'litwa' etc.
-        for (const pid of Object.keys(s.provinces || {})) {
-          const k = provKeyFromId(pid);
-          if (k === target) return pid;
-        }
-        return null;
-      })();
-      if (!enginePid) continue;
-      const units = (s.troops?.[enginePid]?.[pidx] || 0) | 0;
-      if (units > 0) { youCanDefend = true; break; }
+    outer:
+    for (const item of details) {
+      // zamiana key -> engine pid (np. 'litwa' -> 'Litwa')
+      const pid = Object.keys(s2.provinces || {}).find(p => provKeyFromId(p) === item.key);
+      if (!pid) continue;
+      const row = s2.troops?.[pid] || [];
+      for (let i = 0; i < row.length; i++) {
+        if ((row[i]|0) > 0) { canAnyoneDefend = true; break outer; }
+      }
     }
   }
 
-  // Składamy treść listy
   const listLines = hasAttacks
-    ? perProvince.flatMap(p => {
-        if (!p.threats || p.threats.length === 0) return [`• ${p.label} — atak (szczegóły niedostępne)`];
-        return p.threats.map(th => `• ${p.label} — atakuje ${th.enemy}${th.strength != null ? ` (siła: ${th.strength})` : ''}`);
+    ? details.flatMap(p => {
+        return (p.threats.length ? p.threats : [{ enemy:'wróg', strength:null }])
+          .map(th => `• ${p.label} — atakuje ${th.enemy}${th.strength!=null?` (siła: ${th.strength})`:''}`);
       })
     : [];
 
   const lines = hasAttacks
-    ? [
-        'Te prowincje są napadane w tej fazie:',
-        '',
-        ...listLines,
-        '',
-        youCanDefend
-          ? 'Możesz bronić tylko tam, gdzie masz własne jednostki.'
-          : 'Nie masz jednostek w napadanych prowincjach — nie możesz się bronić.'
-      ]
+    ? ['Te prowincje są napadane w tej fazie:', '', ...listLines]
     : ['W tej rundzie brak najazdów (żaden tor nie osiągnął wartości 3).'];
 
   popupFromEngine('Najazdy — cele obrony', lines, {
     imageUrl: ATTACK_IMG_MID,
-    buttonText: youCanDefend ? 'Do obrony' : 'Dalej (Spustoszenia)',
+    buttonText: (hasAttacks && canAnyoneDefend) ? 'Do obrony' : 'Dalej (Spustoszenia)',
     onAction: () => {
-      if (!youCanDefend || !hasAttacks) {
+      if (!hasAttacks || !canAnyoneDefend) {
         const nxt = game.finishPhaseAndAdvance();
         ok(`Auto-next z Obrony -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
         syncUIFromGame();
@@ -832,6 +863,7 @@ function ensureDefensePopup(state){
 
   _defensePopupRound = r;
 }
+
 
 
 function enginePidFromUiKey(state, uiKey){
