@@ -768,8 +768,8 @@ svg{
 }
 
 #defenseArrows .arrow{
-  stroke:#0a0a0a;             /* czarne */
-  stroke-width:4.5;           /* trochę cieńsze */
+  stroke:#fff;             
+  stroke-width:4.5;           
   fill:none;
   vector-effect:non-scaling-stroke;
   stroke-dasharray:10 10;
