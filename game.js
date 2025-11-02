@@ -1335,65 +1335,79 @@ class DefenseAPI {
     return log;
   }
 
-
-  // drobna zmiana: USUWAMY reset PASS-ów stąd (robi to #advance(true))
-  defend({ playerIndex, provinceId, rolls }) {
+  defend({ playerIndex, provinceId, rolls, dice }) {
     this.#requireActive(playerIndex);
     const c = this.ctx; const t = this.ctx.defenseTurn;
     if (!t.prepared) throw new Error("Najpierw wylosuj cele: defense.chooseTargets({ N:..., S:..., E:... }).");
-
+  
     ensurePerProvinceArrays(c);
-
-    if (!(provinceId in c.defense.enemyByProvince)) throw new Error("Ta prowincja nie jest celem obrony.");
-
-    const enemy = c.defense.enemyByProvince[provinceId] | 0;
+  
+    if (!(provinceId in c.defense.enemyByProvince))
+      throw new Error("Ta prowincja nie jest celem obrony.");
+  
+    let enemy = c.defense.enemyByProvince[provinceId] | 0;
     if (enemy <= 0) return ["[Obrona] Wróg w tej prowincji już rozbity."];
-
+  
     const pidx = playerIndex | 0;
-    const myUnits = c.troops.per_province[provinceId]?.[pidx] | 0;
+    let myUnits = c.troops.per_province[provinceId]?.[pidx] | 0;
     if (myUnits <= 0) throw new Error("Nie masz jednostek w tej prowincji.");
-
+  
+    // ile kości chcemy użyć w tej akcji (max = liczba naszych jednostek)
+    const requestedDice =
+      Number.isFinite(dice) && (dice | 0) > 0 ? (dice | 0)
+      : (Array.isArray(rolls) && rolls.length > 0 ? rolls.length
+      : 1);
+    const usedDice = Math.max(1, Math.min(requestedDice, myUnits));
+  
+    // zbuduj sekwencję rzutów (uzupełnij losowymi, jeśli podano za mało)
+    const seq = Array.isArray(rolls) ? rolls.slice(0, usedDice) : [];
+    while (seq.length < usedDice) seq.push(1 + Math.floor(Math.random() * 6));
+  
     const kinds = c.troops_kind.per_province[provinceId];
     const out = [];
-    const seq = Array.isArray(rolls) && rolls.length ? rolls.slice() : [1 + Math.floor(Math.random() * 6)];
-
+  
     for (const r0 of seq) {
-      let e = c.defense.enemyByProvince[provinceId] | 0;
-      let u = c.troops.per_province[provinceId][pidx] | 0;
-      if (e <= 0 || u <= 0) break;
-
+      enemy = c.defense.enemyByProvince[provinceId] | 0;
+      myUnits = c.troops.per_province[provinceId][pidx] | 0;
+      if (enemy <= 0 || myUnits <= 0) break;
+  
       const r = r0 | 0;
       if (!(r >= 1 && r <= 6)) throw new Error("Rzut musi być 1..6.");
-
+  
       if (r === 1) {
-        u = Math.max(0, u - 1);
+        // ginie tylko obrońca
+        c.troops.per_province[provinceId][pidx] = Math.max(0, myUnits - 1);
+        if ((c.troops.per_province[provinceId][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE;
         out.push("1 → ginie tylko jednostka obrońcy.");
       } else if (r <= 5) {
-        e = Math.max(0, e - 1);
-        u = Math.max(0, u - 1);
+        // obie strony tracą po 1
+        c.defense.enemyByProvince[provinceId] = Math.max(0, enemy - 1);
+        c.troops.per_province[provinceId][pidx] = Math.max(0, myUnits - 1);
+        if ((c.troops.per_province[provinceId][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE;
         out.push("2–5 → giną obie strony (wróg −1, obrońca −1).");
       } else {
-        e = Math.max(0, e - 1);
+        // ginie tylko wróg
+        c.defense.enemyByProvince[provinceId] = Math.max(0, enemy - 1);
         out.push("6 → ginie tylko jednostka wroga (wróg −1).");
       }
-
-      c.defense.enemyByProvince[provinceId] = e;
-      c.troops.per_province[provinceId][pidx] = u;
-      if (u === 0) kinds[pidx] = UnitKind.NONE;
-
-      if (e === 0) {
+  
+      if ((c.defense.enemyByProvince[provinceId] | 0) === 0) {
         c.defense.successByProvince[provinceId] = true;
         out.push(`[Obrona] Wróg rozbity w ${provinceId} — spustoszenia nie będzie.`);
         break;
       }
     }
-
-    out.push(`Po obronie: wróg=${c.defense.enemyByProvince[provinceId]}, ${c.settings.players[pidx].name}=${c.troops.per_province[provinceId][pidx]}.`);
-
-    // ⬇️ tylko to zostaje – zarządza rotacją i resetem PASS-ów jak w attacks
+  
+    out.push(
+      `Po obronie: wróg=${c.defense.enemyByProvince[provinceId]}, `
+      + `${c.settings.players[pidx].name}=${c.troops.per_province[provinceId][pidx]}.`
+    );
+  
+    // zachowanie rotacji i PASS-ów tak jak w attacks.attack(...)
     this.#advance(true);
     return out;
   }
+
 
   pass(playerIndex) {
     this.#requireActive(playerIndex);
