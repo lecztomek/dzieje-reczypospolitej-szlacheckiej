@@ -670,53 +670,80 @@ function getUnderAttackSet(state){
 function collectDefenseThreats(state){
   const s = state || game.getPublicState?.() || {};
   const d = s.defense_state || s.defense || {};
-  const out = [];
 
-  // Najpewniejsze źródło: prepReport.events
-  if (d.prepReport && Array.isArray(d.prepReport.events)) {
-    d.prepReport.events.forEach(ev => {
-      const key = provKeyFromId(ev?.target);
-      if (!key) return;
-      out.push({
-        key,
-        label: PROV_DISPLAY[key] || key,
-        enemy: ev?.trackId || ev?.trackKey || 'wróg',
-        strength: (ev?.strength|0) || null,
+  const TRACK_NAME = { N:'Szwecja', E:'Moskwa', S:'Tatarzy' };
+
+  // Mapa: uiKey ('litwa', 'malopolska', ...) -> { key, label, threats:[{enemy, strength, trackKey}] }
+  const byProv = new Map();
+
+  function ensureProv(uiKey){
+    if (!byProv.has(uiKey)) {
+      byProv.set(uiKey, {
+        key: uiKey,
+        label: PROV_DISPLAY[uiKey] || uiKey,
+        threats: []
       });
-    });
+    }
+    return byProv.get(uiKey);
   }
 
-  // Fallback, gdyby events były niedostępne:
-  if (!out.length && d.enemyByProvince && typeof d.enemyByProvince === 'object') {
-    const nameByTrack = { N:'Szwecja', E:'Moskwa', S:'Tatarzy' };
-    for (const [pid, v] of Object.entries(d.enemyByProvince)) {
-      const key = provKeyFromId(pid);
-      if (!key) continue;
+  // 1) Najpewniejsze źródło: prepReport.events (trackKey, trackId, target, strength)
+  const evs = d?.prepReport?.events;
+  if (Array.isArray(evs)) {
+    for (const ev of evs) {
+      const uiKey = provKeyFromId(ev?.target);
+      if (!uiKey) continue;
+      const slot = ensureProv(uiKey);
+      slot.threats.push({
+        enemy: ev?.trackId || (TRACK_NAME[ev?.trackKey] || 'wróg'),
+        strength: (ev?.strength | 0) || null,
+        trackKey: ev?.trackKey || null
+      });
+    }
+  }
 
-      if (typeof v === 'number') {
-        if (v > 0) out.push({ key, label: PROV_DISPLAY[key] || key, enemy:'wróg', strength: v });
-      } else if (v && typeof v === 'object') {
-        for (const [trk, val] of Object.entries(v)) {
-          const str = val|0; if (str <= 0) continue;
-          out.push({ key, label: PROV_DISPLAY[key] || key, enemy: nameByTrack[trk] || 'wróg', strength: str });
+  // 2) Uzupełnij (lub fallback), jeśli są dane w enemyByProvince
+  //    Może być number (siła bez toru) albo obiekt {N:4,E:3,...} – patrz Twój JSON z r.5.
+  const ebp = d?.enemyByProvince;
+  if (ebp && typeof ebp === 'object') {
+    for (const [pid, val] of Object.entries(ebp)) {
+      const uiKey = provKeyFromId(pid);
+      if (!uiKey) continue;
+      const slot = ensureProv(uiKey);
+
+      if (typeof val === 'number') {
+        // Jeśli nie wiemy z którego toru – spróbuj dopasować przez targetsByTrack
+        let enemyName = 'wróg', trackKey = null;
+        const tbt = d?.targetsByTrack;
+        if (tbt && typeof tbt === 'object') {
+          for (const [tk, tp] of Object.entries(tbt)) {
+            if (tp === pid) { trackKey = tk; enemyName = TRACK_NAME[tk] || enemyName; break; }
+          }
+        }
+        // Dopisz tylko, jeśli identycznego wpisu nie ma
+        if (!slot.threats.some(th => th.trackKey === trackKey && (th.strength|0) === (val|0))) {
+          slot.threats.push({ enemy: enemyName, strength: (val|0), trackKey });
+        }
+      } else if (val && typeof val === 'object') {
+        for (const [tk, strVal] of Object.entries(val)) {
+          const str = strVal | 0; if (str <= 0) continue;
+          const enemyName = TRACK_NAME[tk] || 'wróg';
+          if (!slot.threats.some(th => th.trackKey === tk && (th.strength|0) === str)) {
+            slot.threats.push({ enemy: enemyName, strength: str, trackKey: tk });
+          }
         }
       }
     }
   }
 
-  // porządek
-  out.sort((a,b)=> a.label.localeCompare(b.label,'pl') || String(a.enemy).localeCompare(String(b.enemy),'pl'));
+  // 3) wynik jako tablica, posortowany ładnie po label, a wewnątrz po nazwie wroga
+  const out = Array.from(byProv.values());
+  out.forEach(p => p.threats.sort((a,b) =>
+    String(a.enemy).localeCompare(String(b.enemy), 'pl') ||
+    ((b.strength|0) - (a.strength|0))
+  ));
+  out.sort((a,b) => a.label.localeCompare(b.label, 'pl'));
   return out;
-}
-
-function enginePidFromUiKey(state, uiKey){
-  const s = state || game.getPublicState?.() || {};
-  const target = (uiKey || '').toString().trim().toLowerCase();
-  for (const pid of Object.keys(s.provinces || {})) {
-    const k = provKeyFromId(pid); // np. 'Litwa' -> 'litwa'
-    if (k === target) return pid;  // zwróć dokładny klucz, jakiego używa silnik (np. 'Litwa')
-  }
-  return null;
 }
 
 function ensureDefensePopup(state){
@@ -727,8 +754,8 @@ function ensureDefensePopup(state){
   const r = s0.round_status?.current_round | 0;
   if (r === _defensePopupRound) return; // tylko raz na rundę
 
-  // upewnij się, że cele są przygotowane (żeby mieć co pokazać)
-  if (!s0.defense_turn?.prepared) {
+  // Upewnij się, że cele są wyznaczone (żeby mieć co pokazać)
+  if (!(s0.defense_turn?.prepared)) {
     try {
       const dice = {};
       if ((s0.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
@@ -736,46 +763,48 @@ function ensureDefensePopup(state){
       if ((s0.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
       const out = game.defense.chooseTargets(dice);
       logEngine(out);
-    } catch(_) { /* brak torów ≥3 → OK, nic do obrony */ }
+    } catch(_) { /* brak torów ≥3 → OK */ }
   }
 
   // świeży stan po ewentualnym chooseTargets
   const s = game.getPublicState?.() || {};
 
-  // lista zagrożeń do pokazania (etykiety, siła, kto)
-  const threats = collectDefenseThreats(s); // [{key,label,enemy,strength},...]
+  // Zadbaj o pełną listę (per prowincja → threats[])
+  const perProvince = collectDefenseThreats(s); // [{key,label,threats:[{enemy,strength,trackKey}], ...}]
+  const hasAttacks = perProvince.some(p => Array.isArray(p.threats) && p.threats.length > 0);
 
-  // kto jest aktywnym obrońcą (jak w Wyprawach: preferuj indeks z silnika)
+  // Kto jest aktywnym obrońcą (gdy brak indeksu w stanie — użyj aktualnego UI)
   const pidx = Number.isInteger(s.active_defender_index)
     ? s.active_defender_index
     : (curPlayerIdx >= 0 ? curPlayerIdx : 0);
 
-  // zestaw prowincji faktycznie pod atakiem (klucze UI: 'prusy','litwa',...)
-  const underAttack = getUnderAttackSet(s);
-
-  // Czy AKTYWNY gracz ma jednostki w którejś z prowincji będących pod atakiem?
+  // >>> Kluczowe: sprawdzamy MOŻLIWOŚĆ OBRONY wprost po prowincjach z perProvince, po kluczach STRING z silnika.
   let youCanDefend = false;
-  for (const [pid, arr] of Object.entries(s.troops || {})) {
-    const key = provKeyFromId(pid); // ← jak w najazdach/wyprawach: z ID silnika -> klucz UI
-    if (!key) continue;
-    if (!underAttack.has(key)) continue;     // musi być atakowana
-    const units = (arr?.[pidx] || 0) | 0;    // jednostki aktywnego obrońcy
-    if (units > 0) { youCanDefend = true; break; }
+  if (hasAttacks) {
+    for (const p of perProvince) {
+      if (!p.threats || p.threats.length === 0) continue;
+      // znajdź dokładny klucz silnika (np. 'Litwa') dla uiKey ('litwa')
+      const enginePid = (() => {
+        const target = p.key; // 'litwa' etc.
+        for (const pid of Object.keys(s.provinces || {})) {
+          const k = provKeyFromId(pid);
+          if (k === target) return pid;
+        }
+        return null;
+      })();
+      if (!enginePid) continue;
+      const units = (s.troops?.[enginePid]?.[pidx] || 0) | 0;
+      if (units > 0) { youCanDefend = true; break; }
+    }
   }
 
-  const hasAttacks = threats.length > 0;
-
+  // Składamy treść listy
   const listLines = hasAttacks
-    ? threats.flatMap(t => {
-        if (!Array.isArray(t.threats) || t.threats.length === 0) return [`• ${t.label} — atak (szczegóły niedostępne)`];
-        return t.threats.map(th => {
-          const pwr = (th.strength != null) ? ` (siła: ${th.strength})` : '';
-          const who = th.enemy || (th.trackKey ? TRACK_NAME[th.trackKey] : 'wróg');
-          return `• ${t.label} — atakuje ${who}${pwr}`;
-        });
+    ? perProvince.flatMap(p => {
+        if (!p.threats || p.threats.length === 0) return [`• ${p.label} — atak (szczegóły niedostępne)`];
+        return p.threats.map(th => `• ${p.label} — atakuje ${th.enemy}${th.strength != null ? ` (siła: ${th.strength})` : ''}`);
       })
     : [];
-
 
   const lines = hasAttacks
     ? [
@@ -787,17 +816,13 @@ function ensureDefensePopup(state){
           ? 'Możesz bronić tylko tam, gdzie masz własne jednostki.'
           : 'Nie masz jednostek w napadanych prowincjach — nie możesz się bronić.'
       ]
-    : [
-        'W tej rundzie brak najazdów (żaden tor nie osiągnął wartości 3).'
-      ];
-
-  const buttonText = youCanDefend ? 'Do obrony' : 'Dalej (Spustoszenia)';
+    : ['W tej rundzie brak najazdów (żaden tor nie osiągnął wartości 3).'];
 
   popupFromEngine('Najazdy — cele obrony', lines, {
     imageUrl: ATTACK_IMG_MID,
-    buttonText,
+    buttonText: youCanDefend ? 'Do obrony' : 'Dalej (Spustoszenia)',
     onAction: () => {
-      if (!youCanDefend) {
+      if (!youCanDefend || !hasAttacks) {
         const nxt = game.finishPhaseAndAdvance();
         ok(`Auto-next z Obrony -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
         syncUIFromGame();
@@ -806,6 +831,17 @@ function ensureDefensePopup(state){
   });
 
   _defensePopupRound = r;
+}
+
+
+function enginePidFromUiKey(state, uiKey){
+  const s = state || game.getPublicState?.() || {};
+  const target = (uiKey || '').toString().trim().toLowerCase();
+  for (const pid of Object.keys(s.provinces || {})) {
+    const k = provKeyFromId(pid); // np. 'Litwa' -> 'litwa'
+    if (k === target) return pid;  // zwróć dokładny klucz, jakiego używa silnik (np. 'Litwa')
+  }
+  return null;
 }
 
 
