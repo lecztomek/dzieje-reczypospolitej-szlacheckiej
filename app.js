@@ -1057,12 +1057,12 @@ function clientToSvg(clientX, clientY){
 }
 
 // ===== Pasek faz (UI tylko do podglądu) =====
-// [ZMIANA — pasek faz: wstaw „Obrona” PRZED „Wyprawy”]
 const PHASES = [
   'Wydarzenia','Dochód','Sejm','Akcje','Starcia',
   'Palenie','Wzmacnianie',
-  'Obrona',             
-  'Wyprawy','Spustoszenia'
+  'Wyprawy',   // ← najpierw Wyprawy
+  'Obrona',    // ← tuż przed Spustoszeniami
+  'Spustoszenia'
 ];
 
 let phaseCur = 1; // 1..PHASES.length
@@ -1465,7 +1465,6 @@ function setEnemyCount(which, n, color = ENEMY_DEFAULT_COLOR){
   return true;
 }
 
-
 const ENGINE_TO_UI_PHASE = {
   events: 1,
   income: 2,
@@ -1475,11 +1474,10 @@ const ENGINE_TO_UI_PHASE = {
   battles: 5,
   arson: 6,
   reinforcements: 7,
-  defense: 8,     
-  attacks: 9,
-  devastation: 10,
+  attacks: 8,     
+  defense: 9,    
+  devastation: 10
 };
-
 
 function applyPhaseFromEngineState(s){
   const id = s.current_phase || game.round?.currentPhaseId?.();
