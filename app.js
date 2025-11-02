@@ -1208,8 +1208,6 @@ function svgCenterOf(el){
   return { x: b.x + b.width/2, y: b.y + b.height/2 };
 }
 
-function bboxCenter(el){ const b = el.getBBox(); return { x: b.x + b.width/2, y: b.y + b.height/2 }; }
-
 function getAutoTrackCenter(trackKey){
   const svg = document.getElementById('mapSvg');
   if (!svg) return null;
