@@ -614,7 +614,6 @@ const REV_PROV_MAP = {
 };
 
 function getUnderAttackSet(state){
-  // Zwraca Set kluczy UI ('prusy','litwa',...)
   const s = state || game.getPublicState?.() || {};
   const out = new Set();
 
@@ -639,7 +638,7 @@ function getUnderAttackSet(state){
   }
 
   // 2) NOWE: bezpośrednio z silnika (DefenseAPI): enemyByProvince / targetsByTrack / prepReport
-  const d = s.defense || {};
+  const d = s.defense_state || s.defense || {};
   if (d.enemyByProvince && typeof d.enemyByProvince === 'object') {
     for (const [pid, enemy] of Object.entries(d.enemyByProvince)) {
       if ((enemy|0) > 0) { const k = provKeyFromId(pid); if (k) out.add(k); }
@@ -660,7 +659,6 @@ function getUnderAttackSet(state){
 }
 
 function collectDefenseThreats(state){
-  // Zwraca tablicę { key:'prusy', label:'Prusy', enemy:'Szwecja'|'Moskwa'|'Tatarzy'|'wróg', strength: number|null }
   const s = state || game.getPublicState?.() || {};
   const threats = new Map(); // key -> { enemy, strength }
 
@@ -672,7 +670,7 @@ function collectDefenseThreats(state){
   };
 
   // 1) Najbogatsze źródło: raport z chooseTargets()
-  const d = s.defense || {};
+  const d = s.defense_state || s.defense || {};
   if (d.prepReport && Array.isArray(d.prepReport.events) && d.prepReport.events.length){
     d.prepReport.events.forEach(ev => {
       const key = provKeyFromId(ev?.target); if (!key) return;
