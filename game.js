@@ -878,7 +878,7 @@ class PlayerBattleAPI {
   }
 
   #resetPasses() {
-    const t = this.ctx.attackTurn;
+    const t = this.ctx.battlesTurn;
     if (!t) return;  
     t.passed.fill(false);
   }
