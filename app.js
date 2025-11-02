@@ -777,12 +777,16 @@ function ensureDefensePopup(state){
   const hasAttacks = threats.length > 0;
 
   const listLines = hasAttacks
-    ? threats.map(t => {
-        const who = t.enemy || 'wróg';
-        const pwr = (t.strength != null) ? ` (siła: ${t.strength})` : '';
-        return `• ${t.label} — atakuje ${who}${pwr}`;
+    ? threats.flatMap(t => {
+        if (!Array.isArray(t.threats) || t.threats.length === 0) return [`• ${t.label} — atak (szczegóły niedostępne)`];
+        return t.threats.map(th => {
+          const pwr = (th.strength != null) ? ` (siła: ${th.strength})` : '';
+          const who = th.enemy || (th.trackKey ? TRACK_NAME[th.trackKey] : 'wróg');
+          return `• ${t.label} — atakuje ${who}${pwr}`;
+        });
       })
     : [];
+
 
   const lines = hasAttacks
     ? [
