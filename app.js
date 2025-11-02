@@ -1224,7 +1224,22 @@ function getFallbackTrackAnchor(trackKey){
 }
 
 function getTrackAnchor(trackKey){
-  return getAutoTrackCenter(trackKey) || getFallbackTrackAnchor(trackKey);
+  const svg = document.getElementById('mapSvg');
+  if (!svg) return null;
+
+  // Rozmiar SVG (preferuj viewBox, fallback na wymiary klienta i sensowne domyślne)
+  const vb = svg.viewBox?.baseVal || null;
+  const width  = vb?.width  || svg.clientWidth  || 1633; // te same liczby, co w createEnemyTracks
+  const height = vb?.height || svg.clientHeight || 1137;
+
+  // Ustal dokładnie te same „kotwice”, co przy rysowaniu torów:
+  // N: środek u góry, y = 60
+  // E: prawa krawędź − 60, y = 340
+  // S: środek u dołu, y = height − 50
+  if (trackKey === 'N') return { x: width / 2,     y: 60 };
+  if (trackKey === 'E') return { x: width - 60,    y: 340 };
+  if (trackKey === 'S') return { x: width / 2,     y: height - 50 };
+  return null;
 }
 
 function getProvinceCenter(pid){
