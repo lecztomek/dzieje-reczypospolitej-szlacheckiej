@@ -1262,25 +1262,22 @@ class DefenseAPI {
     return false;
   }
 
-
-
   #advance(turnWasDefense) {
     const t = this.ctx.defenseTurn;
     if (!t) return;
-
-    // jak w attacks: po realnej akcji zaczyna się nowa mini-runda → zdejmij PASS-y
+  
     if (turnWasDefense) {
+      // Po prawdziwej obronie zaczyna się nowa mini-runda → reset PASS-ów
       t.passed = t.passed.map(() => false);
     }
-
-    // KONIEC fazy, gdy w TEJ mini-rundzie wszyscy mają PASS
-    // ALBO gdy nie ma już żadnych możliwych obron (wróg jest, ale nikt nie może go kontrować)
-    if (t.passed.every(Boolean) || !this.#anyEligibleDefensesLeft()) {
+  
+    // ✅ JEDYNY warunek końca: wszyscy mają PASS w TEJ mini-rundzie
+    if (t.passed.every(Boolean)) {
       t.done = true;
       return;
     }
-
-    // przejdź do kolejnego gracza bez PASS
+  
+    // Przejdź do kolejnego gracza, który jeszcze nie ma PASS
     const n = t.order.length;
     for (let step = 1; step <= n; step++) {
       const nextIdx = (t.idx + step) % n;
