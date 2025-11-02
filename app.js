@@ -2253,8 +2253,8 @@ if (phase === 'auction' || phase === 'sejm'){
 
   // ====== SPUSTOSZENIA ======
   if (phase === 'devastation'){
-    const box = section('Spustoszenia', 'Wylosuj N, S, E (1–6) i zastosuj spustoszenia, potem przejdź do następnej rundy.');
-    const btnDev = chip('Wylosuj i zastosuj (gdevast N S E)', ()=>{
+    const box = section('Spustoszenia', 'Zastosuj spustoszenia, potem przejdź do następnej rundy.');
+    const btnDev = chip('Sprawdz spustoszenia', ()=>{
       const r = ()=> 1 + Math.floor(Math.random()*6);
       const N=r(), S=r(), E=r();
 
