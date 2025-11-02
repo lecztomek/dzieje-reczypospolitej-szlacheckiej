@@ -1177,20 +1177,21 @@ class DevastationAPI {
       for (const rid of order) {
         const k = tracksMapKey(rid);
         const track = c.raid_tracks[k];
-        if (track.value >= 3) {
+        if ((track.value | 0) >= 3) {
           const pid = c.defense.targetsByTrack[k];
-          if (!pid) continue; // nic nie było wybrane
-
-          const enemyLeft = (c.defense.enemyByProvince[pid] | 0) > 0;
-          const defended  = !!c.defense.successByProvince[pid];
-
+          if (!pid) continue;
+    
+          const perTrackEnemy = c.defense.enemyByProvince[pid] || {};
+          const perTrackOK    = c.defense.successByProvince[pid] || {};
+          const enemyLeft     = ((perTrackEnemy[k] | 0) > 0);          // czy wróg nadal stoi
+          const defended      = !!perTrackOK[k];                       // czy w tej prowincji, przeciw temu torowi, odparto atak
+    
           if (!enemyLeft || defended) {
             log.push(`[Spustoszenia] ${track.id} → ${pid}: obrona skuteczna — brak spustoszenia (tor ustawiony na 1).`);
             track.value = 1;
             continue;
           }
-
-          // obrona się nie powiodła ⇒ normalne spustoszenie
+    
           const msg = plunderProvince(c, pid);
           track.value = 1;
           log.push(`${msg} Tor ${track.id} ustawiony na 1.`);
