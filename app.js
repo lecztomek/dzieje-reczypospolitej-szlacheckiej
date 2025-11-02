@@ -1207,50 +1207,72 @@ function svgCenterOf(el){
   const b = el.getBBox();
   return { x: b.x + b.width/2, y: b.y + b.height/2 };
 }
-function getTrackAnchor(trackKey){
+
+function bboxCenter(el){ const b = el.getBBox(); return { x: b.x + b.width/2, y: b.y + b.height/2 }; }
+
+function getAutoTrackCenter(trackKey){
   const svg = document.getElementById('mapSvg');
-  return svg?.querySelector(`#trackAnchors [data-track="${trackKey}"]`) || null;
+  if (!svg) return null;
+  // priorytet: elementy w enemiesLayer oznaczone data-track
+  const el = svg.querySelector(`#enemiesLayer [data-track="${trackKey}"]`)
+         || svg.querySelector(`#enemiesLayer .label`); // bardzo awaryjny fallback
+  return el ? bboxCenter(el) : null;
 }
+
+function getFallbackTrackAnchor(trackKey){
+  const svg = document.getElementById('mapSvg');
+  const circ = svg?.querySelector(`#trackAnchors [data-track="${trackKey}"]`);
+  return circ ? { x:+circ.getAttribute('cx'), y:+circ.getAttribute('cy') } : null;
+}
+
+function getTrackAnchor(trackKey){
+  return getAutoTrackCenter(trackKey) || getFallbackTrackAnchor(trackKey);
+}
+
 function getProvinceCenter(pid){
   const svg = document.getElementById('mapSvg');
   const elId = PID_TO_ELEMID[pid];
   const el = elId ? svg?.getElementById(elId) : null;
-  return el ? svgCenterOf(el) : null;
+  return el ? bboxCenter(el) : null;
 }
-function drawArrow(svg, from, to, { stroke, markerId }, label, offsetIdx = 0){
-  // lekkie rozchylenie przy wielu strzałkach na 1 prowincję
+
+function drawArrow(svg, from, to, labelText, offsetIdx=0){
+  // rozchylenie równoległe do normalnej, by kilka strzałek nie leżało na sobie
   const dx = to.x - from.x, dy = to.y - from.y, L = Math.hypot(dx,dy) || 1;
-  const nx = -dy/L, ny = dx/L, spread = 18; // px w układzie viewBox
+  const nx = -dy/L, ny =  dx/L;
+  const spread = 18; // px w przestrzeni viewBox
   const ox = nx * spread * offsetIdx, oy = ny * spread * offsetIdx;
 
   const x1 = from.x + ox, y1 = from.y + oy;
   const x2 = to.x   + ox, y2 = to.y   + oy;
 
+  // linia
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   line.setAttribute('x1', x1); line.setAttribute('y1', y1);
   line.setAttribute('x2', x2); line.setAttribute('y2', y2);
   line.setAttribute('class', 'arrow');
-  line.setAttribute('stroke', stroke);
-  line.setAttribute('marker-end', `url(#${markerId})`);
+  line.setAttribute('marker-end', 'url(#arrowB)');
   svg.appendChild(line);
 
-  // etykieta ~10% przed końcem
-  const tx = x2 - dx * 0.10, ty = y2 - dy * 0.10;
+  // Etykieta na środku linii (50%), z minimalnym odsunięciem od linii
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const midOffset = 10; // odsunięcie etykiety prostopadle od linii (px)
+  const tx = mx + nx * midOffset, ty = my + ny * midOffset;
+
   const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   text.setAttribute('x', tx); text.setAttribute('y', ty);
   text.setAttribute('class', 'arrow-label');
-  text.textContent = String(label);
+  text.textContent = String(labelText);
   svg.appendChild(text);
 }
 
-// główna aktualizacja — wołaj w syncUIFromGame() w fazie 'defense'
 export function updateDefenseArrowsLayer(state){
   const s = state || (window.game?.getPublicState?.() || {});
   const svg = document.getElementById('mapSvg');
   const layer = svg?.getElementById?.('defenseArrows') || document.getElementById('defenseArrows');
   if (!svg || !layer) return;
 
-  // wipe
+  // czyścimy
   while (layer.firstChild) layer.removeChild(layer.firstChild);
 
   // rysujemy tylko w fazie obrony
@@ -1260,40 +1282,18 @@ export function updateDefenseArrowsLayer(state){
   const def = s.defense_state || s.defense || {};
   const perProv = def.enemyByProvince || {};
 
-  // style per tor
-  const STYLE = {
-    N: { stroke:'#2563eb', markerId:'arrowN' }, // Szwecja
-    E: { stroke:'#dc2626', markerId:'arrowE' }, // Moskwa
-    S: { stroke:'#16a34a', markerId:'arrowS' }, // Tatarzy
-  };
+  for (const [pid, tracks] of Object.entries(perProv)){
+    if (!tracks || typeof tracks !== 'object') continue;
+    const to = getProvinceCenter(pid); if (!to) continue;
 
-  // cache kotwic torów
-  const anchors = {
-    N: getTrackAnchor('N'),
-    E: getTrackAnchor('E'),
-    S: getTrackAnchor('S'),
-  };
-  const fromPt = (k)=> anchors[k] ? { x:+anchors[k].getAttribute('cx'), y:+anchors[k].getAttribute('cy') } : null;
-
-  for (const [pid, val] of Object.entries(perProv)){
-    // nowy format: { N:3, E:0, S:2 } — wyciągamy tylko >0
-    if (!val || typeof val !== 'object') continue;
-
-    const to = getProvinceCenter(pid);
-    if (!to) continue;
-
-    const active = Object.entries(val)
-      .filter(([,v]) => (v|0) > 0)
-      .map(([k,v]) => ({ k, v: v|0 }));
-
-    active.forEach(({k, v}, idx) => {
-      const src = fromPt(k); if (!src) return;
-      const sty = STYLE[k] || { stroke:'#64748b', markerId:'arrowN' };
-      drawArrow(layer, src, to, sty, v, idx);
+    // aktywne tory z siłą > 0
+    const entries = Object.entries(tracks).filter(([,v]) => (v|0) > 0);
+    entries.forEach(([k, v], idx) => {
+      const from = getTrackAnchor(k); if (!from) return;
+      drawArrow(layer, from, to, v|0, idx);
     });
   }
 }
-
 
 const diac = { "ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z" };
 function norm(s){
