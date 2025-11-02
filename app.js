@@ -614,17 +614,14 @@ const REV_PROV_MAP = {
 };
 
 function getUnderAttackSet(state){
-  // szukamy kilku popularnych kształtów stanu – zwracamy Set kluczy UI: 'prusy','litwa',...
+  // Zwraca Set kluczy UI ('prusy','litwa',...)
   const s = state || game.getPublicState?.() || {};
   const out = new Set();
 
-  // 1) najbardziej oczywiste: defense_turn.targets: [provinceId,...]
+  // 1) klasyczne kształty z UI
   const arr1 = s.defense_turn?.targets;
-  if (Array.isArray(arr1)) {
-    arr1.forEach(pid => { const k = provKeyFromId(pid); if (k) out.add(k); });
-  }
+  if (Array.isArray(arr1)) arr1.forEach(pid => { const k = provKeyFromId(pid); if (k) out.add(k); });
 
-  // 2) czasem engine podaje mapę: { [provinceId]: true|1|... }
   const obj1 = s.defense_turn?.under_attack || s.under_attack || s.attacked_provinces;
   if (obj1 && typeof obj1 === 'object') {
     for (const [pid, val] of Object.entries(obj1)) {
@@ -633,7 +630,6 @@ function getUnderAttackSet(state){
     }
   }
 
-  // 3) alternatywne: lista obiektów { provinceId / province_id / province / id }
   const arr2 = s.defense_turn?.attacks || s.defense_turn?.events || s.attacks_on_provinces;
   if (Array.isArray(arr2)) {
     arr2.forEach(x => {
@@ -642,51 +638,150 @@ function getUnderAttackSet(state){
     });
   }
 
+  // 2) NOWE: bezpośrednio z silnika (DefenseAPI): enemyByProvince / targetsByTrack / prepReport
+  const d = s.defense || {};
+  if (d.enemyByProvince && typeof d.enemyByProvince === 'object') {
+    for (const [pid, enemy] of Object.entries(d.enemyByProvince)) {
+      if ((enemy|0) > 0) { const k = provKeyFromId(pid); if (k) out.add(k); }
+    }
+  }
+  if (d.targetsByTrack && typeof d.targetsByTrack === 'object') {
+    for (const pid of Object.values(d.targetsByTrack)) {
+      const k = provKeyFromId(pid); if (k) out.add(k);
+    }
+  }
+  if (d.prepReport && Array.isArray(d.prepReport.events)) {
+    d.prepReport.events.forEach(ev => {
+      const k = provKeyFromId(ev?.target); if (k) out.add(k);
+    });
+  }
+
+  return out;
+}
+
+function collectDefenseThreats(state){
+  // Zwraca tablicę { key:'prusy', label:'Prusy', enemy:'Szwecja'|'Moskwa'|'Tatarzy'|'wróg', strength: number|null }
+  const s = state || game.getPublicState?.() || {};
+  const threats = new Map(); // key -> { enemy, strength }
+
+  const TRACK_NAME = { N: 'Szwecja', E: 'Moskwa', S: 'Tatarzy' };
+  const TRACK_BY_ID = { // gdy dostajemy trackId z prepReport.events
+    [RaidTrackID?.N]: 'N',
+    [RaidTrackID?.E]: 'E',
+    [RaidTrackID?.S]: 'S'
+  };
+
+  // 1) Najbogatsze źródło: raport z chooseTargets()
+  const d = s.defense || {};
+  if (d.prepReport && Array.isArray(d.prepReport.events) && d.prepReport.events.length){
+    d.prepReport.events.forEach(ev => {
+      const key = provKeyFromId(ev?.target); if (!key) return;
+      const k = (typeof ev?.trackKey === 'string') ? ev.trackKey : TRACK_BY_ID[ev?.trackId];
+      const enemy = TRACK_NAME[k] || 'wróg';
+      const strength = (ev?.strength|0) || null;
+      threats.set(key, { enemy, strength });
+    });
+  }
+
+  // 2) Alternatywa: targetsByTrack + raid_tracks (gdy prepReport niedostępny)
+  if (d.targetsByTrack && typeof d.targetsByTrack === 'object'){
+    for (const [k, pid] of Object.entries(d.targetsByTrack)){
+      if (!pid) continue;
+      const key = provKeyFromId(pid); if (!key) continue;
+      const enemy = TRACK_NAME[k] || 'wróg';
+      const strength = (s.raid_tracks && typeof s.raid_tracks[k] !== 'undefined')
+        ? (s.raid_tracks[k]|0)
+        : null;
+      if (!threats.has(key)) threats.set(key, { enemy, strength });
+    }
+  }
+
+  // 3) Fallback: enemyByProvince (znamy siłę, ale nie zawsze wiemy "kto")
+  if (d.enemyByProvince && typeof d.enemyByProvince === 'object'){
+    for (const [pid, val] of Object.entries(d.enemyByProvince)){
+      const count = val|0;
+      if (count <= 0) continue;
+      const key = provKeyFromId(pid); if (!key) continue;
+      if (!threats.has(key)) threats.set(key, { enemy: 'wróg', strength: count });
+    }
+  }
+
+  // Jeśli nic nie znaleziono, zwróć pustą listę
+  const out = [];
+  for (const [key, info] of threats.entries()){
+    out.push({
+      key,
+      label: PROV_DISPLAY[key] || key,
+      enemy: info.enemy || 'wróg',
+      strength: Number.isFinite(info.strength) ? info.strength : null
+    });
+  }
   return out;
 }
 
 function ensureDefensePopup(state){
-  const s = state || game.getPublicState?.(); if (!s) return;
-  const phase = s.current_phase || game.round?.currentPhaseId?.();
+  const s0 = state || game.getPublicState?.(); if (!s0) return;
+  const phase = s0.current_phase || game.round?.currentPhaseId?.();
   if (phase !== 'defense') return;
 
-  const r = s.round_status?.current_round | 0;
-  if (r === _defensePopupRound) return; // pokazujemy raz na rundę
+  const r = s0.round_status?.current_round | 0;
+  if (r === _defensePopupRound) return; // tylko raz na rundę
 
-  // Zbierz cele (jeśli silnik je już wystawił, zobaczymy je tutaj)
-  const underAttack = getUnderAttackSet(s);
-  const nice = Array.from(underAttack);
-  const noAttacks = nice.length === 0;
+  // upewnij się, że cele są przygotowane (żeby mieć co pokazać)
+  if (!s0.defense_turn?.prepared) {
+    try {
+      const dice = {};
+      if ((s0.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
+      if ((s0.raid_tracks?.E|0) >= 3) dice.E = roll1d6();
+      if ((s0.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
+      const out = game.defense.chooseTargets(dice);
+      logEngine(out);
+    } catch(_) { /* brak torów ≥3 → OK, nic do obrony */ }
+  }
 
-  const lines = noAttacks
+  const s = game.getPublicState?.() || {};
+  const threats = collectDefenseThreats(s); // [{key,label,enemy,strength},...]
+
+  // Czy aktywny gracz ma gdzie się bronić?
+  const pidx = Number.isInteger(s.active_defender_index) ? s.active_defender_index : curPlayerIdx;
+  let youCanDefend = false;
+  for (const t of threats){
+    const pid = PROV_MAP[t.key];
+    const u = (s.troops?.[pid]?.[pidx] || 0)|0;
+    if (u > 0) { youCanDefend = true; break; }
+  }
+
+  const hasAttacks = threats.length > 0;
+
+  const listLines = hasAttacks
+    ? threats.map(t => {
+        const who = t.enemy || 'wróg';
+        const pwr = (t.strength != null) ? ` (siła: ${t.strength})` : '';
+        return `• ${t.label} — atakuje ${who}${pwr}`;
+      })
+    : [];
+
+  const lines = hasAttacks
     ? [
-        'Brak wykrytych najazdów w tej fazie.',
-        'W tej rundzie nie ma nic do obrony — przejdźmy do Spustoszeń.'
+        'Te prowincje są napadane w tej fazie:',
+        '',
+        ...listLines,
+        '',
+        youCanDefend
+          ? 'Możesz bronić tylko tam, gdzie masz własne jednostki.'
+          : 'Nie masz jednostek w napadanych prowincjach — nie możesz się bronić.'
       ]
     : [
-        'Te prowincje są właśnie napadane — tylko w nich możesz się bronić:',
-        '',
-        ...nice.map(k => `• ${PROV_DISPLAY[k] || k}`)
+        'W tej rundzie brak najazdów (żaden tor nie osiągnął wartości 3).'
       ];
+
+  const buttonText = youCanDefend ? 'Do obrony' : 'Dalej (Spustoszenia)';
 
   popupFromEngine('Najazdy — cele obrony', lines, {
     imageUrl: ATTACK_IMG_MID,
-    buttonText: noAttacks ? 'Dalej (Spustoszenia)' : 'Do obrony',
+    buttonText,
     onAction: () => {
-      if (noAttacks) {
-        // (bezpieczeństwo) jeśli cele nie były przygotowane, przygotuj — chooseTargets ustawi done=true przy braku torów ≥3
-        try {
-          const sNow = game.getPublicState?.() || {};
-          if (!sNow.defense_turn?.prepared) {
-            const dice = {};
-            if ((sNow.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
-            if ((sNow.raid_tracks?.E|0) >= 3) dice.E = roll1d6();
-            if ((sNow.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
-            const out = game.defense.chooseTargets(dice);
-            logEngine(out);
-          }
-        } catch (_) { /* ignorujemy ewentualny brak/wyjątek */ }
-
+      if (!youCanDefend) {
         const nxt = game.finishPhaseAndAdvance();
         ok(`Auto-next z Obrony -> ${nxt || game.round.currentPhaseId() || 'koniec gry'}`);
         syncUIFromGame();
