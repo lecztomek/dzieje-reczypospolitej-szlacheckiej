@@ -737,16 +737,28 @@ function ensureDefensePopup(state){
     } catch(_) { /* brak torów ≥3 → OK, nic do obrony */ }
   }
 
+  // świeży stan po ewentualnym chooseTargets
   const s = game.getPublicState?.() || {};
+
+  // lista zagrożeń do pokazania (etykiety, siła, kto)
   const threats = collectDefenseThreats(s); // [{key,label,enemy,strength},...]
 
-  // Czy aktywny gracz ma gdzie się bronić?
-  const pidx = Number.isInteger(s.active_defender_index) ? s.active_defender_index : curPlayerIdx;
+  // kto jest aktywnym obrońcą (jak w Wyprawach: preferuj indeks z silnika)
+  const pidx = Number.isInteger(s.active_defender_index)
+    ? s.active_defender_index
+    : (curPlayerIdx >= 0 ? curPlayerIdx : 0);
+
+  // zestaw prowincji faktycznie pod atakiem (klucze UI: 'prusy','litwa',...)
+  const underAttack = getUnderAttackSet(s);
+
+  // Czy AKTYWNY gracz ma jednostki w którejś z prowincji będących pod atakiem?
   let youCanDefend = false;
-  for (const t of threats){
-    const pid = PROV_MAP[t.key];
-    const u = (s.troops?.[pid]?.[pidx] || 0)|0;
-    if (u > 0) { youCanDefend = true; break; }
+  for (const [pid, arr] of Object.entries(s.troops || {})) {
+    const key = provKeyFromId(pid); // ← jak w najazdach/wyprawach: z ID silnika -> klucz UI
+    if (!key) continue;
+    if (!underAttack.has(key)) continue;     // musi być atakowana
+    const units = (arr?.[pidx] || 0) | 0;    // jednostki aktywnego obrońcy
+    if (units > 0) { youCanDefend = true; break; }
   }
 
   const hasAttacks = threats.length > 0;
@@ -789,6 +801,7 @@ function ensureDefensePopup(state){
 
   _defensePopupRound = r;
 }
+
 
 // === [DODAJ] Bezpieczna normalizacja identyfikatora prowincji ===
 function provKeyFromId(id){
