@@ -96,6 +96,10 @@ const ATTACK_TARGETS = {
   ukraina:      ['tatarzy','moskwa'],
 };
 
+// NOWE: nazwy torów i konwersja na RaidTrackID
+const TRACK_NAME = { N: 'Szwecja', E: 'Moskwa', S: 'Tatarzy' };
+function toTrackEnum(k){ return k === 'N' ? RaidTrackID.N : k === 'E' ? RaidTrackID.E : RaidTrackID.S; }
+
 // Opisy i przyciski dla wariantów (zgodnie z silnikiem)
 const LAW_VARIANTS = {
   1: { // Podatek
@@ -637,11 +641,16 @@ function getUnderAttackSet(state){
     });
   }
 
-  // 2) NOWE: bezpośrednio z silnika (DefenseAPI): enemyByProvince / targetsByTrack / prepReport
   const d = s.defense_state || s.defense || {};
   if (d.enemyByProvince && typeof d.enemyByProvince === 'object') {
     for (const [pid, enemy] of Object.entries(d.enemyByProvince)) {
-      if ((enemy|0) > 0) { const k = provKeyFromId(pid); if (k) out.add(k); }
+      // obsłuż stary (number) i nowy (object) format
+      const threatened = (typeof enemy === 'number')
+        ? ((enemy|0) > 0)
+        : (enemy && Object.values(enemy).some(v => (v|0) > 0));
+      if (threatened) {
+        const k = provKeyFromId(pid); if (k) out.add(k);
+      }
     }
   }
   if (d.targetsByTrack && typeof d.targetsByTrack === 'object') {
@@ -660,62 +669,66 @@ function getUnderAttackSet(state){
 
 function collectDefenseThreats(state){
   const s = state || game.getPublicState?.() || {};
-  const threats = new Map(); // key -> { enemy, strength }
-
-  const TRACK_NAME = { N: 'Szwecja', E: 'Moskwa', S: 'Tatarzy' };
-  const TRACK_BY_ID = { // gdy dostajemy trackId z prepReport.events
-    [RaidTrackID?.N]: 'N',
-    [RaidTrackID?.E]: 'E',
-    [RaidTrackID?.S]: 'S'
-  };
-
-  // 1) Najbogatsze źródło: raport z chooseTargets()
   const d = s.defense_state || s.defense || {};
+
+  // key(UI prowincji) -> tablica { trackKey:'N'|'E'|'S', enemy:'Szwecja'|..., strength:int|null }
+  const perProv = new Map();
+
+  // 1) preferuj raport z chooseTargets (ma target + siłę + tor)
   if (d.prepReport && Array.isArray(d.prepReport.events) && d.prepReport.events.length){
     d.prepReport.events.forEach(ev => {
       const key = provKeyFromId(ev?.target); if (!key) return;
-      const k = (typeof ev?.trackKey === 'string') ? ev.trackKey : TRACK_BY_ID[ev?.trackId];
-      const enemy = TRACK_NAME[k] || 'wróg';
-      const strength = (ev?.strength|0) || null;
-      threats.set(key, { enemy, strength });
+      const k = typeof ev?.trackKey === 'string' ? ev.trackKey
+              : (ev?.trackId === RaidTrackID?.N ? 'N' : ev?.trackId === RaidTrackID?.E ? 'E' : ev?.trackId === RaidTrackID?.S ? 'S' : null);
+      if (!k) return;
+      const arr = perProv.get(key) || [];
+      arr.push({ trackKey: k, enemy: TRACK_NAME[k] || 'wróg', strength: (ev?.strength|0) || null });
+      perProv.set(key, arr);
     });
   }
 
-  // 2) Alternatywa: targetsByTrack + raid_tracks (gdy prepReport niedostępny)
+  // 2) targetsByTrack + bieżące wartości torów (gdy brak prepReport)
   if (d.targetsByTrack && typeof d.targetsByTrack === 'object'){
     for (const [k, pid] of Object.entries(d.targetsByTrack)){
       if (!pid) continue;
       const key = provKeyFromId(pid); if (!key) continue;
-      const enemy = TRACK_NAME[k] || 'wróg';
-      const strength = (s.raid_tracks && typeof s.raid_tracks[k] !== 'undefined')
-        ? (s.raid_tracks[k]|0)
-        : null;
-      if (!threats.has(key)) threats.set(key, { enemy, strength });
+      const strength = (s.raid_tracks && typeof s.raid_tracks[k] !== 'undefined') ? (s.raid_tracks[k]|0) : null;
+      const arr = perProv.get(key) || [];
+      // uniknij duplikatów tego samego toru
+      if (!arr.some(x => x.trackKey === k)) arr.push({ trackKey: k, enemy: TRACK_NAME[k] || 'wróg', strength });
+      perProv.set(key, arr);
     }
   }
 
-  // 3) Fallback: enemyByProvince (znamy siłę, ale nie zawsze wiemy "kto")
+  // 3) fallback: enemyByProvince (nowy format per-tor)
   if (d.enemyByProvince && typeof d.enemyByProvince === 'object'){
     for (const [pid, val] of Object.entries(d.enemyByProvince)){
-      const count = val|0;
-      if (count <= 0) continue;
       const key = provKeyFromId(pid); if (!key) continue;
-      if (!threats.has(key)) threats.set(key, { enemy: 'wróg', strength: count });
+      if (typeof val === 'number') {
+        if ((val|0) > 0 && !perProv.has(key)) perProv.set(key, [{ trackKey: null, enemy:'wróg', strength: val|0 }]);
+      } else if (val && typeof val === 'object') {
+        for (const [k, v] of Object.entries(val)){
+          if ((v|0) <= 0) continue;
+          const arr = perProv.get(key) || [];
+          if (!arr.some(x => x.trackKey === k)) arr.push({ trackKey: k, enemy: TRACK_NAME[k] || 'wróg', strength: v|0 });
+          perProv.set(key, arr);
+        }
+      }
     }
   }
 
-  // Jeśli nic nie znaleziono, zwróć pustą listę
+  // wynik
   const out = [];
-  for (const [key, info] of threats.entries()){
+  for (const [key, threats] of perProv.entries()){
     out.push({
       key,
       label: PROV_DISPLAY[key] || key,
-      enemy: info.enemy || 'wróg',
-      strength: Number.isFinite(info.strength) ? info.strength : null
+      threats: threats   // tablica {trackKey, enemy, strength}
     });
   }
   return out;
 }
+
 
 function ensureDefensePopup(state){
   const s0 = state || game.getPublicState?.(); if (!s0) return;
@@ -2320,20 +2333,17 @@ if (phase === 'auction' || phase === 'sejm'){
     
       const pidx = Number.isInteger(s.active_defender_index) ? s.active_defender_index : curPlayerIdx;
       const activePlayerName = s.settings?.players?.[pidx]?.name || '—';
-      box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } },
-        `Aktywny gracz: ${activePlayerName}`
-      ));
+      box.append(el('div', { style:{ color:'#94a3b8', margin:'0 0 8px' } }, `Aktywny gracz: ${activePlayerName}`));
     
-      // NOWE: zestaw prowincji pod atakiem
-      const underAttack = getUnderAttackSet(s); // Set('prusy', 'litwa', ...)
+      const underAttack = getUnderAttackSet(s);
+      const enemyMap = (s.defense_state?.enemyByProvince) || {};
     
-      // Twoje prowincje z jednostkami, ale tylko takie, które są pod najazdem
       const playerProvinces = [];
       for (const [pid, arr] of Object.entries(s.troops || {})) {
         const key = provKeyFromId(pid); if (!key) continue;
-        if (!underAttack.has(key)) continue;           // <<< filtr 1: musi być atakowana
+        if (!underAttack.has(key)) continue;
         const units = (arr?.[pidx] || 0) | 0;
-        if (units > 0) playerProvinces.push({ key, units }); // <<< filtr 2: musisz mieć tam wojsko
+        if (units > 0) playerProvinces.push({ key, pid, units });
       }
     
       if (playerProvinces.length === 0){
@@ -2342,41 +2352,55 @@ if (phase === 'auction' || phase === 'sejm'){
           : 'Nie masz jednostek w atakowanych prowincjach.';
         box.append(el('div', { style:{ color:'#f59e0b', margin:'6px 0 8px' } }, `Brak możliwych obron — ${why}`));
       } else {
-        playerProvinces.forEach(({ key, units }) => {
+        playerProvinces.forEach(({ key, pid, units }) => {
           const row = el('div', { style:{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', margin:'6px 0' } });
           row.append(el('span', { style:{ minWidth:'220px', fontWeight:'800' } }, `${key} (jednostek: ${units})`));
     
-          // jak wcześniej – korzystamy z ATTACK_TARGETS, ale renderujemy TYLKO, gdy prowincja jest pod atakiem
-          const targets = ATTACK_TARGETS[key] || [];
-          targets.forEach(enemyKey => {
-            row.append(chip(`bronię ${key} ⇄ ${enemyKey}`, () => {
-              try {
-                const roll = roll1d6();
-                ok(`(UI) Obrona ${key} ⇄ ${enemyKey}, rzut: ${roll}`);
-                const lines = game.defense.defend({
-                  playerIndex: pidx,
-                  enemy: toEnemyEnum(enemyKey),
-                  from:  toProvEnum(key),
-                  rolls: [roll],
-                  dice: 1
-                });
-                logEngine(lines);
-                syncUIFromGame();
-                maybeAutoAdvanceAfterDefense();
-                popupFromEngine(`Obrona — ${key} ⇄ ${enemyKey}`, [
-                  `Rzut: ${roll}.`,
-                  ...(Array.isArray(lines) ? lines : [lines]),
-                ], {
-                  imageUrl: attackImageForRoll(roll),
-                  buttonText: 'OK',
-                  onClose: () => {
-                    maybeAutoAdvanceAfterDefense();
-                    buildPhaseActionsSmart(game.getPublicState());
-                  }
-                });
-              } catch (e) { err('Błąd obrony: ' + e.message); }
-            }, `gdefend ${enemyKey} ${key} <auto 1k6>`));
-          });
+          // NOWE: odczytaj aktywne tory dla tej prowincji
+          const perTrack = enemyMap[pid] || {}; // np. { N:3, E:2 }
+          const trackKeys = Object.entries(perTrack).filter(([,v]) => (v|0) > 0).map(([k]) => k);
+    
+          // Fallback (gdyby z jakiegoś powodu brakło perTrack): spróbuj z targetsByTrack
+          if (trackKeys.length === 0 && s.defense_state?.targetsByTrack) {
+            for (const [k, targetPid] of Object.entries(s.defense_state.targetsByTrack)) {
+              if (targetPid === pid) trackKeys.push(k);
+            }
+          }
+    
+          // Renderuj po jednym przycisku na KAŻDY tor atakujący tę prowincję
+          if (trackKeys.length === 0) {
+            row.append(el('span', { style:{ color:'#94a3b8' } }, '— brak aktywnych torów przeciw tej prowincji —'));
+          } else {
+            trackKeys.forEach(k => {
+              const label = `bronię ${key} ⇄ ${TRACK_NAME[k] || k}`;
+              row.append(chip(label, () => {
+                try {
+                  const roll = roll1d6();
+                  ok(`(UI) Obrona ${key} ⇄ ${TRACK_NAME[k] || k}, rzut: ${roll}`);
+                  const lines = game.defense.defend({
+                    playerIndex: pidx,
+                    provinceId: toProvEnum(key),  // ← ID z silnika
+                    track: toTrackEnum(k),        // ← NOWE: wymagane przez API
+                    rolls: [roll]
+                  });
+                  logEngine(lines);
+                  syncUIFromGame();
+                  maybeAutoAdvanceAfterDefense();
+                  popupFromEngine(`Obrona — ${key} ⇄ ${TRACK_NAME[k] || k}`, [
+                    `Rzut: ${roll}.`,
+                    ...(Array.isArray(lines) ? lines : [lines]),
+                  ], {
+                    imageUrl: attackImageForRoll(roll),
+                    buttonText: 'OK',
+                    onClose: () => {
+                      maybeAutoAdvanceAfterDefense();
+                      buildPhaseActionsSmart(game.getPublicState());
+                    }
+                  });
+                } catch (e) { err('Błąd obrony: ' + e.message); }
+              }, `gdefend ${k} ${key} <auto 1k6>`));
+            });
+          }
     
           box.append(row);
         });
@@ -2404,6 +2428,7 @@ if (phase === 'auction' || phase === 'sejm'){
       tintByActive();
       return;
     }
+
 
 
   // ====== SPUSTOSZENIA ======
