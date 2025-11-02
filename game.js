@@ -90,9 +90,10 @@ class GameContext {
 
     // Defense phase state
     this.defense = {
-      targetsByTrack: { N: null, S: null, E: null },  
-      enemyByProvince: {},                             
-      successByProvince: {},                           
+      targetsByTrack: { N: null, S: null, E: null },    // jak było
+      enemyByProvince: {},   // np. { "Litwa": { N:3, E:4 } }
+      successByProvince: {}, // np. { "Litwa": { N:false, E:true } }
+      prepReport: null,
     };
 
     
@@ -1233,19 +1234,17 @@ class DefenseAPI {
     }
   }
 
-  // NOWE: dokładnie jak w attacks — czy w tej chwili istnieje jakakolwiek legalna obrona?
   #anyEligibleDefensesLeft() {
     const c = this.ctx;
     ensurePerProvinceArrays(c);
-
-    // aktywne cele (tam gdzie wróg > 0)
+  
+    // zbierz prowincje z aktywnym wrogiem na DOWOLNYM torze
     const targets = Object.entries(c.defense.enemyByProvince)
-      .filter(([, v]) => (v | 0) > 0)
+      .filter(([, perTrack]) => perTrack && Object.values(perTrack).some(v => (v|0) > 0))
       .map(([pid]) => pid);
-
+  
     if (!targets.length) return false;
-
-    // czy którykolwiek gracz ma jednostki w którejkolwiek z tych prowincji?
+  
     const pcount = c.settings.players.length;
     for (const pid of targets) {
       const arr = c.troops.per_province[pid] || [];
@@ -1255,6 +1254,7 @@ class DefenseAPI {
     }
     return false;
   }
+
 
   #advance(turnWasDefense) {
     const t = this.ctx.defenseTurn;
@@ -1308,13 +1308,15 @@ class DefenseAPI {
         const r = Number(dice?.[k]);
         if (!(r >= 1 && r <= 6)) throw new Error(`Missing/invalid die for ${k}`);
         const target = (r <= 3) ? first : second;
-  
         c.defense.targetsByTrack[k] = target;
-        c.defense.enemyByProvince[target] = (track.value | 0);
-        c.defense.successByProvince[target] = false;
-  
+      
+        if (!c.defense.enemyByProvince[target]) c.defense.enemyByProvince[target] = {};
+        if (!c.defense.successByProvince[target]) c.defense.successByProvince[target] = {};
+        c.defense.enemyByProvince[target][k] = (track.value | 0);
+        c.defense.successByProvince[target][k] = false;
+      
         log.push(`[Obrona] ${track.id}: cel ${target} (tor=${track.value}, wróg=${track.value} j.).`);
-        events.push({ trackKey: k, trackId: track.id, target, strength: track.value }); // ⬅️ nowe
+        events.push({ trackKey: k, trackId: track.id, target, strength: track.value });
       } else {
         c.defense.targetsByTrack[k] = null;
       }
@@ -1335,79 +1337,61 @@ class DefenseAPI {
     return log;
   }
 
-  defend({ playerIndex, provinceId, rolls, dice }) {
+  defend({ playerIndex, provinceId, track, rolls }) {
     this.#requireActive(playerIndex);
     const c = this.ctx; const t = this.ctx.defenseTurn;
     if (!t.prepared) throw new Error("Najpierw wylosuj cele: defense.chooseTargets({ N:..., S:..., E:... }).");
   
     ensurePerProvinceArrays(c);
   
-    if (!(provinceId in c.defense.enemyByProvince))
-      throw new Error("Ta prowincja nie jest celem obrony.");
+    const k = tracksMapKey(track); // 'N' | 'S' | 'E'
+    const perTrack = c.defense.enemyByProvince[provinceId];
+    if (!perTrack || (perTrack[k] | 0) <= 0) throw new Error("Ta prowincja nie jest celem obrony dla wskazanego toru.");
   
-    let enemy = c.defense.enemyByProvince[provinceId] | 0;
-    if (enemy <= 0) return ["[Obrona] Wróg w tej prowincji już rozbity."];
+    const enemy0 = perTrack[k] | 0;
+    let enemy = enemy0;
   
     const pidx = playerIndex | 0;
-    let myUnits = c.troops.per_province[provinceId]?.[pidx] | 0;
-    if (myUnits <= 0) throw new Error("Nie masz jednostek w tej prowincji.");
-  
-    // ile kości chcemy użyć w tej akcji (max = liczba naszych jednostek)
-    const requestedDice =
-      Number.isFinite(dice) && (dice | 0) > 0 ? (dice | 0)
-      : (Array.isArray(rolls) && rolls.length > 0 ? rolls.length
-      : 1);
-    const usedDice = Math.max(1, Math.min(requestedDice, myUnits));
-  
-    // zbuduj sekwencję rzutów (uzupełnij losowymi, jeśli podano za mało)
-    const seq = Array.isArray(rolls) ? rolls.slice(0, usedDice) : [];
-    while (seq.length < usedDice) seq.push(1 + Math.floor(Math.random() * 6));
+    let u = c.troops.per_province[provinceId]?.[pidx] | 0;
+    if (u <= 0) throw new Error("Nie masz jednostek w tej prowincji.");
   
     const kinds = c.troops_kind.per_province[provinceId];
     const out = [];
+    const seq = Array.isArray(rolls) && rolls.length ? rolls.slice() : [1 + Math.floor(Math.random() * 6)];
   
     for (const r0 of seq) {
-      enemy = c.defense.enemyByProvince[provinceId] | 0;
-      myUnits = c.troops.per_province[provinceId][pidx] | 0;
-      if (enemy <= 0 || myUnits <= 0) break;
-  
+      if (enemy <= 0 || u <= 0) break;
       const r = r0 | 0;
       if (!(r >= 1 && r <= 6)) throw new Error("Rzut musi być 1..6.");
   
       if (r === 1) {
-        // ginie tylko obrońca
-        c.troops.per_province[provinceId][pidx] = Math.max(0, myUnits - 1);
-        if ((c.troops.per_province[provinceId][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE;
+        u = Math.max(0, u - 1);
         out.push("1 → ginie tylko jednostka obrońcy.");
       } else if (r <= 5) {
-        // obie strony tracą po 1
-        c.defense.enemyByProvince[provinceId] = Math.max(0, enemy - 1);
-        c.troops.per_province[provinceId][pidx] = Math.max(0, myUnits - 1);
-        if ((c.troops.per_province[provinceId][pidx] | 0) === 0) kinds[pidx] = UnitKind.NONE;
+        enemy = Math.max(0, enemy - 1);
+        u = Math.max(0, u - 1);
         out.push("2–5 → giną obie strony (wróg −1, obrońca −1).");
       } else {
-        // ginie tylko wróg
-        c.defense.enemyByProvince[provinceId] = Math.max(0, enemy - 1);
+        enemy = Math.max(0, enemy - 1);
         out.push("6 → ginie tylko jednostka wroga (wróg −1).");
-      }
-  
-      if ((c.defense.enemyByProvince[provinceId] | 0) === 0) {
-        c.defense.successByProvince[provinceId] = true;
-        out.push(`[Obrona] Wróg rozbity w ${provinceId} — spustoszenia nie będzie.`);
-        break;
       }
     }
   
-    out.push(
-      `Po obronie: wróg=${c.defense.enemyByProvince[provinceId]}, `
-      + `${c.settings.players[pidx].name}=${c.troops.per_province[provinceId][pidx]}.`
-    );
+    // zapisz stan
+    c.defense.enemyByProvince[provinceId][k] = enemy;
+    c.troops.per_province[provinceId][pidx] = u;
+    if (u === 0) kinds[pidx] = UnitKind.NONE;
   
-    // zachowanie rotacji i PASS-ów tak jak w attacks.attack(...)
+    if (enemy === 0) {
+      c.defense.successByProvince[provinceId][k] = true;
+      out.push(`[Obrona] Wróg z toru ${c.raid_tracks[k].id} rozbity w ${provinceId} — brak spustoszenia z tego toru.`);
+    }
+  
+    out.push(`Po obronie (${c.raid_tracks[k].id}): wróg=${enemy}, ${c.settings.players[pidx].name}=${u}.`);
+  
     this.#advance(true);
     return out;
   }
-
 
   pass(playerIndex) {
     this.#requireActive(playerIndex);
