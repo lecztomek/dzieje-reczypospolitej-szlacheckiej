@@ -618,6 +618,11 @@ const REV_PROV_MAP = {
 // mapy pomocnicze
 const TRACK_NAME = { N: 'Szwecja', E: 'Moskwa', S: 'Tatarzy' };
 
+function getUnderAttackSet(state){
+  const details = getUnderAttackDetails(state);
+  return new Set(details.map(d => d.key));
+}
+
 function getUnderAttackDetails(state){
   const s = state || game.getPublicState?.() || {};
   const perProv = new Map(); // key -> { key, label, threats: [{enemy,trackKey,strength}] }
