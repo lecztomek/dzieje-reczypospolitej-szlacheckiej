@@ -175,6 +175,30 @@ function eventImageFor(n){
 
 function randRolls(n){ return Array.from({length: Math.max(1, n|0)}, ()=> 1 + Math.floor(Math.random()*6)); }
 
+function maybePrepareDefenseTargets(state){
+  const s = state || game.getPublicState?.() || {};
+  const phase = s.current_phase || game.round?.currentPhaseId?.();
+  if (phase !== 'defense') return;
+  if (s.defense_turn?.prepared) return;   // już zrobione
+
+  // rzuć kością tylko dla torów z wartością ≥3
+  const dice = {};
+  if ((s.raid_tracks?.N|0) >= 3) dice.N = roll1d6();
+  if ((s.raid_tracks?.E|0) >= 3) dice.E = roll1d6();
+  if ((s.raid_tracks?.S|0) >= 3) dice.S = roll1d6();
+
+  try {
+    const lines = game.defense.chooseTargets(dice);
+    logEngine(lines);
+  } catch (e) {
+    err('Obrona — losowanie celów nie powiodło się: ' + e.message);
+  }
+
+  // po przygotowaniu celów odśwież UI
+  syncUIFromGame();
+}
+
+
 function maybeAutoAdvanceAfterArson(){
   const s = game.getPublicState?.() || {};
   if ((s.current_phase || game.round?.currentPhaseId?.()) !== 'arson') return;
@@ -1488,6 +1512,7 @@ function applyPhaseFromEngineState(s){
   setPhaseNow(id);     
 
   if (id === 'defense') {
+    maybePrepareDefenseTargets(s);
     ensureDefensePopup(s);
   }
 }
