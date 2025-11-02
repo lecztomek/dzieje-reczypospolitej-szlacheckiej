@@ -96,8 +96,6 @@ const ATTACK_TARGETS = {
   ukraina:      ['tatarzy','moskwa'],
 };
 
-// NOWE: nazwy torów i konwersja na RaidTrackID
-const TRACK_NAME = { N: 'Szwecja', E: 'Moskwa', S: 'Tatarzy' };
 function toTrackEnum(k){ return k === 'N' ? RaidTrackID.N : k === 'E' ? RaidTrackID.E : RaidTrackID.S; }
 
 // Opisy i przyciski dla wariantów (zgodnie z silnikiem)
